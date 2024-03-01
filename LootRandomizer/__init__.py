@@ -3,14 +3,32 @@ from unrealsdk import Log, GetEngine  #type: ignore
 from Mods import ModMenu #type: ignore
 
 if __name__ == "__main__":
-    from Mods.LootRandomizer import options, items, locations #type: ignore
+    for mod in ModMenu.Mods:
+        if mod.Name != "Loot Randomizer":
+            continue
+
+        if mod.IsEnabled:
+            mod.Disable()
+        ModMenu.Mods.remove(mod)
+        _this_module = mod.__class__.__module__
+        break
+
+    from Mods.LootRandomizer import options, seed, hints #type: ignore
+    from Mods.LootRandomizer import items, locations, enemies, missions #type: ignore
 
     import sys, importlib
-    for module_name, module in sys.modules.items():
-        if module_name.startswith("Mods.LootRandomizer."):
-            importlib.reload(module)
+    for submodule_name in (
+        "defines", "seed", "options", "hints", "items", "item_list",
+        "locations", "missions", "mission_list", "enemies", "enemy_list", # "misc",
+    ):
+        importlib.reload(sys.modules["Mods.LootRandomizer." + submodule_name])
+
+    # for module_name, module in sys.modules.items():
+    #     if module_name.startswith("Mods.LootRandomizer."):
+    #         importlib.reload(module)
 else:
-    from . import options, items, hints, locations
+    from . import options, seed
+    from . import items, hints, locations, enemies, missions
 
 from typing import Sequence
 
@@ -23,31 +41,29 @@ class LootRandomizer(ModMenu.SDKMod):
     Types: ModMenu.ModTypes = ModMenu.ModTypes.Gameplay
     SaveEnabledState: ModMenu.EnabledSaveType = ModMenu.EnabledSaveType.LoadOnMainMenu
 
-    Options: Sequence[ModMenu.Options.Base] = (options.HintType,)
+    Options: Sequence[ModMenu.Options.Base] = options.Options
 
 
     def Enable(self):
-        super().Enable()
-
-        options.Enable()
+        hints.Enable()
         items.Enable()
         locations.Enable()
-
-        for item in items.Items:
-            if item.name == "World Burn":
-                break
-
-        locations.Apply()
-        for location in locations.Locations:
-            location.apply(item)
+        enemies.Enable()
+        missions.Enable()
+        options.Enable()
+        super().Enable()
 
 
     def Disable(self):
-        super().Disable()
+        seed.Revert()
 
         options.Disable()
-        items.Disable()
+        missions.Disable()
+        enemies.Disable()
         locations.Disable()
+        items.Disable()
+        hints.Disable()
+        super().Disable()
 
         GetEngine().GamePlayers[0].Actor.ConsoleCommand("obj garbage")
 
@@ -55,14 +71,8 @@ class LootRandomizer(ModMenu.SDKMod):
 _mod_instance = LootRandomizer()
 
 if __name__ == "__main__":
-    for mod in ModMenu.Mods:
-        if mod.Name == _mod_instance.Name:
-            if mod.IsEnabled:
-                mod.Disable()
-            ModMenu.Mods.remove(mod)
-            _mod_instance.__class__.__module__ = mod.__class__.__module__
-            break
-
+    try: _mod_instance.__class__.__module__ = _this_module
+    except: pass
     ModMenu.RegisterMod(_mod_instance)
     _mod_instance.Enable()
 else:
@@ -71,6 +81,17 @@ else:
 
 """
 
-disable Sky Rocket and VH Relic in starting gear
+Features:
+- Every named enemy in the game made to be able to drop loot
+- Every side mission in the game made able to be repeated
+- Every enemy and mission hand tuned to adjust loot generosity
+- Categories to disable certain loot locations (e.g. "rare enemies" or "very long missions")
+- Hint items dropped by enemies to give an indiation of whether they are worth farming
+- Seeds save item locations across game sessions, and also can be shared with friends
+
+Compatibility:
+- Works with any overhauls that do not add items to the game (e.g. UCP, BL2fix, Reborn)
+- Works in co-op, with only the only host needing to run the mod
+- Seeds can be generated to accomodate any combinations of DLCs
 
 """

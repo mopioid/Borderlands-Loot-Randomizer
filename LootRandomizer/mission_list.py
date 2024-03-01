@@ -1,194 +1,8 @@
-from __future__ import annotations
+from .defines import Tag
+from .locations import Behavior
+from .missions import Mission, Reward, AltReward, MissionGiver, McShooty
 
-from unrealsdk import Log, FindObject, GetEngine #type: ignore
-from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
-
-from .. import options, locations
-from ..options import Tag
-
-from typing import Dict, List, Set
-
-
-MissionTags = (
-    Tag.ShortMission    |
-    Tag.LongMission     |
-    Tag.VeryLongMission |
-    Tag.Slaughter       |
-    Tag.RaidMission     
-)
-
-_purge_paths: Set[str] = set()
-_double_reward_paths: Set[str] = set()
-
-
-def Enable() -> None:
-    global _purge_paths
-    _purge_paths = set()
-
-    RunHook("WillowGame.QuestAcceptGFxMovie.GetRewardPresentations", "LootRandomizer", lambda c,f,p: False)
-    RunHook("WillowGame.StatusMenuExGFxMovie.GetRewardPresentations", "LootRandomizer", lambda c,f,p: False)
-    RunHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer", lambda c,f,p: False)
-
-    # TODO: Test Client
-    RunHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer", _AcceptMission)
-    RunHook("WillowGame.WillowPlayerController.ServerCompleteMission", "LootRandomizer", _CompleteMission)
-    RunHook("WillowGame.QuestAcceptGFxMovie.AcceptReward", "LootRandomizer", _AcceptReward)
-
-
-def Disable() -> None:
-    global _purge_paths
-    _purge_paths = set()
-
-    RemoveHook("WillowGame.QuestAcceptGFxMovie.GetRewardPresentations", "LootRandomizer")
-    RemoveHook("WillowGame.StatusMenuExGFxMovie.GetRewardPresentations", "LootRandomizer")
-    RemoveHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer")
-
-    RemoveHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer")
-    RemoveHook("WillowGame.WillowPlayerController.ServerCompleteMission", "LootRandomizer")
-    RemoveHook("WillowGame.QuestAcceptGFxMovie.AcceptReward", "LootRandomizer")
-
-
-def _block_method(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    return False
-
-
-def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    tracker = GetEngine().GetCurrentWorldInfo().GRI.MissionTracker
-    #TODO: stop (return True) here if mission not in tracker
-
-    RemoveHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer")
-    if params.MissionDirector:
-        caller.AcceptMission(params.Mission, params.MissionDirector.ObjectPointer)
-    else:
-        caller.AcceptMission(params.Mission)
-    RunHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer", _AcceptMission)
-    
-    tracker.PlayKickoff(params.Mission)
-    return False
-
-
-def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    if UObject.PathName(params.Mission) not in _purge_paths:
-        return True
-
-    RemoveHook("WillowGame.WillowPlayerController.ServerCompleteMission", "LootRandomizer")
-    caller.ServerCompleteMission(params.Mission, params.MissionDirector.ObjectPointer)
-    RunHook("WillowGame.WillowPlayerController.ServerCompleteMission", "LootRandomizer", _CompleteMission)
-
-    gri = GetEngine().GetCurrentWorldInfo().GRI
-    pc = GetEngine().GamePlayers[0].Actor
-
-    for mission_data in gri.MissionTracker.MissionList:
-        if mission_data.MissionDef == params.Mission:
-            mission_data.Status = 0
-            mission_data.ObjectivesProgress = []
-            mission_data.ActiveObjectiveSet = None
-            mission_data.SubObjectiveSets = []
-
-    mission_datas: List[FStruct] = []
-    for mission_data in pc.MissionPlaythroughs[gri.GetCurrPlaythrough()].MissionList:
-        if mission_data.MissionDef != params.Mission:
-            mission_datas.append((
-                mission_data.MissionDef,
-                mission_data.Status,
-                mission_data.ObjectivesProgress,
-                mission_data.ActiveObjectiveSet,
-                mission_data.SubObjectiveSets,
-                mission_data.GameStage,
-                mission_data.bNeedsRewards,
-                mission_data.bHeardKickoff,
-            ))
-    pc.MissionPlaythroughs[gri.GetCurrPlaythrough()].MissionList = mission_datas
-
-    return False
-
-
-def _AcceptReward(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    mission = caller.MissionDefForRewardPage
-    if UObject.PathName(mission) not in _double_reward_paths:
-        return True
-
-    Log("Found double mission reward turnin")
-
-    RemoveHook("WillowGame.QuestAcceptGFxMovie.AcceptReward", "LootRandomizer")
-    caller.AcceptReward(params.RewardChoice)
-    RunHook("WillowGame.QuestAcceptGFxMovie.AcceptReward", "LootRandomizer", _AcceptReward)
-
-    GetEngine().GamePlayers[0].Actor.ServerGrantMissionRewards(mission, False)
-
-    return False
-
-
-class Reward(locations.Dropper):
-    path: str
-    purge: bool
-
-    uobject: UObject
-
-    reward_items: List[UObject]
-    reward_pools: List[UObject]
-
-    @property
-    def reward_attribute(self) -> FStruct:
-        return self.uobject.Reward
-
-    def __init__(self, path: str, purge: bool = False) -> None:
-        self.path = path; self.purge = purge
-
-    def register(self) -> None:
-        self.uobject = FindObject("MissionDefinition", self.path)
-
-        self.repeatable = self.uobject.bRepeatable
-        self.reward_items = self.reward_attribute.RewardItems
-        self.reward_pools = self.reward_attribute.RewardItemPools
-
-        self.uobject.bRepeatable = True
-        self.reward_attribute.RewardItems = []
-
-        self.reward_attribute.RewardItemPools = self.location.get_pools()
-
-        if self.location.tags & (Tag.VeryLongMission|Tag.RaidMission):
-            _double_reward_paths.add(self.path)
-
-        if self.purge:
-            _purge_paths.add(self.path)
-
-
-    def unregister(self) -> None:
-        if self.uobject:
-            self.uobject.bRepeatable = self.repeatable
-            self.reward_attribute.RewardItems = self.reward_items
-            self.reward_attribute.RewardItemPools = self.reward_pools
-
-        _purge_paths.discard(self.path)
-        _double_reward_paths.discard(self.path)
-
-
-class AltReward(Reward):
-    @property
-    def reward_attribute(self) -> FStruct:
-        return self.uobject.AlternativeReward
-
-
-class Mission(locations.Location):
-    def __init__(self, name: str, *droppers: locations.Dropper, tags=Tag.BaseGame|Tag.ShortMission) -> None:
-        super().__init__(name, *droppers, tags=tags)
-
-        if not self.tags & options.ContentTags:
-            self.tags |= Tag.BaseGame
-        if not tags & MissionTags:
-            self.tags |= Tag.ShortMission
-
-    def get_pools(self) -> locations.Sequence:
-        if self.tags & (Tag.LongMission|Tag.VeryLongMission|Tag.RaidMission):
-            return (self.item.uobject, self.item.uobject)
-        return (self.item.uobject,)
-
-
-from .mcshooty import McShooty
-
-
-Locations = (
+Missions = (
     Mission("This Town Ain't Big Enough", Reward("GD_Z1_ThisTown.M_ThisTown")),
     Mission("Shielded Favors", Reward("GD_Episode02.M_Ep2b_Henchman")),
     Mission("Symbiosis", Reward("GD_Z1_Symbiosis.M_Symbiosis")),
@@ -238,9 +52,9 @@ Locations = (
     Mission("The Good, the Bad, and the Mordecai", Reward("GD_Z3_GoodBadMordecai.M_GoodBadMordecai"), tags=Tag.Slaughter),
     Mission("Bandit Slaughter: Round 1", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter1"), tags=Tag.Slaughter),
     Mission("Bandit Slaughter: Round 2", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter2"), tags=Tag.Slaughter),
-    Mission("Bandit Slaughter: Round 3", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter3"), tags=Tag.Slaughter),
-    Mission("Bandit Slaughter: Round 4", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter4"), tags=Tag.Slaughter),
-    Mission("Bandit Slaughter: Round 5", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter5"), tags=Tag.Slaughter),
+    Mission("Bandit Slaughter: Round 3", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter3"), tags=Tag.Slaughter|Tag.LongMission),
+    Mission("Bandit Slaughter: Round 4", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter4"), tags=Tag.Slaughter|Tag.LongMission),
+    Mission("Bandit Slaughter: Round 5", Reward("GD_Z1_BanditSlaughter.M_BanditSlaughter5"), tags=Tag.Slaughter|Tag.VeryLongMission),
         # double-check repeating mission with no save-quit
 
     Mission("Won't Get Fooled Again", Reward("GD_Z1_WontGetFooled.M_WontGetFooled")),
@@ -283,11 +97,11 @@ Locations = (
         # Victory dialog plays upon completing last wave, but no objective update
     Mission("Creature Slaughter: Round 2", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_2"), tags=Tag.Slaughter),
         # UBA Varkid doesnt respawn in last wave
-    Mission("Creature Slaughter: Round 3", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_3"), tags=Tag.Slaughter),
+    Mission("Creature Slaughter: Round 3", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_3"), tags=Tag.Slaughter|Tag.LongMission),
         # Victory dialog plays upon completing last wave, but no objective update
-    Mission("Creature Slaughter: Round 4", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_4"), tags=Tag.Slaughter),
+    Mission("Creature Slaughter: Round 4", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_4"), tags=Tag.Slaughter|Tag.LongMission),
         # Victory dialog plays and objective updates upon completing last wave, but no turn-in
-    Mission("Creature Slaughter: Round 5", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_5"), tags=Tag.Slaughter),
+    Mission("Creature Slaughter: Round 5", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_5"), tags=Tag.Slaughter|Tag.VeryLongMission),
         # Fire Thresher doesnt respawn in last wave
     Mission("Doctor's Orders", Reward("GD_Z2_DoctorsOrders.M_DoctorsOrders")),
         # Loot midget box with echo doesnt re-close after complete
@@ -354,16 +168,16 @@ Locations = (
         # On repeat, mal unprepared for combat
     Mission("Hyperion Slaughter: Round 1", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_1"), tags=Tag.Slaughter),
     Mission("Hyperion Slaughter: Round 2", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_2"), tags=Tag.Slaughter),
-    Mission("Hyperion Slaughter: Round 3", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_3"), tags=Tag.Slaughter),
-    Mission("Hyperion Slaughter: Round 4", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_4"), tags=Tag.Slaughter),
-    Mission("Hyperion Slaughter: Round 5", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_5"), tags=Tag.Slaughter),
+    Mission("Hyperion Slaughter: Round 3", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_3"), tags=Tag.Slaughter|Tag.LongMission),
+    Mission("Hyperion Slaughter: Round 4", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_4"), tags=Tag.Slaughter|Tag.LongMission),
+    Mission("Hyperion Slaughter: Round 5", Reward("GD_Z3_RobotSlaughter.M_RobotSlaughter_5"), tags=Tag.Slaughter|Tag.VeryLongMission),
     Mission("The Lost Treasure", Reward("GD_Z3_LostTreasure.M_LostTreasure", purge=True), tags=Tag.LongMission),
         # Mission ECHO box unopenable after completion
     Mission("The Great Escape", Reward("GD_Z3_GreatEscape.M_GreatEscape", purge=True)),
         # Beacon doesnt spawn on repeat
         # Ulysses stays dead after save quit
     Mission("The Chosen One", Reward("GD_Z3_ChosenOne.M_ChosenOne")),
-    Mission("Capture the Flags", Reward("GD_Z3_CaptureTheFlags.M_CaptureTheFlags"), tags=Tag.LongMission),
+    Mission("Capture the Flags", Reward("GD_Z3_CaptureTheFlags.M_CaptureTheFlags"), tags=Tag.VeryLongMission),
     Mission("This Just In", Reward("GD_Z3_ThisJustIn.M_ThisJustIn")),
     Mission("Uncle Teddy (Turn in Una)", Reward("GD_Z3_UncleTeddy.M_UncleTeddy")),
     Mission("Uncle Teddy (Turn in Hyperion)", AltReward("GD_Z3_UncleTeddy.M_UncleTeddy")),
@@ -409,8 +223,8 @@ Locations = (
     Mission("Catch-A-Ride, and Also Tetanus", Reward("GD_Orchid_SM_Tetanus.M_Orchid_CatchRideTetanus"), tags=Tag.PiratesBooty),
     Mission("Treasure of the Sands", Reward("GD_Orchid_SM_EndGameClone.M_Orchid_EndGame"), tags=Tag.PiratesBooty|Tag.VeryLongMission),
         # Roscoe/Scarlett dont respawn until savequit
-    Mission("Hyperius the Invincible", Reward("GD_Orchid_Raid.M_Orchid_Raid1"), tags=Tag.PiratesBooty|Tag.RaidMission|Tag.LongMission),
-    Mission("Master Gee the Invincible", Reward("GD_Orchid_Raid.M_Orchid_Raid3"), tags=Tag.PiratesBooty|Tag.RaidMission),
+    Mission("Hyperius the Invincible", Reward("GD_Orchid_Raid.M_Orchid_Raid1"), tags=Tag.PiratesBooty|Tag.RaidEnemy|Tag.LongMission),
+    Mission("Master Gee the Invincible", Reward("GD_Orchid_Raid.M_Orchid_Raid3"), tags=Tag.PiratesBooty|Tag.RaidEnemy),
 
     Mission("Tier 2 Battle: Bar Room Blitz", Reward("GD_IrisEpisode03_Battle.M_IrisEp3Battle_BarFight2"), tags=Tag.CampaignOfCarnage|Tag.Slaughter),
     Mission("Tier 3 Battle: Bar Room Blitz", Reward("GD_IrisEpisode03_Battle.M_IrisEp3Battle_BarFight3"), tags=Tag.CampaignOfCarnage|Tag.Slaughter),
@@ -438,7 +252,7 @@ Locations = (
         # Skags dont respawn without savequit
     Mission("Say That To My Face", Reward("GD_IrisDL3_PSYouSuck.M_IrisDL3_PSYouSuck"), tags=Tag.CampaignOfCarnage),
     Mission("Commercial Appeal", Reward("GD_IrisDL3_CommAppeal.M_IrisDL3_CommAppeal"), tags=Tag.CampaignOfCarnage|Tag.LongMission),
-    Mission("Pete the Invincible", Reward("GD_IrisRaidBoss.M_Iris_RaidPete"), tags=Tag.CampaignOfCarnage|Tag.RaidMission),
+    Mission("Pete the Invincible", Reward("GD_IrisRaidBoss.M_Iris_RaidPete"), tags=Tag.CampaignOfCarnage|Tag.RaidEnemy),
         # Pete doesnt respawn without savequit
     Mission("Number One Fan", Reward("GD_IrisDL2_PumpkinHead.M_IrisDL2_PumpkinHead"), tags=Tag.CampaignOfCarnage),
         # Sully doesnt respawn without savequit
@@ -449,75 +263,145 @@ Locations = (
         # Staff enemies do not respawn without savequit
 
     Mission("An Acquired Taste", Reward("GD_Sage_SM_AcquiredTaste.M_Sage_AcquiredTaste"), tags=Tag.HammerlocksHunt),
-    Mission("Big Feet", Reward("GD_Sage_SM_BigFeet.M_Sage_BigFeet"), tags=Tag.HammerlocksHunt),
     Mission("Still Just a Borok in a Cage", Reward("GD_Sage_SM_BorokCage.M_Sage_BorokCage"), tags=Tag.HammerlocksHunt),
-    Mission("The Rakk Dahlia Murder", Reward("GD_Sage_SM_DahliaMurder.M_Sage_DahliaMurder"), tags=Tag.HammerlocksHunt),
-    Mission("Egg on Your Face", Reward("GD_Sage_SM_EggOnFace.M_Sage_EggOnFace"), tags=Tag.HammerlocksHunt),
-    Mission("Follow The Glow", Reward("GD_Sage_SM_FollowGlow.M_Sage_FollowGlow"), tags=Tag.HammerlocksHunt),
-    Mission("Nakayama-rama", Reward("GD_Sage_SM_Nakarama.M_Sage_Nakayamarama"), tags=Tag.HammerlocksHunt),
-    Mission("Now You See It", Reward("GD_Sage_SM_NowYouSeeIt.M_Sage_NowYouSeeIt"), tags=Tag.HammerlocksHunt),
-    Mission("Ol' Pukey", Reward("GD_Sage_SM_OldPukey.M_Sage_OldPukey"), tags=Tag.HammerlocksHunt),
+    Mission("Egg on Your Face", Reward("GD_Sage_SM_EggOnFace.M_Sage_EggOnFace"), tags=Tag.HammerlocksHunt|Tag.LongMission),
+        # Cage still closed without savequit
     Mission("Palling Around", Reward("GD_Sage_SM_PallingAround.M_Sage_PallingAround"), tags=Tag.HammerlocksHunt),
-    Mission("I Like My Monsters Rare", Reward("GD_Sage_SM_RareSpawns.M_Sage_RareSpawns"), tags=Tag.HammerlocksHunt),
-    Mission("Urine, You're Out", Reward("GD_Sage_SM_Urine.M_Sage_Urine"), tags=Tag.HammerlocksHunt),
-    Mission("Voracidous the Invincible", Reward("GD_Sage_Raid.M_Sage_Raid"), tags=Tag.HammerlocksHunt),
+        # Bulwark doesnt respawn without savequit
+    Mission("I Like My Monsters Rare", Reward("GD_Sage_SM_RareSpawns.M_Sage_RareSpawns"), tags=Tag.HammerlocksHunt|Tag.VeryLongMission),
+    Mission("Ol' Pukey", Reward("GD_Sage_SM_OldPukey.M_Sage_OldPukey"), tags=Tag.HammerlocksHunt|Tag.LongMission),
+        # Pukey no AI without savequit
+    Mission("Nakayama-rama", Reward("GD_Sage_SM_Nakarama.M_Sage_Nakayamarama"), tags=Tag.HammerlocksHunt|Tag.LongMission),
+        # Only 2 echos respawn without savequit
+    Mission("The Rakk Dahlia Murder", Reward("GD_Sage_SM_DahliaMurder.M_Sage_DahliaMurder"), tags=Tag.HammerlocksHunt),
+        # Rakkanoth doesnt respawn without savequit
+    Mission("Urine, You're Out", Reward("GD_Sage_SM_Urine.M_Sage_Urine"), tags=Tag.HammerlocksHunt|Tag.VeryLongMission),
+        # Urine not reinteractable without savequit
+    Mission("Follow The Glow", Reward("GD_Sage_SM_FollowGlow.M_Sage_FollowGlow"), tags=Tag.HammerlocksHunt),
+        # Dribbles wave fight doesnt reset without savequit
+    Mission("Big Feet", Reward("GD_Sage_SM_BigFeet.M_Sage_BigFeet"), tags=Tag.HammerlocksHunt),
+    Mission("Now You See It", Reward("GD_Sage_SM_NowYouSeeIt.M_Sage_NowYouSeeIt"), tags=Tag.HammerlocksHunt|Tag.LongMission),
+    Mission("Voracidous the Invincible", Reward("GD_Sage_Raid.M_Sage_Raid"), tags=Tag.HammerlocksHunt|Tag.RaidEnemy|Tag.LongMission),
 
-    Mission("The Amulet", Reward("GD_Aster_AmuletDoNothing.M_AmuletDoNothing"), tags=Tag.DragonKeep),
-    Mission("The Claptrap's Apprentice", Reward("GD_Aster_ClaptrapApprentice.M_ClaptrapApprentice"), tags=Tag.DragonKeep),
-    Mission("The Beard Makes The Man", Reward("GD_Aster_ClapTrapBeard.M_ClapTrapBeard"), tags=Tag.DragonKeep),
-    Mission("My Kingdom for a Wand", Reward("GD_Aster_ClaptrapWand.M_WandMakesTheMan"), tags=Tag.DragonKeep),
-    Mission("Critical Fail", Reward("GD_Aster_CriticalFail.M_CriticalFail"), tags=Tag.DragonKeep),
-    Mission("My Dead Brother", Reward("GD_Aster_DeadBrother.M_MyDeadBrother"), tags=Tag.DragonKeep),
-    Mission("Lost Souls", Reward("GD_Aster_DemonicSouls.M_DemonicSouls"), tags=Tag.DragonKeep),
-    Mission("Ell in Shining Armor", Reward("GD_Aster_EllieDress.M_EllieDress"), tags=Tag.DragonKeep),
     Mission("Fake Geek Guy", Reward("GD_Aster_FakeGeekGuy.M_FakeGeekGuy"), tags=Tag.DragonKeep),
-    Mission("Feed Butt Stallion", Reward("GD_Aster_FeedButtStallion.M_FeedButtStallion"), tags=Tag.DragonKeep),
-    Mission("Loot Ninja", Reward("GD_Aster_LootNinja.M_LootNinja"), tags=Tag.DragonKeep),
-    Mission("MMORPGFPS", Reward("GD_Aster_MMORPGFPS.M_MMORPGFPS"), tags=Tag.DragonKeep),
+        # Questions dont respawn until savequit
+    Mission("Roll Insight", Reward("GD_Aster_RollInsight.M_RollInsight", purge=True), tags=Tag.DragonKeep),
+        # Die stays in place of bartlesby after completion, and also until savequit with purge
+    Mission("Ell in Shining Armor (Skimpy Armor)", Reward("GD_Aster_EllieDress.M_EllieDress"), tags=Tag.DragonKeep),
+    Mission("Ell in Shining Armor (Bulky Armor)", AltReward("GD_Aster_EllieDress.M_EllieDress"), tags=Tag.DragonKeep),
+    Mission("Tree Hugger", Reward("GD_Aster_TreeHugger.M_TreeHugger"), tags=Tag.DragonKeep|Tag.LongMission),
+    Mission("Lost Souls", Reward("GD_Aster_DemonicSouls.M_DemonicSouls", purge=True), tags=Tag.DragonKeep),
+        # Dark Souls guy stays revived  after completion, and also until savequit with purge
+    Mission("Critical Fail", Reward("GD_Aster_CriticalFail.M_CriticalFail"), tags=Tag.DragonKeep),
+        # Huts dont respawn without savequit
+    Mission("MMORPGFPS", Reward("GD_Aster_MMORPGFPS.M_MMORPGFPS"), tags=Tag.DragonKeep|Tag.LongMission),
+        # Knights dont respawn unless savequit
+    Mission("The Sword in The Stoner", Reward("GD_Aster_SwordInStone.M_SwordInStoner"), tags=Tag.DragonKeep|Tag.LongMission),
+        # Stoner doesnt respawn without savequit
+    Mission("The Beard Makes The Man", Reward("GD_Aster_ClapTrapBeard.M_ClapTrapBeard", block_mission_item=True), tags=Tag.DragonKeep|Tag.LongMission),
+        # Forge doesnt reset without savequit
+    Mission("My Kingdom for a Wand", Reward("GD_Aster_ClaptrapWand.M_WandMakesTheMan"), tags=Tag.DragonKeep),
+    Mission("The Claptrap's Apprentice", Reward("GD_Aster_ClaptrapApprentice.M_ClaptrapApprentice"), tags=Tag.DragonKeep),
+        # After turn in, claptrap animates disappearing and then only returns after savequit
+    Mission("Loot Ninja", Reward("GD_Aster_LootNinja.M_LootNinja", purge=True), tags=Tag.DragonKeep),
+        # After turn in, Sir Gallow does not spawn to give mission
+    Mission("Winter is a Bloody Business", Reward("GD_Aster_WinterIsComing.M_WinterIsComing"), tags=Tag.DragonKeep|Tag.LongMission),
+    Mission("My Dead Brother (Kill Edgar)", Reward("GD_Aster_DeadBrother.M_MyDeadBrother", purge=True), tags=Tag.DragonKeep|Tag.LongMission),
+    Mission("My Dead Brother (Kill Simon)", AltReward("GD_Aster_DeadBrother.M_MyDeadBrother", purge=True), tags=Tag.DragonKeep|Tag.LongMission),
+    Mission("The Amulet (Buy Miz's Amulet)", Reward("GD_Aster_AmuletDoNothing.M_AmuletDoNothing"), tags=Tag.DragonKeep|Tag.LongMission),
+    Mission("The Amulet (Punch Miz In The Face)", AltReward("GD_Aster_AmuletDoNothing.M_AmuletDoNothing"), tags=Tag.DragonKeep|Tag.LongMission),
+        # Upon reaccepting mission, Miz has no behavior
     Mission("Pet Butt Stallion", Reward("GD_Aster_PetButtStallion.M_PettButtStallion"), tags=Tag.DragonKeep),
-    Mission("Post-Crumpocalyptic", Reward("GD_Aster_Post-Crumpocalyptic.M_Post-Crumpocalyptic"), tags=Tag.DragonKeep),
-    Mission("Raiders of the Last Boss", Reward("GD_Aster_RaidBoss.M_Aster_RaidBoss"), tags=Tag.DragonKeep),
-    Mission("Roll Insight", Reward("GD_Aster_RollInsight.M_RollInsight"), tags=Tag.DragonKeep),
-    Mission("Tree Hugger", Reward("GD_Aster_TreeHugger.M_TreeHugger"), tags=Tag.DragonKeep),
-    Mission("Winter is a Bloody Business", Reward("GD_Aster_WinterIsComing.M_WinterIsComing"), tags=Tag.DragonKeep|Tag.Slaughter),
-    Mission("Magic Slaughter: Round 1", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter1"), tags=Tag.DragonKeep|Tag.Slaughter),
-    Mission("Magic Slaughter: Round 2", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter2"), tags=Tag.DragonKeep|Tag.Slaughter),
-    Mission("Magic Slaughter: Round 3", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter3"), tags=Tag.DragonKeep|Tag.Slaughter),
-    Mission("Magic Slaughter: Round 4", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter4"), tags=Tag.DragonKeep|Tag.Slaughter),
-    Mission("Magic Slaughter: Round 5", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter5"), tags=Tag.DragonKeep|Tag.Slaughter),
-    Mission("Magic Slaughter: Badass Round", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter6Badass"), tags=Tag.DragonKeep),
-    Mission("The Magic of Childhood", Reward("GD_Aster_TempleTower.M_TempleTower"), tags=Tag.DragonKeep),
+    Mission("Feed Butt Stallion", Reward("GD_Aster_FeedButtStallion.M_FeedButtStallion"), tags=Tag.DragonKeep),
+    Mission("Raiders of the Last Boss", Reward("GD_Aster_RaidBoss.M_Aster_RaidBoss"), tags=Tag.DragonKeep|Tag.RaidEnemy),
+    Mission("Post-Crumpocalyptic", Reward("GD_Aster_Post-Crumpocalyptic.M_Post-Crumpocalyptic"), tags=Tag.DragonKeep|Tag.VeryLongMission),
     Mission("Find Murderlin's Temple", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughterIntro"), tags=Tag.DragonKeep),
-    Mission("The Sword in The Stoner", Reward("GD_Aster_SwordInStone.M_SwordInStoner"), tags=Tag.DragonKeep),
+    Mission("Magic Slaughter: Round 1", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter1"), tags=Tag.DragonKeep|Tag.Slaughter),
 
-    Mission("Claptocurrency", Reward("GD_Anemone_Side_Claptocurrency.M_Claptocurrency"), tags=Tag.FightForSanctuary),
-    Mission("BFFFs", Reward("GD_Anemone_Side_EyeSnipers.M_Anemone_EyeOfTheSnipers"), tags=Tag.FightForSanctuary),
+    Mission("Magic Slaughter: Round 2", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter2"), tags=Tag.DragonKeep|Tag.Slaughter),
+    Mission("Magic Slaughter: Round 3", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter3"), tags=Tag.DragonKeep|Tag.Slaughter|Tag.LongMission),
+    Mission("Magic Slaughter: Round 4", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter4"), tags=Tag.DragonKeep|Tag.Slaughter|Tag.LongMission),
+    Mission("Magic Slaughter: Round 5", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter5"), tags=Tag.DragonKeep|Tag.Slaughter|Tag.VeryLongMission),
+    Mission("Magic Slaughter: Badass Round", Reward("GD_Aster_TempleSlaughter.M_TempleSlaughter6Badass"), tags=Tag.DragonKeep|Tag.Slaughter|Tag.VeryLongMission),
+    Mission("The Magic of Childhood", Reward("GD_Aster_TempleTower.M_TempleTower"), tags=Tag.DragonKeep|Tag.Slaughter|Tag.LongMission|Tag.Slaughter),
+
+    Mission("Space Cowboy", Reward("GD_Anemone_Side_SpaceCowboy.M_Anemone_SpaceCowboy"), tags=Tag.FightForSanctuary|Tag.LongMission),
+        # Midget toilet porn doesnt respawn without savequit
     Mission("Hypocritical Oath", Reward("GD_Anemone_Side_HypoOathPart1.M_HypocriticalOathPart1"), tags=Tag.FightForSanctuary),
+        # Experiment doesnt respawn without savequit
     Mission("Cadeuceus", Reward("GD_Anemone_Side_HypoOathPart2.M_HypocriticalOathPart2"), tags=Tag.FightForSanctuary),
-    Mission("My Brittle Pony", Reward("GD_Anemone_Side_MyBrittlePony.M_Anemone_MyBrittlePony"), tags=Tag.FightForSanctuary),
-    Mission("The Oddest Couple", Reward("GD_Anemone_Side_OddestCouple.M_Anemone_OddestCouple"), tags=Tag.FightForSanctuary),
-    Mission("A Most Cacophonous Lure", Reward("GD_Anemone_Side_RaidBoss.M_Anemone_CacophonousLure"), tags=Tag.FightForSanctuary),
-    Mission("Sirentology", Reward("GD_Anemone_Side_Sirentology.M_Anemone_Sirentology"), tags=Tag.FightForSanctuary),
-    Mission("Space Cowboy", Reward("GD_Anemone_Side_SpaceCowboy.M_Anemone_SpaceCowboy"), tags=Tag.FightForSanctuary),
+        # Experiment doesnt respawn without savequit
     Mission("The Vaughnguard", Reward("GD_Anemone_Side_VaughnPart1.M_Anemone_VaughnPart1"), tags=Tag.FightForSanctuary),
+        # Recruits dont respawn without savequit
     Mission("The Hunt is Vaughn", Reward("GD_Anemone_Side_VaughnPart2.M_Anemone_VaughnPart2"), tags=Tag.FightForSanctuary),
+    Mission("A Most Cacophonous Lure", Reward("GD_Anemone_Side_RaidBoss.M_Anemone_CacophonousLure"), tags=Tag.FightForSanctuary|Tag.RaidEnemy),
+        # Haderax doesnt respawn without savequit
+    Mission("Claptocurrency", Reward("GD_Anemone_Side_Claptocurrency.M_Claptocurrency"), tags=Tag.FightForSanctuary),
+        # On repeat, cannot place blocks without savequit
+    # Mission("The Oddest Couple", Reward("GD_Anemone_Side_OddestCouple.M_Anemone_OddestCouple"), tags=Tag.FightForSanctuary),
+        # Earl's door becomes uninteractable after completion
+    Mission("Sirentology", Reward("GD_Anemone_Side_Sirentology.M_Anemone_Sirentology"), tags=Tag.FightForSanctuary|Tag.LongMission),
+    Mission("My Brittle Pony", Reward("GD_Anemone_Side_MyBrittlePony.M_Anemone_MyBrittlePony"), tags=Tag.FightForSanctuary|Tag.LongMission),
+        # Brick and enemy waves dont respawn without savequit
+    Mission("BFFFs", Reward("GD_Anemone_Side_EyeSnipers.M_Anemone_EyeOfTheSnipers"), tags=Tag.FightForSanctuary),
+        # Lieutenants dont respawn without savequit
     Mission("Chief Executive Overlord", Reward("GD_Anemone_Side_VaughnPart3.M_Anemone_VaughnPart3"), tags=Tag.FightForSanctuary),
-    Mission("Echoes of the Past", Reward("GD_Anemone_Side_Echoes.M_Anemone_EchoesOfThePast"), tags=Tag.FightForSanctuary),
+    Mission("Echoes of the Past", Reward("GD_Anemone_Side_Echoes.M_Anemone_EchoesOfThePast", purge=True), tags=Tag.FightForSanctuary),
+        # Mission giver echo not interactable after completion
 
-    Mission("Grandma Flexington's Story", Reward("GD_Allium_GrandmaFlexington.M_ListenToGrandma"), tags=Tag.WattleGobbler|Tag.LongMission),
-        # replace $1 to provide yet additional item copy
-    Mission("Grandma Flexington's Story: Raid Difficulty", Reward("GD_Allium_Side_GrandmaRaid.M_ListenToGrandmaRaid"), tags=Tag.WattleGobbler|Tag.RaidMission|Tag.VeryLongMission),
-        # replace purple launcher to provide yet additional item copy
+    Mission("The Hunger Pangs",
+        Reward("GD_Allium_TG_Plot_Mission01.M_Allium_ThanksgivingMission01"),
+        MissionGiver("Hunger_P", "GD_Allium_Torgue.Character.Pawn_Allium_Torgue:MissionDirectivesDefinition_1", 0, True, True),
+    tags=Tag.WattleGobbler|Tag.VeryLongMission),
+        # On reaccept, no sequence until after savequit
+    Mission("Grandma Flexington's Story",
+        Reward("GD_Allium_GrandmaFlexington.M_ListenToGrandma"),
+        Behavior("GD_Allium_TorgueGranma.Character.AIDef_Torgue:AIBehaviorProviderDefinition_0.Behavior_SpawnItems_6"),
+    tags=Tag.WattleGobbler|Tag.LongMission),
+    Mission("Grandma Flexington's Story: Raid Difficulty",
+        Reward("GD_Allium_Side_GrandmaRaid.M_ListenToGrandmaRaid", purge=True),
+        Behavior("GD_Allium_TorgueGranma.Character.AIDef_Torgue:AIBehaviorProviderDefinition_0.Behavior_SpawnItems_3"),
+    tags=Tag.WattleGobbler|Tag.RaidEnemy|Tag.VeryLongMission),
+        # Grandma not interactable without savequit after completion
+
+    Mission("Get Frosty",
+        Reward("GD_Allium_KillSnowman.M_KillSnowman"),
+        MissionGiver("Xmas_P", "Xmas_Mission.TheWorld:PersistentLevel.WillowAIPawn_28.MissionDirectivesDefinition_0", 1, True, True),
+    tags=Tag.MercenaryDay|Tag.VeryLongMission),
+        # On reaccept, no marcus AI until after savequit
     Mission("Special Delivery", Reward("GD_Allium_Delivery.M_Delivery"), tags=Tag.MercenaryDay),
+        # Toys dont respawn until savequit; resetting dens works
+    
+    Mission("The Bloody Harvest",
+        Reward("GD_FlaxMissions.M_BloodHarvest"),
+        MissionGiver("Pumpkin_Patch_P", "Pumpkin_Patch_Dynamic.TheWorld:PersistentLevel.WillowAIPawn_5.MissionDirectivesDefinition_0", 0, True, True),
+    tags=Tag.BloodyHarvest|Tag.VeryLongMission),
     Mission("Trick or Treat", Reward("GD_FlaxMissions.M_TrickOrTreat"), tags=Tag.BloodyHarvest),
-    Mission("Victims of Vault Hunters", Reward("GD_Nast_Easter_Mission_Side01.M_Nast_Easter_Side01"), tags=Tag.SonOfCrawmerax),
-    Mission("Learning to Love", Reward("GD_Nast_Vday_Mission_Side01.M_Nast_Vday_Side01"), tags=Tag.WeddingDayMassacre),
+        # Not all candies collectable again until savequit
 
-    Mission("A History of Simulated Violence", Reward("GD_Lobelia_TestingZone.M_TestingZone"), tags=Tag.DigistructPeak|Tag.VeryLongMission|Tag.RaidMission),
-    Mission("More History of Simulated Violence", Reward("GD_Lobelia_TestingZone.M_TestingZoneRepeatable"), tags=Tag.DigistructPeak|Tag.VeryLongMission|Tag.RaidMission),
+    Mission("Fun, Sun, and Guns",
+        Reward("GD_Nast_Easter_Plot_M01.M_Nast_Easter"),
+        MissionGiver("Easter_P", "GD_Nasturtium_Hammerlock.Character.Pawn_Hammerlock:MissionDirectivesDefinition_1", 0, True, True),
+    tags=Tag.SonOfCrawmerax|Tag.VeryLongMission),
+    Mission("Victims of Vault Hunters", Reward("GD_Nast_Easter_Mission_Side01.M_Nast_Easter_Side01"), tags=Tag.SonOfCrawmerax|Tag.LongMission),
+        # Evidence locations dont reset without savequit
+
+    Mission("A Match Made on Pandora",
+        Reward("GD_Nast_Vday_Mission_Plot.M_Nast_Vday"),
+        MissionGiver("Distillery_P", "GD_Nasturtium_Moxxi.Character.Pawn_Moxxi:MissionDirectivesDefinition_1", 1, True, True),
+    tags=Tag.WeddingDayMassacre|Tag.VeryLongMission),
+    Mission("Learning to Love", Reward("GD_Nast_Vday_Mission_Side01.M_Nast_Vday_Side01", purge=True), tags=Tag.WeddingDayMassacre|Tag.LongMission),
+        # Innuendobot is dead until savequit after purge
+
+    Mission("Dr. T and the Vault Hunters", Reward("GD_Lobelia_UnlockDoor.M_Lobelia_UnlockDoor"), tags=Tag.DigistructPeak),
+    Mission("A History of Simulated Violence", Reward("GD_Lobelia_TestingZone.M_TestingZone"), tags=Tag.DigistructPeak|Tag.VeryLongMission|Tag.RaidEnemy),
+    Mission("More History of Simulated Violence", Reward("GD_Lobelia_TestingZone.M_TestingZoneRepeatable"), tags=Tag.DigistructPeak|Tag.VeryLongMission|Tag.RaidEnemy),
 )
 
 
 """
+GD_SkagRabid_Digi.Character.Pawn_SkagRabid_Digi:MissionDirectivesDefinition_0
+
+
 - gearys unbreakable gear
 """

@@ -1,116 +1,75 @@
-from unrealsdk import ConstructObject, FindObject, GetEngine, KeepAlive #type: ignore
+from unrealsdk import FindObject, KeepAlive #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
 
-import enum
-
-from typing import List, Tuple
-
-
-# _inventory_template: UObject = None #InventoryBalanceDefinition
-# _useitem_template: UObject = None #UsableItemDefinition
-# _presentation_template: UObject = None #InventoryCardPresentationDefinition
+from . import seed
+from .defines import construct_object, set_command
 
 
-def _set_command(uobject: UObject, attribute: str, value: str):
-    GetEngine().GamePlayers[0].Actor.ConsoleCommand(f"set {UObject.PathName(uobject)} {attribute} {value}")
+inventory_template: UObject = None
+useitem_template: UObject = None
+presentation_template: UObject = None
+useitem_behavior: UObject = None
 
 
-class Hint(str, enum.Enum):
-    ClassMod = "Class Mod"
+def Enable() -> None:
+    global inventory_template, useitem_template, presentation_template, useitem_behavior
 
-    PurpleShield = "Purple Shield"
-    UniqueShield = "Unique Shield"
-    LegendaryShield = "Legendary Shield"
+    RunHook("WillowGame.Behavior_LocalCustomEvent.ApplyBehaviorToContext", "LootRandomizer", _Behavior_LocalCustomEvent)
 
-    PurpleRelic = "Purple Relic"
-    UniqueRelic = "Unique Relic"
-    EtechRelic = "E-tech Relic"
+    presentation_template = FindObject("InventoryCardPresentationDefinition", "GD_InventoryPresentations.Definitions.Credits")
+    inventory_template = FindObject("InventoryBalanceDefinition", "LootRandomizer.Hint_Inventory_Default")
+    if inventory_template:
+        useitem_template = FindObject("UsableItemDefinition", "LootRandomizer.Hint_Item_Default")
+        useitem_behavior = useitem_template.BehaviorProviderDefinition.BehaviorSequences[0].BehaviorData2[0].Behavior
+        return
 
-    PurpleGrenade = "Purple Grenade"
-    UniqueGrenade = "Unique Grenade"
-    LegendaryGrenade = "Legendary Grenade"
-
-    PurplePistol = "Purple Pistol"
-    UniquePistol = "Unique Pistol"
-    LegendaryPistol = "Legendary Pistol"
-
-    PurpleAR = "Purple Assault Rifle"
-    UniqueAR = "Unique Assault Rifle"
-    LegendaryAR = "Legendary Assault Rifle"
-
-    PurpleShotgun = "Purple Shotgun"
-    UniqueShotgun = "Unique Shotgun"
-    LegendaryShotgun = "Legendary Shotgun"
-
-    PurpleSMG = "Purple SMG"
-    UniqueSMG = "Unique SMG"
-    LegendarySMG = "Legendary SMG"
-
-    PurpleSniper = "Purple Sniper Rifle"
-    UniqueSniper = "Unique Sniper Rifle"
-    LegendarySniper = "Legendary Sniper Rifle"
-
-    PurpleLauncher = "Purple Rocket Launcher"
-    UniqueLauncher = "Unique Rocket Launcher"
-    LegendaryLauncher = "Legendary Rocket Launcher"
-
-    PearlescentWeapon = "Pearlescent Weapon"
-
-    SeraphItem = "Seraph Item"
-    SeraphWeapon = "Seraph Weapon"
-
-    EffervescentItem = "Effervescent Item"
-    EffervescentWeapon = "Effervescent Weapon"
-
-
-def ConstructInventory(name: str) -> UObject: #InventoryBalanceDefinition
     original = FindObject("InventoryBalanceDefinition", "GD_ItemGrades.BuffDrink.ItemGrade_BuffDrink_Toughness")
-    inventory = ConstructObject(original.Class, Template=original)
+    inventory_template = construct_object(original, "Hint_Inventory_Default")
+    KeepAlive(inventory_template)
 
-    inventory.Manufacturers = ((FindObject("ManufacturerDefinition", "GD_Currency.Manufacturers.Cash_Manufacturer"),),)
+    inventory_template.Manufacturers = ((
+        FindObject("ManufacturerDefinition", "GD_Currency.Manufacturers.Cash_Manufacturer"),
+    ),)
 
-    useitem = ConstructObject(inventory.InventoryDefinition.Class, Template=inventory.InventoryDefinition)
-    inventory.InventoryDefinition = useitem
+    original = FindObject("UsableItemDefinition", "GD_BuffDrinks.A_Item.BuffDrink_Toughness")
+    useitem_template = construct_object(original, "Hint_Item_Default")
+    KeepAlive(useitem_template)
 
-    useitem.bPickupInBulk = False
-    useitem.BehaviorProviderDefinition = None
-    useitem.CalloutDefinition = None
-    useitem.CustomPresentations = []
-    useitem.OnUseConstraints = []
-    useitem.NonCompositeStaticMesh = FindObject("StaticMesh", "prop_interactive.Meshes.DataRecorder_01_Active")
-    useitem.PickupFlagIcon = FindObject("Texture2D", "fx_shared_items.Textures.ItemCards.sdu")
-    # useitem.LootBeamColorOverride = (152, 152, 188, 255)
-    _set_command(useitem, "ItemName", name + "?")
+    useitem_template.bPickupInBulk = False
+    useitem_template.CalloutDefinition = None
+    useitem_template.CustomPresentations = ()
+    useitem_template.OnUseConstraints = ()
+    useitem_template.NonCompositeStaticMesh = FindObject("StaticMesh", "prop_interactive.Meshes.DataRecorder_01_Active")
+    useitem_template.PickupFlagIcon = FindObject("Texture2D", "fx_shared_items.Textures.ItemCards.sdu")
+    # useitem_template.LootBeamColorOverride = (152, 152, 188, 255)
 
     original = FindObject("InteractionIconDefinition", "GD_InteractionIcons.Default.Icon_DefaultPickUp")
-    useitem.PickupIconOverride = ConstructObject(original.Class, Template=original)
-    _set_command(useitem.PickupIconOverride, "Text", "Dismiss")
+    useitem_template.PickupIconOverride = construct_object(original, "Icon_DismissHint")
+    set_command(useitem_template.PickupIconOverride, "Text", "Dismiss")
 
-    return inventory
+    original = FindObject("BehaviorProviderDefinition", "GD_Currency.A_Item.Currency:BehaviorProviderDefinition_0")
+    useitem_bpd = construct_object(original, "Hint_BehaviorProviderDefinition")
+    useitem_template.BehaviorProviderDefinition = useitem_bpd
 
-
-def ConstructPresentation(text: str) -> UObject: #InventoryCardPresentationDefinition
-    original = FindObject("InventoryCardPresentationDefinition", "GD_InventoryPresentations.Definitions.Credits")
-    presentation = ConstructObject(original.Class, Template=original)
-
-    _set_command(presentation, "DescriptionLocReference", text)
-    # _set_command(presentation, "ZippyFrame", "personal")
-
-    return presentation
+    useitem_behavior = construct_object("Behavior_LocalCustomEvent", useitem_bpd)
+    useitem_bpd.BehaviorSequences[0].BehaviorData2[0].Behavior = useitem_behavior
 
 
+def Disable() -> None:
+    RemoveHook("WillowGame.Behavior_LocalCustomEvent.ApplyBehaviorToContext", "LootRandomizer")
 
-"""
-give each ItemPool a `hint` attribute
 
-`Enemy`s request `ItemPool`s to generate ItemPoolDefinitions:
-    self.item.construct_pool(name=self.name, rarity=10)
+def UpdateHints() -> None:
+    for location in seed.Locations:
+        location.update_hint()
 
-`ItemPool` then constructs the ItemPoolDefinitions and fills its BalancedItems such that it drops
-the item with a (1/rarity) chance, and the hint item with a (rarity-1/rarity) chance
-    
-    
-junk color: (152, 152, 188, 255)
-junk mesh: Prop_Pickups.Meshes.PowerShotBuffCan
-junk icon: fx_shared_items.Textures.ItemCards.Buff_Toughen-up
-"""
+
+def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    if caller is not useitem_behavior:
+        return True
+
+    hint_inventory = params.SelfObject.DefinitionData.BalanceDefinition
+    for location in seed.Locations:
+        if location.hint_inventory is hint_inventory:
+            location.update_hint(False)
+    return False
