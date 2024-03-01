@@ -2,6 +2,7 @@ from .defines import Tag
 from .locations import Behavior
 from .missions import Mission, Reward, AltReward, MissionGiver, McShooty
 
+
 Missions = (
     Mission("This Town Ain't Big Enough", Reward("GD_Z1_ThisTown.M_ThisTown")),
     Mission("Shielded Favors", Reward("GD_Episode02.M_Ep2b_Henchman")),
@@ -104,7 +105,6 @@ Missions = (
     Mission("Creature Slaughter: Round 5", Reward("GD_Z2_CreatureSlaughter.M_CreatureSlaughter_5"), tags=Tag.Slaughter|Tag.VeryLongMission),
         # Fire Thresher doesnt respawn in last wave
     Mission("Doctor's Orders", Reward("GD_Z2_DoctorsOrders.M_DoctorsOrders")),
-        # Loot midget box with echo doesnt re-close after complete
         # Stalker crates with final ECHO arent accessible on repeat
     Mission("Animal Rights", Reward("GD_Z2_FreeWilly.M_FreeWilly")),
         # Neither animals nor guards respawn on repeat

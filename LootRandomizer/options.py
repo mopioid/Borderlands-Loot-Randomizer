@@ -183,7 +183,7 @@ def Enable():
         SeedOption(Tag.LongMission,        "Long Missions",         "Include longer side missions. Longer mission turn-ins provide bonus loot options."),
         SeedOption(Tag.VeryLongMission,    "Very Long Missions",    "Include very long side missions (including Headhunter missions). Very long mission turn-ins provide even more bonus loot options."),
         SeedOption(Tag.Slaughter,          "Slaughter Missions",    "Include slaughter missions."),
-        SeedOption(Tag.RaidMission,        "Raid Missions",         "Include missions for raid bosses and Digistruct Peak. Raid missions provide even more bonus loot options."),
+        # SeedOption(Tag.RaidMission,        "Raid Missions",         "Include missions for raid bosses and Digistruct Peak. Raid missions provide even more bonus loot options."),
 
         SeedHeader("Enemies"),
         SeedOption(Tag.UniqueEnemy,        "Unique Enemies",        "Include refarmable enemies."),

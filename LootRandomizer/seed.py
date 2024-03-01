@@ -90,16 +90,14 @@ def Apply(seed: Seed) -> None:
         randomizer.shuffle(Items)
 
     for location, item in zip(Locations, Items):
-        location.apply(item)
+        location.item = item
 
 
 def Revert() -> None:
     global Locations, Items
 
     for location in Locations:
-        location.revert()
-    Locations = ()
+        location.item = None
 
-    for pool in Items:
-        pool.release()
+    Locations = ()
     Items = ()

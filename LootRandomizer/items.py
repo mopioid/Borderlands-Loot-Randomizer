@@ -53,10 +53,11 @@ def Enable() -> None:
 
 
 def Disable() -> None:
-    for character in Character:
-        if hasattr(character, "attr_init"):
-            character.attr_init.ObjectFlags.A &= ~0x4000
-            del character.attr_init
+    pass
+    # for character in Character:
+    #     if hasattr(character, "attr_init"):
+    #         character.attr_init.ObjectFlags.A &= ~0x4000
+    #         del character.attr_init
 
 
 class Item:
@@ -75,27 +76,23 @@ class Item:
     ) -> None:
         self.path = path; self.tags = tags; self.weight = weight
 
-    def initialize(self) -> None:
-        self._inventory = FindObject("InventoryBalanceDefinition", self.path)
-        
+    @property
+    def inventory(self) -> BalancedItem:
+        if not self._inventory:
+            self._inventory = FindObject("InventoryBalanceDefinition", self.path)
+        return self._inventory
+
+    @property
+    def balanced_item(self) -> BalancedItem:
+        if not self._inventory:
+            self.initialize()
+
         if isinstance(self.weight, float):
             probability = (self.weight, None, None, 1.0)
         else:
             probability = (1.0, None, self.weight.attr_init, 1.0)
 
-        self._balanced_item = (None, self.inventory, probability, True)
-
-    @property
-    def inventory(self) -> BalancedItem:
-        if not self._inventory:
-            self.initialize()
-        return self._inventory
-
-    @property
-    def balanced_item(self) -> BalancedItem:
-        if not self._balanced_item:
-            self.initialize()
-        return self._balanced_item
+        return (None, self.inventory, probability, True)
 
     def validate(self) -> bool:
         return not (self.tags & ~seed.SelectedTags)
@@ -209,13 +206,10 @@ class ItemPool:
 
     @property
     def pool(self) -> UObject: #ItemPoolDefinition
-        if self._pool:
-            return self._pool
-
-        self._pool = construct_object("ItemPoolDefinition", "ItemPool_" + self.name)
-        KeepAlive(self._pool)
-        self._pool.bAutoReadyItems = False
-        self._pool.BalancedItems = [item.balanced_item for item in self.valid_items]
+        if not self._pool:
+            self._pool = construct_object("ItemPoolDefinition", "ItemPool_" + self.name)
+            self._pool.bAutoReadyItems = False
+            self._pool.BalancedItems = [item.balanced_item for item in self.valid_items]
 
         return self._pool
     
@@ -225,13 +219,6 @@ class ItemPool:
             self.valid_items.append(self.fallback)
 
         return bool(self.valid_items)
-
-    def release(self) -> None:
-        if hasattr(self, "valid_items"):
-            del self.valid_items
-        if self._pool:
-            self._pool.ObjectFlags.A &= ~0x4000
-            self._pool = None
 
     def prepare(self) -> None:
         for item in self.valid_items:

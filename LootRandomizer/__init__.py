@@ -27,8 +27,8 @@ if __name__ == "__main__":
     #     if module_name.startswith("Mods.LootRandomizer."):
     #         importlib.reload(module)
 else:
-    from . import options, seed
-    from . import items, hints, locations, enemies, missions
+    from . import options, seed, items, hints
+    from . import locations, enemies, missions
 
 from typing import Sequence
 

@@ -1,4 +1,4 @@
-from unrealsdk import Log, ConstructObject, GetEngine, UPackage #type: ignore
+from unrealsdk import Log, ConstructObject, FindObject, GetEngine, KeepAlive, UPackage #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
 
 import enum
@@ -148,28 +148,39 @@ def convert_struct(fstruct: Any) -> Tuple[Any, ...]:
     return (*values,)
 
 
-def format_name(name: str) -> str:
-    return "".join(character for character in name if character.isalnum())
+def construct_object(basis: Union[str, UObject], name: Union[str, UObject, None] = None) -> UObject:
+    path: Optional[str] = None
+    class_name: str = basis
 
-
-def construct_object(basis: Union[str, UObject], path: Union[str, UObject, None] = None) -> UObject:
     kwargs = {'Class': basis, 'Outer': Package}
 
-    if isinstance(path, str):
-        kwargs['Name'] = "".join(char for char in path if char.isalnum() or char == "_")
-    elif path:
-        kwargs['Outer'] = path
+    if isinstance(name, str):
+        name = "".join(char for char in name if char.isalnum() or char == "_")
+        kwargs['Name'] = name
+        path = f"{Package.Name}.{name}"
+    elif name:
+        kwargs['Outer'] = name
 
     if not isinstance(basis, str):
         kwargs['Template'] = basis
         kwargs['Class'] = basis.Class
+        class_name = basis.Class.Name
 
-    return ConstructObject(**kwargs)
+    obj: Optional[UObject] = None
+    if path:
+        obj = FindObject(class_name, path)
+
+    if not obj:
+        obj = ConstructObject(**kwargs)
+        KeepAlive(obj)
+
+    return obj
 
 
-def do_next_tick(routine: Callable[[], None]) -> None:
+def do_next_tick(*routines: Callable[[], None]) -> None:
     def tick(caller: UObject, function: UFunction, params: FStruct) -> bool:
-        RemoveHook("Engine.Interaction.Tick", f"LootRandomizer.{id(routine)}")
-        routine()
+        RemoveHook("Engine.Interaction.Tick", f"LootRandomizer.{id(tick)}")
+        for routine in routines:
+            routine()
         return True
-    RunHook("Engine.Interaction.Tick", f"LootRandomizer.{id(routine)}", tick)
+    RunHook("Engine.Interaction.Tick", f"LootRandomizer.{id(tick)}", tick)

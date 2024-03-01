@@ -15,7 +15,7 @@ MissionTags = (
     Tag.LongMission     |
     Tag.VeryLongMission |
     Tag.Slaughter       |
-    Tag.RaidMission     
+    Tag.RaidEnemy
 )
 
 _purge_paths: Set[str] = set()
@@ -159,7 +159,7 @@ class Reward(locations.Dropper):
         if self.block_mission_item:
             self.uobject
 
-        if self.location.tags & (Tag.VeryLongMission|Tag.RaidMission):
+        if self.location.tags & (Tag.VeryLongMission|Tag.RaidEnemy):
             _double_reward_paths.add(self.path)
 
         if self.purge:
@@ -194,7 +194,7 @@ class Mission(locations.Location):
         if not tags & MissionTags:
             tags |= Tag.ShortMission
 
-        if tags & (Tag.LongMission|Tag.VeryLongMission|Tag.RaidMission):
+        if tags & (Tag.LongMission|Tag.VeryLongMission|Tag.RaidEnemy):
             rarities = (1, 1)
         else:
             rarities = (1,)
@@ -279,8 +279,10 @@ def TakeDamage(caller: UObject, function: UFunction, params: FStruct) -> bool:
 
 
 class MissionGiver(locations.MapDropper):
-    directive_path: str
-    directive_index: int
+    path: str
+    index: int
+    begins: bool
+    ends: bool
 
     def __init__(
         self,
@@ -290,13 +292,16 @@ class MissionGiver(locations.MapDropper):
         begins: bool,
         ends: bool
     ) -> None:
-        super().__init__()
         self.map_names = (map_name,)
-        self.directive_path = path; self.directive_index = index
+        self.path = path; self.index = index
+        self.begins = begins; self.ends = ends
+        super().__init__()
 
     def inject(self) -> None:
-        directive = FindObject("MissionDirectivesDefinition", self.directive_path)
-        directive.MissionDirectives[self.directive_index].bBeginsMission = True
+        giver = FindObject("MissionDirectivesDefinition", self.path)
+        directive = giver.MissionDirectives[self.index]
+        directive.bBeginsMission = self.begins
+        directive.bEndsMission = self.ends
 
 """
 - revert mcshooty's enemy status after completion

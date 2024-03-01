@@ -51,27 +51,17 @@ def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
     if not registry:
         return True
     
-    droppers = [dropper for dropper in registry if dropper.should_inject(caller)]
-    if not droppers:
-        return True
-
     pools = [
         defines.convert_struct(pool) for pool in caller.ItemPoolList
         if pool.ItemPool and pool.ItemPool.Name in locations.pool_whitelist
     ]
 
-    for dropper in droppers:
-        pools += [(pool, (1, None, None, 1)) for pool in dropper.location.pools]
-        dropper.location.item.prepare()
+    droppers = [dropper for dropper in registry if dropper.should_inject(caller)]
+    inject_pools, revert_items = locations.prepare_dropper_pools(droppers)
 
-    caller.ItemPoolList = pools
+    caller.ItemPoolList = pools + inject_pools
 
-    def reset(droppers = droppers):
-        for dropper in droppers:
-            dropper.location.item.revert()
-
-    defines.do_next_tick(reset)
-
+    defines.do_next_tick(revert_items)
     return True
 
 
@@ -82,6 +72,7 @@ class Pawn(locations.MapDropper):
 
     def __init__(self, aiclass: str, transform: Optional[int] = None) -> None:
         self.aiclass = aiclass; self.transform = transform
+        super().__init__()
 
     def register(self) -> None:
         super().register()
@@ -249,7 +240,7 @@ class MissionMidget(Pawn):
 
 
 class MissionMidgetSource(locations.MapDropper):
-    map_names = ("PandoraPark_P",)
+    map_names = ("PandoraPark_P", "OldDust_P")
 
     def inject(self) -> None:
         _mission_midgets.clear()

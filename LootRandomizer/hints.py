@@ -16,12 +16,6 @@ def Enable() -> None:
 
     RunHook("WillowGame.Behavior_LocalCustomEvent.ApplyBehaviorToContext", "LootRandomizer", _Behavior_LocalCustomEvent)
 
-    presentation_template = FindObject("InventoryCardPresentationDefinition", "GD_InventoryPresentations.Definitions.Credits")
-    inventory_template = FindObject("InventoryBalanceDefinition", "LootRandomizer.Hint_Inventory_Default")
-    if inventory_template:
-        useitem_template = FindObject("UsableItemDefinition", "LootRandomizer.Hint_Item_Default")
-        useitem_behavior = useitem_template.BehaviorProviderDefinition.BehaviorSequences[0].BehaviorData2[0].Behavior
-        return
 
     original = FindObject("InventoryBalanceDefinition", "GD_ItemGrades.BuffDrink.ItemGrade_BuffDrink_Toughness")
     inventory_template = construct_object(original, "Hint_Inventory_Default")
@@ -50,6 +44,8 @@ def Enable() -> None:
     original = FindObject("BehaviorProviderDefinition", "GD_Currency.A_Item.Currency:BehaviorProviderDefinition_0")
     useitem_bpd = construct_object(original, "Hint_BehaviorProviderDefinition")
     useitem_template.BehaviorProviderDefinition = useitem_bpd
+
+    presentation_template = FindObject("InventoryCardPresentationDefinition", "GD_InventoryPresentations.Definitions.Credits")
 
     useitem_behavior = construct_object("Behavior_LocalCustomEvent", useitem_bpd)
     useitem_bpd.BehaviorSequences[0].BehaviorData2[0].Behavior = useitem_behavior
