@@ -6,17 +6,10 @@ from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ig
 
 from . import defines
 from .defines import Tag
+from .items import ItemPool
 
-from typing import List, Set
+from typing import List, Optional, Set
 
-
-MissionTags = (
-    Tag.ShortMission    |
-    Tag.LongMission     |
-    Tag.VeryLongMission |
-    Tag.Slaughter       |
-    Tag.RaidEnemy
-)
 
 _purge_paths: Set[str] = set()
 _double_reward_paths: Set[str] = set()
@@ -82,9 +75,9 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
     for mission_data in gri.MissionTracker.MissionList:
         if mission_data.MissionDef == params.Mission:
             mission_data.Status = 0
-            mission_data.ObjectivesProgress = []
+            mission_data.ObjectivesProgress = ()
             mission_data.ActiveObjectiveSet = None
-            mission_data.SubObjectiveSets = []
+            mission_data.SubObjectiveSets = ()
 
     mission_datas: List[FStruct] = []
     for mission_data in pc.MissionPlaythroughs[gri.GetCurrPlaythrough()].MissionList:
@@ -120,78 +113,36 @@ def _AcceptReward(caller: UObject, function: UFunction, params: FStruct) -> bool
     return False
 
 
-class Reward(locations.Dropper):
+class Mission(locations.Location):
     path: str
+    alt: bool
     purge: bool
-    block_mission_item: bool
+    block_weapon: bool
 
     uobject: UObject
 
+    repeatable: bool
     reward_items: List[UObject]
     reward_pools: List[UObject]
+    mission_weapon: UObject
 
-    @property
-    def reward_attribute(self) -> FStruct:
-        return self.uobject.Reward
+    _item: Optional[ItemPool] = None
 
-    def __init__(self, path: str, purge: bool = False, block_mission_item: bool = False) -> None:
-        self.path = path; self.purge = purge; self.block_mission_item = block_mission_item
-
-    def register(self) -> None:
-        self.uobject = FindObject("MissionDefinition", self.path)
-
-        self.repeatable = self.uobject.bRepeatable
-
-        self.reward_items = self.reward_attribute.RewardItems
-        for item in self.reward_items:
-            KeepAlive(item)
-
-        self.reward_pools = self.reward_attribute.RewardItemPools
-        for pool in self.reward_pools:
-            KeepAlive(pool)
-
-        self.uobject.bRepeatable = True
-        self.reward_attribute.RewardItems = []
-
-        self.reward_attribute.RewardItemPools = self.location.pools
-
-        #TODO
-        if self.block_mission_item:
-            self.uobject
-
-        if self.location.tags & (Tag.VeryLongMission|Tag.RaidEnemy):
-            _double_reward_paths.add(self.path)
-
-        if self.purge:
-            _purge_paths.add(self.path)
-
-
-    def unregister(self) -> None:
-        if self.uobject:
-            self.uobject.bRepeatable = self.repeatable
-            self.reward_attribute.RewardItems = self.reward_items
-            self.reward_attribute.RewardItemPools = self.reward_pools
-
-        _purge_paths.discard(self.path)
-        _double_reward_paths.discard(self.path)
-
-
-class AltReward(Reward):
-    @property
-    def reward_attribute(self) -> FStruct:
-        return self.uobject.AlternativeReward
-
-
-class Mission(locations.Location):
     def __init__(
         self,
         name: str,
+        path: str,
         *droppers: locations.Dropper,
+        alt: bool = True,
+        purge: bool = False,
+        block_weapon: bool = False,
         tags=Tag.BaseGame|Tag.ShortMission
     ) -> None:
+        self.path = path; self.alt = alt; self.purge = purge; self.block_weapon = block_weapon
+
         if not tags & defines.ContentTags:
             tags |= Tag.BaseGame
-        if not tags & MissionTags:
+        if not tags & defines.MissionTags:
             tags |= Tag.ShortMission
 
         if tags & (Tag.LongMission|Tag.VeryLongMission|Tag.RaidEnemy):
@@ -200,6 +151,57 @@ class Mission(locations.Location):
             rarities = (1,)
 
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
+
+    @property
+    def reward_attribute(self) -> FStruct:
+        return self.uobject.AlternativeReward if self.alt else self.uobject.Reward
+
+    def enable(self) -> None:
+        self.uobject = FindObject("MissionDefinition", self.path)
+
+        self.repeatable = self.uobject.bRepeatable
+
+        self.reward_items = tuple(self.reward_attribute.RewardItems)
+        for item in self.reward_items:
+            KeepAlive(item)
+        self.reward_attribute.RewardItems = ()
+
+        self.reward_pools = tuple(self.reward_attribute.RewardItemPools)
+        for pool in self.reward_pools:
+            KeepAlive(pool)
+        self.reward_attribute.RewardItemPools = ()
+
+        if self.block_weapon:
+            self.mission_weapon = self.uobject.MissionWeapon
+            KeepAlive(self.mission_weapon)
+            self.uobject.MissionWeapon = None
+
+    def disable(self) -> None:
+        self.uobject.bRepeatable = self.repeatable
+
+        self.reward_attribute.RewardItems = self.reward_items
+        self.reward_attribute.RewardItemPools = self.reward_pools
+
+        if self.block_weapon:
+            self.uobject.MissionWeapon = self.mission_weapon
+
+        self.item = None
+
+    @property
+    def item(self) -> ItemPool:
+        return self._item
+    
+    @item.setter
+    def item(self, item: ItemPool) -> None:
+        self._item = item
+        if item:
+            self.uobject.bRepeatable = True
+            _double_reward_paths.add(self.path)
+            _purge_paths.add(self.path)
+        else:
+            self.uobject.bRepeatable = self.repeatable
+            _purge_paths.discard(self.path)
+            _double_reward_paths.discard(self.path)
 
 
 _mcshooty_pawn: UObject = None
@@ -220,7 +222,7 @@ class McShooty(locations.MapDropper):
         _mcshooty_pawn = None
 
 
-    def inject(self) -> None:
+    def entered_map(self) -> None:
         RunHook("WillowGame.WillowAIPawn.Behavior_ChangeUsability", "LootRandomizer.McShooty", PawnBehavior_ChangeUsability)
         RunHook("Engine.Pawn.TakeDamage", "LootRandomizer.McShooty", TakeDamage)
         RunHook("WillowGame.PopulationFactoryBalancedAIPawn.SetupBalancedPopulationActor", "LootRandomizer.McShooty", SetupBalancedPopulationActor)
@@ -235,7 +237,7 @@ class McShooty(locations.MapDropper):
         shooty_dead.MissionStatesToLinkTo.bReadyToTurnIn = False
         shooty_dead.MissionStatesToLinkTo.bComplete = False
 
-    def uninject(self) -> None:
+    def exited_map(self) -> None:
         RemoveHook("WillowGame.WillowAIPawn.Behavior_ChangeUsability", "LootRandomizer.McShooty")
         RemoveHook("Engine.Pawn.TakeDamage", "LootRandomizer.McShooty")
         RemoveHook("WillowGame.PopulationFactoryBalancedAIPawn.SetupBalancedPopulationActor", "LootRandomizer.McShooty")
@@ -277,6 +279,11 @@ def TakeDamage(caller: UObject, function: UFunction, params: FStruct) -> bool:
 
     return False
 
+"""
+- revert mcshooty's enemy status after completion
+- block non-face-shooting dialog on crit
+"""
+
 
 class MissionGiver(locations.MapDropper):
     path: str
@@ -297,14 +304,8 @@ class MissionGiver(locations.MapDropper):
         self.begins = begins; self.ends = ends
         super().__init__()
 
-    def inject(self) -> None:
+    def entered_map(self) -> None:
         giver = FindObject("MissionDirectivesDefinition", self.path)
         directive = giver.MissionDirectives[self.index]
         directive.bBeginsMission = self.begins
         directive.bEndsMission = self.ends
-
-"""
-- revert mcshooty's enemy status after completion
-- block non-face-shooting dialog on crit
-
-"""

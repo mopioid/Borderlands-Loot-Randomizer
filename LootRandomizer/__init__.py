@@ -13,8 +13,8 @@ if __name__ == "__main__":
         _this_module = mod.__class__.__module__
         break
 
-    from Mods.LootRandomizer import options, seed, hints #type: ignore
-    from Mods.LootRandomizer import items, locations, enemies, missions #type: ignore
+    from Mods.LootRandomizer import options, items, hints #type: ignore
+    from Mods.LootRandomizer import locations, enemies, missions, mission_list #type: ignore
 
     import sys, importlib
     for submodule_name in (
@@ -22,13 +22,9 @@ if __name__ == "__main__":
         "locations", "missions", "mission_list", "enemies", "enemy_list", # "misc",
     ):
         importlib.reload(sys.modules["Mods.LootRandomizer." + submodule_name])
-
-    # for module_name, module in sys.modules.items():
-    #     if module_name.startswith("Mods.LootRandomizer."):
-    #         importlib.reload(module)
 else:
-    from . import options, seed, items, hints
-    from . import locations, enemies, missions
+    from . import options, items, hints
+    from . import locations, enemies, missions, mission_list
 
 from typing import Sequence
 
@@ -36,6 +32,7 @@ from typing import Sequence
 class LootRandomizer(ModMenu.SDKMod):
     Name: str = "Loot Randomizer"
     Version: str = "1.0"
+    # TODO
     Description: str = ""
     Author: str = "mopioid"
     Types: ModMenu.ModTypes = ModMenu.ModTypes.Gameplay
@@ -45,6 +42,7 @@ class LootRandomizer(ModMenu.SDKMod):
 
 
     def Enable(self):
+        mission_list.Enable()
         hints.Enable()
         items.Enable()
         locations.Enable()
@@ -55,32 +53,28 @@ class LootRandomizer(ModMenu.SDKMod):
 
 
     def Disable(self):
-        seed.Revert()
-
         options.Disable()
         missions.Disable()
         enemies.Disable()
         locations.Disable()
         items.Disable()
         hints.Disable()
+        mission_list.Disable()
         super().Disable()
 
-        GetEngine().GamePlayers[0].Actor.ConsoleCommand("obj garbage")
 
-
-_mod_instance = LootRandomizer()
+options.mod_instance = LootRandomizer()
 
 if __name__ == "__main__":
-    try: _mod_instance.__class__.__module__ = _this_module
+    try: options.mod_instance.__class__.__module__ = _this_module
     except: pass
-    ModMenu.RegisterMod(_mod_instance)
-    _mod_instance.Enable()
+    ModMenu.RegisterMod(options.mod_instance)
+    options.mod_instance.Enable()
 else:
-    ModMenu.RegisterMod(_mod_instance)
+    ModMenu.RegisterMod(options.mod_instance)
 
 
 """
-
 Features:
 - Every named enemy in the game made to be able to drop loot
 - Every side mission in the game made able to be repeated
@@ -93,5 +87,4 @@ Compatibility:
 - Works with any overhauls that do not add items to the game (e.g. UCP, BL2fix, Reborn)
 - Works in co-op, with only the only host needing to run the mod
 - Seeds can be generated to accomodate any combinations of DLCs
-
 """

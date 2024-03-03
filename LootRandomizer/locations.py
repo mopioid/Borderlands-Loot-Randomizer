@@ -75,6 +75,7 @@ class Location:
             useitem.Presentation = construct_object(hints.presentation_template, useitem)
 
             self._hint_pool = construct_object("ItemPoolDefinition", "Pool_Hint_" + self.name)
+            self._hint_pool.bAutoReadyItems = False
             self._hint_pool.BalancedItems = ((None, hint_inventory, (1, None, None, 1), True),)
 
             self.update_hint(True)
@@ -106,17 +107,16 @@ class Dropper:
 
 class MapDropper(Dropper):
     map_names: Sequence[str]
-    in_map: bool = False
 
     def __init__(self) -> None:
         for map_name in self.map_names:
             registry = map_registry.setdefault(map_name, set())
             registry.add(self)
 
-    def inject(self) -> None:
+    def entered_map(self) -> None:
         raise NotImplementedError
 
-    def uninject(self) -> None:
+    def exited_map(self) -> None:
         pass
 
 
@@ -145,13 +145,11 @@ class Interactive(Dropper):
 def MapChanged(new_map_name: str) -> None:
     global map_name
     for map_dropper in map_registry.get(map_name, ()):
-        map_dropper.in_map = False
-        map_dropper.uninject()
+        map_dropper.exited_map()
     
     map_name = new_map_name
     for map_dropper in map_registry.get(map_name, ()):
-        map_dropper.in_map = True
-        map_dropper.inject()
+        map_dropper.entered_map()
 
 
 def _PostCommitMapChange(caller: UObject, function: UFunction, params: FStruct) -> bool:
@@ -194,7 +192,7 @@ def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) 
     if not registry:
         return True
     
-    original_list = defines.convert_struct(list(caller.ItemPoolList))
+    original_list = defines.convert_struct(tuple(caller.ItemPoolList))
     pools = [pool for pool in original_list if pool[0] and pool[0].Name in pool_whitelist]
 
     droppers = [dropper for dropper in registry if dropper.inject]
@@ -212,7 +210,7 @@ def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) 
             clean_itempoollistdef(nested_itempoollistdef)
 
         if itempoollistdef not in cleaned_itempoollistdefs:
-            pools = defines.convert_struct(list(itempoollistdef.ItemPools))
+            pools = defines.convert_struct(tuple(itempoollistdef.ItemPools))
             cleaned_itempoollistdefs[itempoollistdef] = pools
             itempoollistdef.ItemPools = [
                 pool for pool in pools
@@ -267,6 +265,7 @@ def _UsedBy(caller: UObject, function: UFunction, params: FStruct) -> bool:
 - loot goon chests
 - slot machines
 - tina slot machines
+- roland's armory
 
 - chest being stolen by yeti
 - leprechaun

@@ -10,27 +10,6 @@ from .defines import Tag, construct_object
 from typing import Dict, Optional, Set, Sequence
 
 
-_enemy_tags = (
-    Tag.UniqueEnemy     |
-    Tag.SlowEnemy       |
-    Tag.RareEnemy       |
-    Tag.RaidEnemy       |
-    Tag.MissionEnemy    |
-    Tag.DigistructEnemy |
-    Tag.EvolvedEnemy
-)
-
-_enemy_tag_rarities = {
-    Tag.SlowEnemy:       (3,),
-    Tag.RareEnemy:       (3,),
-    Tag.VeryRareEnemy:   (1,2,2),
-    Tag.EvolvedEnemy:    (2,3),
-    Tag.MissionEnemy:    (5,),
-    Tag.LongMission:     (2,),
-    Tag.VeryLongMission: (1,2),
-    Tag.RaidEnemy:       (1,1,2,2),
-}
-
 def Enable() -> None:
     RunHook("WillowGame.WillowAIPawn.Died", "LootRandomizer", _pawn_died)
 
@@ -38,16 +17,16 @@ def Disable() -> None:
     RemoveHook("WillowGame.WillowAIPawn.Died", "LootRandomizer")
 
 
-aiclass_registry: Dict[str, Set[Pawn]] = dict()
+balance_registry: Dict[str, Set[Pawn]] = dict()
 
 
 def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    aiclass = caller.BalanceDefinitionState.BalanceDefinition
-    aiclass = UObject.PathName(aiclass).split(".")[-1]
-    if not aiclass:
+    balance = caller.BalanceDefinitionState.BalanceDefinition
+    balance = UObject.PathName(balance).split(".")[-1]
+    if not balance:
         return True
     
-    registry = aiclass_registry.get(aiclass)
+    registry = balance_registry.get(balance)
     if not registry:
         return True
     
@@ -59,36 +38,10 @@ def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
     droppers = [dropper for dropper in registry if dropper.should_inject(caller)]
     inject_pools, revert_items = locations.prepare_dropper_pools(droppers)
 
-    caller.ItemPoolList = pools + inject_pools
+    caller.ItemPoolList = pools + [(pool, (1, None, None, 1)) for pool in inject_pools]
 
     defines.do_next_tick(revert_items)
     return True
-
-
-class Pawn(locations.MapDropper):
-    map_names = ()
-    in_map = True
-    transform: Optional[bool]
-
-    def __init__(self, aiclass: str, transform: Optional[int] = None) -> None:
-        self.aiclass = aiclass; self.transform = transform
-        super().__init__()
-
-    def register(self) -> None:
-        super().register()
-        registry = aiclass_registry.setdefault(self.aiclass, set())
-        registry.add(self)
-
-    def unregister(self) -> None:
-        super().unregister()
-        registry = aiclass_registry.get(self.aiclass)
-        if registry:
-            registry.discard(self)
-            if not registry:
-                del aiclass_registry[self.aiclass]
-
-    def should_inject(self, pawn: UObject) -> bool:
-        return self.transform is None or self.transform == pawn.TransformType
 
 
 class Enemy(locations.Location):
@@ -116,31 +69,48 @@ class Enemy(locations.Location):
 
         if not tags & defines.ContentTags:
             tags |= Tag.BaseGame
-        if not tags & _enemy_tags:
+        if not tags & defines.EnemyTags:
             tags |= Tag.UniqueEnemy
 
-        if rarities is None:
-            rarities = list()
-            for tag, tag_rarities in _enemy_tag_rarities.items():
-                if tag & tags:
-                    for rarity in tag_rarities:
-                        rarities.append(rarity)
+        if not rarities:
+            rarities = []
 
-            if not len(rarities):
-                rarities.append(10)
+            if   tags & Tag.SlowEnemy:       rarities += (3,)
+            if   tags & Tag.RareEnemy:       rarities += (3,)
+            if   tags & Tag.VeryRareEnemy:   rarities += (1,2,2)
+            if   tags & Tag.EvolvedEnemy:    rarities += (2,3)
+            if   tags & Tag.RaidEnemy:       rarities += (1,1,2,2)
+
+            if   tags & Tag.LongMission:     rarities += (2,)
+            elif tags & Tag.VeryLongMission: rarities += (1,2)
+            elif tags & Tag.MissionEnemy:    rarities += (5,)
+
+            if   not rarities:               rarities += (8,)
 
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
+
+
+class Pawn(locations.Dropper):
+    transform: Optional[bool]
+
+    def __init__(self, balance: str, transform: Optional[int] = None) -> None:
+        self.balance = balance; self.transform = transform
+
+        registry = balance_registry.setdefault(self.balance, set())
+        registry.add(self)
+
+        super().__init__()
+
+    def should_inject(self, pawn: UObject) -> bool:
+        return self.transform is None or self.transform == pawn.TransformType
 
 
 class Leviathan(locations.MapDropper):
     map_names = ("Orchid_WormBelly_P",)
 
-    def inject(self) -> None:
+    def entered_map(self) -> None:
         def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if UObject.PathName(caller.MissionObjective) not in (
-                # "GD_Orchid_SM_EndGameClone.M_Orchid_EndGame:KillBossWorm",
-                "GD_Orchid_Plot_Mission09.M_Orchid_PlotMission09:KillBossWorm"
-            ):
+            if UObject.PathName(caller.MissionObjective) != "GD_Orchid_Plot_Mission09.M_Orchid_PlotMission09:KillBossWorm":
                 return True
 
             pawn = GetEngine().GetCurrentWorldInfo().PawnList
@@ -165,14 +135,14 @@ class Leviathan(locations.MapDropper):
 
         RunHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}", hook)
         
-    def uninject(self) -> None:
+    def exited_map(self) -> None:
         RemoveHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
 
 
 class MonsterTruck(locations.MapDropper):
     map_names = ("Iris_Hub2_P",)
 
-    def inject(self) -> None:
+    def entered_map(self) -> None:
         def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
             if not (caller.VehicleDef and caller.VehicleDef.Name == "Class_MonsterTruck_AIOnly"):
                 return True
@@ -186,66 +156,39 @@ class MonsterTruck(locations.MapDropper):
 
         RunHook("Engine.Pawn.Died", f"LootRandomizer.{id(self)}", hook)
 
-    def uninject(self) -> None:
+    def exited_map(self) -> None:
         RemoveHook("Engine.Pawn.Died", f"LootRandomizer.{id(self)}")
 
 
-_mission_midgets: Set[str] = set()
-
-midget_aiclasses = (
-    "PawnBalance_Jimmy",
-    "PawnBalance_LootMidget_CombatEngineer",
-    "PawnBalance_LootMidget_Engineer",
-    "PawnBalance_LootMidget_LoaderGUN",
-    "PawnBalance_LootMidget_LoaderJET",
-    "PawnBalance_LootMidget_LoaderWAR",
-    "PawnBalance_LootMidget_Marauder",
-    "PawnBalance_LootMidget_Goliath",
-    "PawnBalance_LootMidget_Nomad",
-    "PawnBalance_LootMidget_Psycho",
-    "PawnBalance_LootMidget_Rat",
-)
+_doctorsorders_midgets: Set[str] = set()
 
 def _spawn_midget(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    if UObject.PathName(caller) in (
-        "GD_Balance_Treasure.InteractiveObjectsTrap.MidgetHyperion.InteractiveObj_CardboardBox_MidgetHyperion:BehaviorProviderDefinition_1.Behavior_SpawnFromPopulationSystem_5",
-    ):
-        _mission_midgets.add(UObject.PathName(params.SpawnedActor))
+    if UObject.PathName(caller) == "GD_Balance_Treasure.InteractiveObjectsTrap.MidgetHyperion.InteractiveObj_CardboardBox_MidgetHyperion:BehaviorProviderDefinition_1.Behavior_SpawnFromPopulationSystem_5":
+        _doctorsorders_midgets.add(UObject.PathName(params.SpawnedActor))
     return True
-
 
 class Midget(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
-        return super().should_inject(pawn) and (
-            (UObject.PathName(pawn) not in _mission_midgets) and
-            (UObject.PathName(pawn.MySpawnPoint) != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26")
+        return (
+            UObject.PathName(pawn) not in _doctorsorders_midgets and
+            UObject.PathName(pawn.MySpawnPoint) != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
         )
 
-
-class MissionMidget(Pawn):
-    in_map = False
-
-    def __init__(self, aiclass: str, map_name: str) -> None:
-        super().__init__(aiclass)
-        self.map_names = (map_name,)
-
+class DoctorsOrdersMidget(Pawn):
     def should_inject(self, pawn: UObject) -> None:
-        return super().should_inject(pawn) and self.in_map and (
-            (UObject.PathName(pawn) in _mission_midgets) or
-            (UObject.PathName(pawn.MySpawnPoint) == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26")
-        )
+        return UObject.PathName(pawn) in _doctorsorders_midgets
 
-    def inject(self) -> None:
-        pass
+class SpaceCowboyMidget(Pawn):
+    def should_inject(self, pawn: UObject) -> None:
+        return UObject.PathName(pawn.MySpawnPoint) == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
 
+class DoctorsOrdersMidgetRegistry(locations.MapDropper):
+    map_names = ("PandoraPark_P",)
 
-class MissionMidgetSource(locations.MapDropper):
-    map_names = ("PandoraPark_P", "OldDust_P")
-
-    def inject(self) -> None:
-        _mission_midgets.clear()
+    def entered_map(self) -> None:
+        _doctorsorders_midgets.clear()
         RunHook("WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput", f"LootRandomizer.{id(self)}", _spawn_midget)
 
-    def uninject(self) -> None:
-        _mission_midgets.clear()
+    def exited_map(self) -> None:
+        _doctorsorders_midgets.clear()
         RemoveHook("WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput", f"LootRandomizer.{id(self)}")

@@ -3,7 +3,7 @@ from .locations import Behavior
 
 from .enemies import Enemy, Pawn
 from .enemies import Leviathan, MonsterTruck
-from .enemies import Midget, MissionMidget, MissionMidgetSource, midget_aiclasses
+from .enemies import Midget, DoctorsOrdersMidget, SpaceCowboyMidget, DoctorsOrdersMidgetRegistry
 
 
 Enemies = (
@@ -84,6 +84,8 @@ Enemies = (
         Behavior("GD_HyperionBunkerBoss.Character.AIDef_BunkerBoss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_17", inject=False),
     tags=Tag.SlowEnemy),
     Enemy("Jim Kepler", Pawn("BD_BFF_Jim"), mission="BFFs"),
+        # TODO
+        # Fix unscaled kepler level
     Enemy("Dukino's Mom", Pawn("PawnBalance_Skagzilla")),
     Enemy("Donkey Mong", Pawn("PawnBalance_PrimalBeast_DonkeyMong"), tags=Tag.RareEnemy),
     Enemy("King Mong", Pawn("PawnBalance_PrimalBeast_KingMong"), tags=Tag.RareEnemy),
@@ -117,17 +119,28 @@ Enemies = (
     tags=Tag.RaidEnemy),
 
     Enemy("Loot Midget",
-        *(Midget(aiclass) for aiclass in midget_aiclasses),
-        MissionMidgetSource(),
+        Midget("PawnBalance_Jimmy"),
+        Midget("PawnBalance_LootMidget_CombatEngineer"),
+        Midget("PawnBalance_LootMidget_Engineer"),
+        Midget("PawnBalance_LootMidget_LoaderGUN"),
+        Midget("PawnBalance_LootMidget_LoaderJET"),
+        Midget("PawnBalance_LootMidget_LoaderWAR"),
+        Midget("PawnBalance_LootMidget_Marauder"),
+        Midget("PawnBalance_LootMidget_Goliath"),
+        Midget("PawnBalance_LootMidget_Nomad"),
+        Midget("PawnBalance_LootMidget_Psycho"),
+        Midget("PawnBalance_LootMidget_Rat"),
+        DoctorsOrdersMidgetRegistry(),
     tags=Tag.RareEnemy),
     Enemy("Loot Midget (Doctor's Orders)",
-        *(MissionMidget(aiclass, "PandoraPark_P") for aiclass in midget_aiclasses),
-        MissionMidgetSource(),
+        DoctorsOrdersMidget("PawnBalance_Jimmy"),
+        DoctorsOrdersMidget("PawnBalance_LootMidget_CombatEngineer"),
+        DoctorsOrdersMidget("PawnBalance_LootMidget_Engineer"),
+        DoctorsOrdersMidget("PawnBalance_LootMidget_LoaderGUN"),
+        DoctorsOrdersMidget("PawnBalance_LootMidget_LoaderJET"),
+        DoctorsOrdersMidget("PawnBalance_LootMidget_LoaderWAR"),
+        DoctorsOrdersMidgetRegistry(),
     mission="Doctor's Orders"),
-    Enemy("Loot Midget (Space Cowboy)",
-        *(MissionMidget(aiclass, "OldDust_P") for aiclass in midget_aiclasses),
-        MissionMidgetSource(),
-    mission="Space Cowboy"),
     Enemy("Chubby/Tubby",
         Pawn("PawnBalance_BugMorphChubby"),
         Pawn("PawnBalance_MidgetChubby"),
@@ -339,6 +352,7 @@ Enemies = (
     Enemy("Ghost", Pawn("PawnBalance_Ghost"), tags=Tag.FightForSanctuary),
     Enemy("Uranus", Pawn("PawnBalance_Uranus"), tags=Tag.FightForSanctuary|Tag.SlowEnemy),
     Enemy("Cassius", Pawn("PawnBalance_Anemone_Cassius"), tags=Tag.FightForSanctuary),
+    Enemy("Loot Midget (Space Cowboy)", SpaceCowboyMidget("PawnBalance_LootMidget_Marauder"), mission="Space Cowboy"),
     Enemy("Dr. Zed's Experiment",
         Pawn("PawnBalance_Anemone_Slagsteins1"),
         Pawn("PawnBalance_Anemone_Slagsteins2"),
@@ -361,22 +375,24 @@ Enemies = (
 
     Enemy("Chef Gouda Remsay", Pawn("PawnBalance_ButcherBoss"), mission="The Hunger Pangs"),
     Enemy("The Rat in the Hat", Pawn("PawnBalance_RatChef"), mission="The Hunger Pangs"),
+    Enemy("Chef Brulee", Pawn("PawnBalance_ButcherBoss2"), mission="The Hunger Pangs"),
+    Enemy("Chef Bork Bork", Pawn("PawnBalance_ButcherBoss3"), mission="The Hunger Pangs"),
     Enemy("Glasspool, Tribute of Wurmwater", Pawn("PawnBalance_SandMale"), mission="The Hunger Pangs"),
     Enemy("William, Tribute of Wurmwater", Pawn("PawnBalance_SandFemale"), mission="The Hunger Pangs"),
     Enemy("Axel, Tribute of Opportunity", Pawn("PawnBalance_EngineerMale"), mission="The Hunger Pangs"),
     Enemy("Rose, Tribute of Opportunity", Pawn("PawnBalance_EngineerFemale"), mission="The Hunger Pangs"),
-    Enemy("Chef Brulee", Pawn("PawnBalance_ButcherBoss2"), mission="The Hunger Pangs"),
-    Enemy("Chef Bork Bork", Pawn("PawnBalance_ButcherBoss3"), mission="The Hunger Pangs"),
-    Enemy("Strip, Tribute of Southern Shelf", Pawn("PawnBalance_FleshripperFemale"), tags=Tag.WattleGobbler),
-    Enemy("Flay, Tribute of Southern Shelf", Pawn("PawnBalance_FleshripperMale"), tags=Tag.WattleGobbler),
-    Enemy("Moretus, Tribute of Sawtooth Cauldron", Pawn("PawnBalance_CraterMale"), tags=Tag.WattleGobbler),
-    Enemy("Bailly, Tribute of Sawtooth Cauldron", Pawn("PawnBalance_CraterFemale"), tags=Tag.WattleGobbler),
+    Enemy("Strip, Tribute of Southern Shelf", Pawn("PawnBalance_FleshripperFemale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Flay, Tribute of Southern Shelf", Pawn("PawnBalance_FleshripperMale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Fuse, Tribute of Frostburn", Pawn("PawnBalance_IncineratorMale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Cynder, Tribute of Frostburn", Pawn("PawnBalance_IncineratorFemale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Annie, Tribute of Lynchwood", Pawn("PawnBalance_Lynchwood_Female"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Garret, Tribute of Lynchwood", Pawn("PawnBalance_Lynchwood_Male"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Moretus, Tribute of Sawtooth Cauldron", Pawn("PawnBalance_CraterMale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Bailly, Tribute of Sawtooth Cauldron", Pawn("PawnBalance_CraterFemale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
     Enemy("Ravenous Wattle Gobbler",
         Pawn("PawnBalance_BigBird"),
         Pawn("PawnBalance_BigBird_HARD"),
     tags=Tag.WattleGobbler),
-    Enemy("Fuse, Tribute of Frostburn", Pawn("PawnBalance_IncineratorMale"), mission="Grandma Flexington's Story: Raid Difficulty"),
-    Enemy("Cynder, Tribute of Frostburn", Pawn("PawnBalance_IncineratorFemale"), mission="Grandma Flexington's Story: Raid Difficulty"),
 
     Enemy("The Abominable Mister Tinder Snowflake",
         Pawn("PawnBalance_SnowMan"),
@@ -445,7 +461,7 @@ Enemies = (
 )
 
 
-"""
+""",
 # Purge drop on death pools
 
 - non-badass magic folk

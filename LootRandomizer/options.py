@@ -21,6 +21,9 @@ from typing import Callable, Optional, Sequence, Set
 _seeds_file = os.path.join(os.path.dirname(__file__), "Seeds.txt")
 
 
+mod_instance: ModMenu.SDKMod
+
+
 OwnedContent = Tag.BaseGame
 
 
@@ -209,6 +212,8 @@ def Enable():
 
 
 def Disable():
+    seed.Revert()
+
     RemoveHook("WillowGame.WillowScrollingList.OnClikEvent", "LootRandomizer")
 
 
@@ -231,11 +236,6 @@ def LoadSeeds() -> None:
         SeedsList.CurrentValue = SeedsList.Choices[0]
 
 
-def Save() -> None:
-    from Mods import LootRandomizer, ModMenu #type: ignore
-    ModMenu.SaveModSettings(LootRandomizer._mod_instance)
-
-
 def GenerateSeedClicked() -> None:
     tags = Tag(0)
 
@@ -248,7 +248,7 @@ def GenerateSeedClicked() -> None:
 
     SeedsList.Choices.append(new_seed_string)
     SeedsList.CurrentValue = new_seed_string
-    Save()
+    ModMenu.SaveModSettings(mod_instance)
 
     with open(_seeds_file, 'a+') as file:
         file.writelines(new_seed.to_string() + "\n")

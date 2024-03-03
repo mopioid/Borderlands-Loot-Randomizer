@@ -46,6 +46,7 @@ class Tag(enum.IntFlag):
     EvolvedEnemy       = enum.auto()
     DigistructEnemy    = enum.auto()
 
+    SeraphVendor       = enum.auto()
     Miscellaneous      = enum.auto()
 
     DuplicateItems     = enum.auto()
@@ -72,10 +73,32 @@ for tag, title, path in (
     tag.path = path
     ContentTags |= tag
 
+MissionTags = (
+    Tag.ShortMission    |
+    Tag.LongMission     |
+    Tag.VeryLongMission |
+    Tag.Slaughter       |
+    Tag.RaidEnemy
+)
+
+EnemyTags = (
+    Tag.UniqueEnemy     |
+    Tag.SlowEnemy       |
+    Tag.RareEnemy       |
+    Tag.RaidEnemy       |
+    Tag.MissionEnemy    |
+    Tag.DigistructEnemy |
+    Tag.EvolvedEnemy
+)
 
 
-class Hint(enum.Enum):
+class Hint(str, enum.Enum):
+    # TODO
     ClassMod = "Class Mod"
+
+    BlueClassMod = "Blue Class Mod"
+    PurpleClassMod = "Purple Class Mod"
+    LegendaryClassMod = "Legendary Class Mod"
 
     PurpleShield = "Purple Shield"
     UniqueShield = "Unique Shield"
@@ -113,6 +136,7 @@ class Hint(enum.Enum):
     UniqueLauncher = "Unique Rocket Launcher"
     LegendaryLauncher = "Legendary Rocket Launcher"
 
+    EtechWeapon = "E-tech Weapon"
     PearlescentWeapon = "Pearlescent Weapon"
 
     SeraphItem = "Seraph Item"
@@ -122,8 +146,11 @@ class Hint(enum.Enum):
     EffervescentWeapon = "Effervescent Weapon"
 
 
+def console_command(command: str) -> None:
+    GetEngine().GamePlayers[0].Actor.ConsoleCommand(command)
+
 def set_command(uobject: UObject, attribute: str, value: str):
-    GetEngine().GamePlayers[0].Actor.ConsoleCommand(f"set {UObject.PathName(uobject)} {attribute} {value}")
+    console_command(f"set {UObject.PathName(uobject)} {attribute} {value}")
 
 
 def convert_struct(fstruct: Any) -> Tuple[Any, ...]:
@@ -139,13 +166,15 @@ def convert_struct(fstruct: Any) -> Tuple[Any, ...]:
 
     values: List[Any] = []
     
-    attribute = struct_type.Children
-    while attribute:
-        value = getattr(fstruct, attribute.GetName())
-        values.append(convert_struct(value))
-        attribute = attribute.Next
+    while struct_type:
+        attribute = struct_type.Children
+        while attribute:
+            value = getattr(fstruct, attribute.GetName())
+            values.append(convert_struct(value))
+            attribute = attribute.Next
+        struct_type = struct_type.SuperField
 
-    return (*values,)
+    return tuple(values)
 
 
 def construct_object(basis: Union[str, UObject], name: Union[str, UObject, None] = None) -> UObject:

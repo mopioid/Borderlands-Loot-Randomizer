@@ -19,7 +19,6 @@ def Enable() -> None:
 
     original = FindObject("InventoryBalanceDefinition", "GD_ItemGrades.BuffDrink.ItemGrade_BuffDrink_Toughness")
     inventory_template = construct_object(original, "Hint_Inventory_Default")
-    KeepAlive(inventory_template)
 
     inventory_template.Manufacturers = ((
         FindObject("ManufacturerDefinition", "GD_Currency.Manufacturers.Cash_Manufacturer"),
@@ -27,7 +26,6 @@ def Enable() -> None:
 
     original = FindObject("UsableItemDefinition", "GD_BuffDrinks.A_Item.BuffDrink_Toughness")
     useitem_template = construct_object(original, "Hint_Item_Default")
-    KeepAlive(useitem_template)
 
     useitem_template.bPickupInBulk = False
     useitem_template.CalloutDefinition = None
