@@ -50,17 +50,17 @@ def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> boo
     if not registry:
         return True
 
-    tracker = get_tracker()
-
+    delegates: List[MissionStatusDelegate] = []
     for mission in registry:
-        if tracker.GetMissionStatus(missiondef) == 4:
-            mission.reward.ExperienceRewardPercentage.BaseValueScaleConstant = 0
+        for dropper in mission.droppers:
+            if isinstance(dropper, MissionStatusDelegate):
+                delegates.append(dropper.accepted)
 
-    def play_kickoff(tracker=tracker, missiondef=missiondef):
+    def play_kickoff(missiondef=missiondef):
+        tracker = get_tracker()
         tracker.PlayKickoff(missiondef)
         tracker.SetKickoffHeard(missiondef)
 
-    delegates = (dropper.accepted for dropper in mission.droppers if isinstance(dropper, MissionStatusDelegate))
     defines.do_next_tick(play_kickoff, *delegates)
     return True
 
@@ -229,6 +229,7 @@ class Mission(locations.Location):
         self.reward.RewardItemPools = ()
 
         self.reward_xp_scale = self.reward.ExperienceRewardPercentage.BaseValueScaleConstant
+        self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = 0
 
         if self.block_weapon:
             self.mission_weapon = self.uobject.MissionWeapon

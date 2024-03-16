@@ -41,7 +41,8 @@ def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
 
     caller.ItemPoolList = pools
 
-    caller.Weapon.bDropOnDeath = False
+    if caller.Weapon:
+        caller.Weapon.bDropOnDeath = False
     for item in caller.EquippedItems:
         if item:
             item.bDropOnDeath = False
