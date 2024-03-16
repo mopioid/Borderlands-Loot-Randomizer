@@ -27,12 +27,15 @@ def _LoadSeeds() -> Sequence[str]:
         Log(f"Could not open seeds directory at {seeds_dir}")
         return ("",)
 
-    if os.path.exists(seeds_file) and not os.path.isfile(seeds_file):
-        Log(f"Could not open seeds file at {seeds_file}")
-        return ("",)
+    if os.path.exists(seeds_file):
+        if not os.path.isfile(seeds_file):
+            Log(f"Could not open seeds file at {seeds_file}")
+            return ("",)
+    else:
+        open(seeds_file, 'w')
 
     listed_seeds: List[str] = []
-    with open(seeds_file, 'a+') as file:
+    with open(seeds_file) as file:
         for line in file:
             line = line.strip()
             if line == "":
@@ -89,8 +92,8 @@ def _NewSeedGenerateClicked() -> None:
 
     _SeedsList.Choices.append(new_seed.string)
     _SeedsList.commit_CurrentValue(new_seed.string)
-
     ModMenu.SaveModSettings(mod_instance)
+
     show_dialog(
         "Seed Generated and Applied",
         "You will now see the seed's randomization in your game.\n\n"
