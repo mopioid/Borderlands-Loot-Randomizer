@@ -2,7 +2,7 @@
 
 [Discord](https://discord.gg/C37HvmvBbS)&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;[Donate](https://streamlabs.com/mopioid/tip)
 
-<hr>
+![Face McTwisty](https://i.imgur.com/OIZ9Ab4.jpeg)
 
 Loot Randomizer is a mod for Borderlands 2 that provides repeated new playthrough experiences, by means of shuffling every item in the game into new drop locations.
 
