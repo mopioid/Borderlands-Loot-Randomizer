@@ -16,22 +16,24 @@
             "Digistruct Peak": "On",
             "Short Missions": "On",
             "Long Missions": "On",
-            "Very Long Missions": "On",
-            "Slaughter Missions": "On",
+            "Very Long Missions": "Off",
+            "Slaughter Missions": "Off",
             "Unique Enemies": "On",
             "Slow Enemies": "On",
             "Rare Enemies": "On",
-            "Very Rare Enemies": "On",
-            "Raid Enemies": "On",
-            "Mission Enemies": "On",
-            "Evolved Enemies": "On",
-            "Digistruct Enemies": "On",
+            "Very Rare Enemies": "Off",
+            "Mob Farms": "Off",
+            "Raid Enemies": "Off",
+            "Mission Enemies": "Off",
+            "Evolved Enemies": "Off",
+            "Digistruct Enemies": "Off",
+            "Special Vendors": "Off",
             "Miscellaneous": "On",
-            "Duplicate Items": "On",
+            "Duplicate Items": "Off",
             "Allow Hints": "On"
         },
         "Select Seed": {
-            "Seed": "gsatw-zya77-776hy"
+            "Seed": ""
         },
         "Hints": "Vague"
     },

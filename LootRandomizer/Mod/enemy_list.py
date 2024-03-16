@@ -1,9 +1,156 @@
-from .defines import Tag
-from .locations import Behavior
+from unrealsdk import Log, FindObject, GetEngine  #type: ignore
+from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
 
+from .defines import Tag, construct_object
+from .locations import Location, Dropper, Behavior, MapDropper, Interactive
 from .enemies import Enemy, Pawn
-from .enemies import Leviathan, MonsterTruck
-from .enemies import Midget, DoctorsOrdersMidget, SpaceCowboyMidget, DoctorsOrdersMidgetRegistry
+from .items import ItemPool
+
+from typing import Optional, Sequence, Set
+
+
+class Leviathan(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("Orchid_WormBelly_P")
+
+    def entered_map(self) -> None:
+        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+            if UObject.PathName(caller.MissionObjective) != "GD_Orchid_Plot_Mission09.M_Orchid_PlotMission09:KillBossWorm":
+                return True
+
+            pawn = GetEngine().GetCurrentWorldInfo().PawnList
+            while pawn:
+                if pawn.AIClass and pawn.AIClass.Name == "CharacterClass_Orchid_BossWorm":
+                    break
+                pawn = pawn.NextPawn
+
+            spawner = construct_object("Behavior_SpawnLootAroundPoint")
+
+            spawner.ItemPools = self.location.pools
+            spawner.SpawnVelocity = (-400, -1800, -400)
+            spawner.SpawnVelocityRelativeTo = 1
+            spawner.CustomLocation = ((1200, -66000, 3000), None, "")
+            spawner.CircularScatterRadius = 200
+
+            self.location.item.prepare()
+            spawner.ApplyBehaviorToContext(pawn, (), None, None, None, ())
+            self.location.item.revert()
+
+            return True
+
+        RunHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}", hook)
+        
+    def exited_map(self) -> None:
+        RemoveHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
+
+
+class MonsterTruck(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("Iris_Hub2_P")
+
+    def entered_map(self) -> None:
+        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+            if not (caller.VehicleDef and caller.VehicleDef.Name == "Class_MonsterTruck_AIOnly"):
+                return True
+
+            spawner = construct_object("Behavior_SpawnLootAroundPoint")
+            spawner.ItemPools = self.location.pools
+
+            self.location.item.prepare()
+            spawner.ApplyBehaviorToContext(caller, (), None, None, None, ())
+            self.location.item.revert()
+
+        RunHook("Engine.Pawn.Died", f"LootRandomizer.{id(self)}", hook)
+
+    def exited_map(self) -> None:
+        RemoveHook("Engine.Pawn.Died", f"LootRandomizer.{id(self)}")
+
+
+_doctorsorders_midgets: Set[str] = set()
+
+def _spawn_midget(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    if UObject.PathName(caller) == "GD_Balance_Treasure.InteractiveObjectsTrap.MidgetHyperion.InteractiveObj_CardboardBox_MidgetHyperion:BehaviorProviderDefinition_1.Behavior_SpawnFromPopulationSystem_5":
+        _doctorsorders_midgets.add(UObject.PathName(params.SpawnedActor))
+    return True
+
+class Midget(Pawn):
+    def should_inject(self, pawn: UObject) -> bool:
+        return (
+            UObject.PathName(pawn) not in _doctorsorders_midgets and
+            UObject.PathName(pawn.MySpawnPoint) != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
+        )
+
+class DoctorsOrdersMidget(Pawn):
+    def should_inject(self, pawn: UObject) -> None:
+        return UObject.PathName(pawn) in _doctorsorders_midgets
+
+class SpaceCowboyMidget(Pawn):
+    def should_inject(self, pawn: UObject) -> None:
+        return UObject.PathName(pawn.MySpawnPoint) == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
+
+class DoctorsOrdersMidgetRegistry(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("PandoraPark_P")
+
+    def entered_map(self) -> None:
+        _doctorsorders_midgets.clear()
+        RunHook("WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput", f"LootRandomizer.{id(self)}", _spawn_midget)
+
+    def exited_map(self) -> None:
+        _doctorsorders_midgets.clear()
+        RemoveHook("WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput", f"LootRandomizer.{id(self)}")
+
+
+class HaderaxChest(Interactive):
+    def inject(self, interactive: UObject) -> None:
+        pools = self.prepare_pools()
+        
+        money = FindObject("ItemPoolDefinition", "GD_Itempools.AmmoAndResourcePools.Pool_Money_1_BIG")
+        pool = pools[0] if pools else money
+
+        for loot in interactive.Loot:
+            loot.ItemAttachments[0].ItemPool = pool
+            for index in (1, 2, 3, 8, 9, 10, 11):
+                loot.ItemAttachments[index].ItemPool = money
+
+
+class DigiEnemy(Enemy):
+    fallback: str
+
+    _fallback_enemy: Optional[Enemy] = None
+    _item: Optional[ItemPool] = None
+
+    def __init__(
+        self,
+        name: str,
+        *droppers: Dropper,
+        fallback: str,
+        tags: Tag = Tag(0),
+        rarities: Optional[Sequence[int]] = None
+    ) -> None:
+        self.fallback = fallback
+        super().__init__(name, *droppers, tags=tags, rarities=rarities)
+
+    @property
+    def fallback_enemy(self) -> Enemy:
+        if not self._fallback_enemy:
+            for enemy in Enemies:
+                if enemy.name == self.fallback:
+                    self._fallback_enemy = enemy
+                    break
+        return self._fallback_enemy
+
+    @property
+    def item(self) -> Optional[ItemPool]:
+        return self._item if self._item else self.fallback_enemy.item
+
+    @item.setter
+    def item(self, item: ItemPool) -> None:
+        self._item = item
+
+    @property
+    def hint_pool(self) -> UObject: #ItemPoolDefinition
+        return super().hint_pool if self._item else self.fallback_enemy.hint_pool
 
 
 Enemies = (
@@ -49,6 +196,7 @@ Enemies = (
     Enemy("Mick Zaford", Pawn("PawnBalance_MickZaford_Combat")),
     Enemy("Tector Hodunk", Pawn("PawnBalance_TectorHodunk_Combat")),
     Enemy("Blue", Pawn("PawnBalance_Blue")),
+    Enemy("Daisy", Pawn("BD_Daisy"), mission="Poetic License"),
     Enemy("Sinkhole", Pawn("PawnBalance_Stalker_SwallowedWhole")),
     Enemy("Shorty", Pawn("PawnBalance_Midge")),
     Enemy("Laney White", Pawn("PawnBalance_Laney")),
@@ -56,7 +204,7 @@ Enemies = (
     Enemy("Rakkman", Pawn("PawnBalance_RakkMan"), tags=Tag.SlowEnemy),
     Enemy("Tumbaa", Pawn("PawnBalance_Tumbaa"), tags=Tag.RareEnemy),
     Enemy("Pimon", Pawn("PawnBalance_Stalker_Simon"), tags=Tag.RareEnemy),
-    Enemy("Son of Mothrakk", Pawn("PawnBalance_SonMothrakk"), tags=Tag.SlowEnemy),
+    Enemy("Son of Mothrakk", Pawn("PawnBalance_SonMothrakk"), tags=Tag.SlowEnemy, rarities=(100,)),
     Enemy("Muscles", Pawn("PawnBalance_Bruiser_Muscles"), tags=Tag.VeryRareEnemy),
     Enemy("The Sheriff of Lynchwood", Pawn("PawnBalance_Sheriff")),
     Enemy("Deputy Winger", Pawn("PawnBalance_Deputy")),
@@ -84,8 +232,6 @@ Enemies = (
         Behavior("GD_HyperionBunkerBoss.Character.AIDef_BunkerBoss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_17", inject=False),
     tags=Tag.SlowEnemy),
     Enemy("Jim Kepler", Pawn("BD_BFF_Jim"), mission="BFFs"),
-        # TODO
-        # Fix unscaled kepler level
     Enemy("Dukino's Mom", Pawn("PawnBalance_Skagzilla")),
     Enemy("Donkey Mong", Pawn("PawnBalance_PrimalBeast_DonkeyMong"), tags=Tag.RareEnemy),
     Enemy("King Mong", Pawn("PawnBalance_PrimalBeast_KingMong"), tags=Tag.RareEnemy),
@@ -96,6 +242,7 @@ Enemies = (
     Enemy("Bone Head 2.0", Pawn("PawnBalance_BoneHead2")),
     Enemy("Saturn", Pawn("PawnBalance_LoaderGiant")),
     Enemy("The Warrior",
+        # TODO fix spawnitems vectors
         Behavior("Boss_Volcano_Combat_Monster.TheWorld:PersistentLevel.Main_Sequence.SeqAct_ApplyBehavior_16.Behavior_SpawnItems_6"),
         Behavior("Boss_Volcano_Combat_Monster.TheWorld:PersistentLevel.Main_Sequence.SeqAct_ApplyBehavior_31.Behavior_SpawnItems_6"),
         Behavior("Boss_Volcano_Combat_Monster.TheWorld:PersistentLevel.Main_Sequence.SeqAct_ApplyBehavior_59.Behavior_SpawnItems_6"),
@@ -113,6 +260,7 @@ Enemies = (
         Behavior("GD_FinalBoss.Character.AIDef_FinalBoss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_17", inject=False),
     tags=Tag.SlowEnemy),
     Enemy("Terramorphous the Invincible",
+        # TODO: test pawn for disappearing loot; maybe switch to behavior
         Pawn("PawnBalance_ThresherRaid"),
         Behavior("GD_ThresherShared.Anims.Anim_Raid_Death1:BehaviorProviderDefinition_29.Behavior_SpawnItems_46", inject=False),
         Behavior("GD_ThresherShared.Anims.Anim_Raid_Death1:BehaviorProviderDefinition_29.Behavior_SpawnItems_47", inject=False),
@@ -161,7 +309,7 @@ Enemies = (
         Pawn("PawnBalance_GoliathBlaster", transform=5),
         Pawn("PawnBalance_GoliathLootGoon", transform=5),
         Pawn("PawnBalance_LootMidget_Goliath", transform=5),
-        Pawn("PawnBalance_MidgetGoliath", transform=5), # Stops at 4 ("Giant Midget of Death")
+        Pawn("PawnBalance_MidgetGoliath", transform=5), # Stops at 5 ("Giant Midget of Death")
         # Pawn("PawnBalance_GoliathTurret", transform=3), # Stops at 3 ("Ultimate Badass Heavy")
         Pawn("Iris_PawnBalance_ArenaGoliath", transform=5),
         Pawn("PawnBalance_InfectedGoliath", transform=5),
@@ -205,7 +353,15 @@ Enemies = (
         Behavior("Transient.Behavior_SpawnItems_Orchid_MasterGeeDeath", inject=False),
     tags=Tag.PiratesBooty|Tag.RaidEnemy|Tag.SlowEnemy),
 
-    Enemy("Gladiator Goliath", Pawn("Iris_PawnBalance_ArenaGoliath"), mission="Tier 2 Battle: Appetite for Destruction"),
+    Enemy("Gladiator Goliath", Pawn("Iris_PawnBalance_ArenaGoliath", evolved=5), mission="Tier 2 Battle: Appetite for Destruction"),
+    Enemy("Pete's Burner",
+        Pawn("Iris_PawnBalance_BikerMidget"),
+        Pawn("Iris_PawnBalance_BikerBruiser"),
+        Pawn("Iris_PawnBalance_Biker"),
+        Pawn("Iris_PawnBalance_BikerBadass"),
+        Pawn("Iris_PawnBalance_BigBiker"),
+        Pawn("Iris_PawnBalance_BigBikerBadass"),
+    tags=Tag.CampaignOfCarnage|Tag.MobFarm),
     Enemy("Hamhock the Ham", Pawn("Iris_PawnBalance_BB_Hamlock"), mission="Mother-Lover (Turn in Scooter)"),
     Enemy("Anonymous Troll Face", Pawn("Iris_PawnBalance_SayFaceTroll"), mission="Say That To My Face"),
     Enemy("Sully the Stabber", Pawn("Iris_PawnBalance_SullyTheStabber"), mission="Number One Fan"),
@@ -255,7 +411,7 @@ Enemies = (
     Enemy("Omnd-Omnd-Ohk",
         Pawn("PawnBalance_Native_Badass", transform=3),
         Pawn("PawnBalance_Nast_Native_Badass", transform=3),
-    tags=Tag.EvolvedEnemy|Tag.VeryRareEnemy),
+    tags=Tag.HammerlocksHunt|Tag.EvolvedEnemy|Tag.VeryRareEnemy),
     Enemy("Dexiduous the Invincible",
         Pawn("PawnBalance_DrifterRaid"),
         Behavior("GD_DrifterRaid.Anims.Anim_Raid_Death:BehaviorProviderDefinition_29.Behavior_SpawnItems_38", inject=False),
@@ -268,28 +424,28 @@ Enemies = (
         Pawn("PawnBalance_Treant_StandStill_OL"),
         Pawn("PawnBalance_Treant_Overleveled"),
     tags=Tag.DragonKeep),
-    Enemy("Warlord Grug", Pawn("PawnBalance_Orc_WarlordGrug"), tags=Tag.DragonKeep),
-    Enemy("Warlord Turge", Pawn("PawnBalance_Orc_WarlordTurge"), tags=Tag.DragonKeep),
+    Enemy("Warlord Grug", Pawn("PawnBalance_Orc_WarlordGrug", evolved=4), tags=Tag.DragonKeep),
+    Enemy("Warlord Turge", Pawn("PawnBalance_Orc_WarlordTurge", evolved=4), tags=Tag.DragonKeep),
     Enemy("Duke of Ork",
         Pawn("PawnBalance_Orc_WarlordGrug", transform=4),
         Pawn("PawnBalance_Orc_WarlordTurge", transform=4),
     tags=Tag.DragonKeep|Tag.EvolvedEnemy),
     Enemy("Arguk the Butcher", Pawn("PawnBalance_Orc_Butcher"), mission="Critical Fail"),
     Enemy("-=nOObkiLLer=-", Pawn("PawnBalance_Knight_LostSouls_Invader"), mission="Lost Souls"),
-    Enemy("xxDatVaultHuntrxx", Pawn("PawnBalance_Knight_MMORPG1"), mission="MMORPGFPS", rarities=(20,)),
-    Enemy("420_E-Sports_Masta", Pawn("PawnBalance_Knight_MMORPG2"), mission="MMORPGFPS", rarities=(20,)),
-    Enemy("[720NoScope]Headshotz", Pawn("PawnBalance_Knight_MMORPG3"), mission="MMORPGFPS", rarities=(20,)),
+    Enemy("xxDatVaultHuntrxx", Pawn("PawnBalance_Knight_MMORPG1"), mission="MMORPGFPS", rarities=(7,)),
+    Enemy("420_E-Sports_Masta", Pawn("PawnBalance_Knight_MMORPG2"), mission="MMORPGFPS", rarities=(7,)),
+    Enemy("[720NoScope]Headshotz", Pawn("PawnBalance_Knight_MMORPG3"), mission="MMORPGFPS", rarities=(7,)),
     Enemy("King Aliah", Pawn("PawnBalance_SkeletonKing_Aliah"), tags=Tag.DragonKeep|Tag.SlowEnemy),
     Enemy("King Crono", Pawn("PawnBalance_SkeletonKing_Crono"), tags=Tag.DragonKeep|Tag.SlowEnemy),
     Enemy("King Seth", Pawn("PawnBalance_SkeletonKing_Seth"), tags=Tag.DragonKeep|Tag.SlowEnemy),
     Enemy("King Nazar", Pawn("PawnBalance_SkeletonKing_Nazar"), tags=Tag.DragonKeep|Tag.SlowEnemy),
     Enemy("Unmotivated Golem", Pawn("PawnBalance_Golem_SwordInStone"), mission="The Sword in The Stoner"),
-    Enemy("Spiderpants", Pawn("PawnBalance_Spiderpants"), tags=Tag.VeryRareEnemy|Tag.SlowEnemy),
-    Enemy("Maxibillion", Pawn("PawnBalance_GolemFlying_Maxibillion"), mission="My Kingdom for a Wand", rarities=(30,)),
-    Enemy("Magical Spider", Pawn("PawnBalance_Spider_ClaptrapWand"), mission="My Kingdom for a Wand", rarities=(30,)),
-    Enemy("Magical Orc", Pawn("PawnBalance_Orc_ClaptrapWand"), mission="My Kingdom for a Wand", rarities=(30,)),
+    Enemy("Spiderpants", Pawn("PawnBalance_Spiderpants"), tags=Tag.DragonKeep|Tag.VeryRareEnemy|Tag.SlowEnemy),
+    Enemy("Maxibillion", Pawn("PawnBalance_GolemFlying_Maxibillion"), mission="My Kingdom for a Wand", rarities=(5,)),
+    Enemy("Magical Spider", Pawn("PawnBalance_Spider_ClaptrapWand"), mission="My Kingdom for a Wand", rarities=(5,)),
+    Enemy("Magical Orc", Pawn("PawnBalance_Orc_ClaptrapWand"), mission="My Kingdom for a Wand", rarities=(5,)),
     Enemy("Iron GOD", Pawn("PawnBalance_Golem_Badass", transform=5), tags=Tag.DragonKeep|Tag.SlowEnemy|Tag.EvolvedEnemy|Tag.RaidEnemy),
-    Enemy("Gold Golem", Pawn("PawnBalance_GolemGold"), tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(3,3,3)),
+    Enemy("Gold Golem", Pawn("PawnBalance_GolemGold"), tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("The Darkness", Pawn("PawnBalance_Darkness"), tags=Tag.DragonKeep),
     Enemy("Sir Boil", Pawn("PawnBalance_SirBoil"), mission="Loot Ninja"),
     Enemy("Sir Mash", Pawn("PawnBalance_SirMash"), mission="Loot Ninja"),
@@ -317,14 +473,10 @@ Enemies = (
         Behavior("GD_DragonBridgeBoss.InteractiveObjects.IO_DragonBridgeBoss_LootExplosion:BehaviorProviderDefinition_0.Behavior_SpawnItems_28", inject=False),
         Behavior("GD_DragonBridgeBoss.InteractiveObjects.IO_DragonBridgeBoss_LootExplosion:BehaviorProviderDefinition_0.Behavior_SpawnItems_29", inject=False),
         Behavior("GD_DragonBridgeBoss.InteractiveObjects.IO_DragonBridgeBoss_LootExplosion:BehaviorProviderDefinition_0.Behavior_SpawnItems_31", inject=False),
-    tags=Tag.DragonKeep, rarities=(3,3,3)),
+    tags=Tag.DragonKeep, rarities=(33,33,33)),
     Enemy("Edgar", Pawn("PawnBalance_Wizard_DeadBrotherEdgar"), mission="My Dead Brother (Kill Edgar)"),
     Enemy("Simon", Pawn("PawnBalance_Wizard_DeadBrotherSimon"), mission="My Dead Brother (Kill Edgar)"),
-    # Enemy("Mr. Miz",
-    #     # TODO:
-    #     # GD_Aster_AmuletDoNothingData.VendingMachineGrades.ObjectGrade_VendingMachine_Pendant
-    # tags=Tag.DragonKeep|Tag.LongMission),
-    Enemy("Sorcerer's Daughter", Pawn("PawnBalance_AngelBoss"), tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(3,3,3)),
+    Enemy("Sorcerer's Daughter", Pawn("PawnBalance_AngelBoss"), tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("Handsome Sorcerer",
         Behavior("GD_ButtStallion_Proto.Character.AIDef_ButtStallion_Proto:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_46"),
         Behavior("GD_DragonBridgeBoss.InteractiveObjects.IO_DragonBridgeBoss_LootExplosion:BehaviorProviderDefinition_0.Behavior_SpawnItems_32"),
@@ -333,7 +485,7 @@ Enemies = (
         Behavior("GD_ButtStallion_Proto.Character.AIDef_ButtStallion_Proto:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_45", inject=False),
         Behavior("GD_DragonBridgeBoss.InteractiveObjects.IO_DragonBridgeBoss_LootExplosion:BehaviorProviderDefinition_0.Behavior_SpawnItems_53", inject=False),
         Behavior("GD_DragonBridgeBoss.InteractiveObjects.IO_DragonBridgeBoss_LootExplosion:BehaviorProviderDefinition_0.Behavior_SpawnItems_30", inject=False),
-    tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(3,3,3)),
+    tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("The Ancient Dragons of Destruction",
         Behavior("GD_Aster_RaidBossData.IOs.IO_LootSpewer:BehaviorProviderDefinition_0.Behavior_SpawnItems_706"),
         Behavior("GD_Aster_RaidBossData.IOs.IO_LootSpewer:BehaviorProviderDefinition_0.Behavior_SpawnItems_702", inject=False),
@@ -346,9 +498,25 @@ Enemies = (
         Behavior("GD_Aster_RaidBossData.IOs.IO_LootSpewer:BehaviorProviderDefinition_0.Behavior_SpawnItems_710", inject=False),
         Behavior("GD_Aster_RaidBossData.IOs.IO_LootSpewer:BehaviorProviderDefinition_0.Behavior_SpawnItems_711", inject=False),
     tags=Tag.DragonKeep|Tag.RaidEnemy),
-    Enemy("Warlord Slog", Pawn("PawnBalance_Orc_WarlordSlog"), mission="Magic Slaughter: Badass Round"),
+    Enemy("Warlord Slog", Pawn("PawnBalance_Orc_WarlordSlog", evolved=4), mission="Magic Slaughter: Badass Round"),
     Enemy("King of Orks", Pawn("PawnBalance_Orc_WarlordSlog", transform=4), mission="Magic Slaughter: Badass Round", tags=Tag.EvolvedEnemy),
 
+    Enemy("Sand Worm",
+        Pawn("PawnBalance_SandWorm_Queen"),
+        Pawn("PawnBalance_InfectedSandWorm"),
+    tags=Tag.FightForSanctuary|Tag.MobFarm),
+    Enemy("New Pandora Soldier",
+        Pawn("PawnBalance_Flamer"),
+        Pawn("PawnBalance_NP_Enforcer"),
+        Pawn("PawnBalance_NP_BadassSniper"),
+        Pawn("PawnBalance_NP_Commander"),
+        Pawn("PawnBalance_NP_Enforcer"),
+        Pawn("PawnBalance_NP_Infecto"),
+        Pawn("PawnBalance_NP_Lt_Angvar"),
+        Pawn("PawnBalance_NP_Lt_Tetra"),
+        Pawn("PawnBalance_NP_Medic"),
+    tags=Tag.FightForSanctuary|Tag.MobFarm),
+    Enemy("Infected Badass Sprout", Pawn("PawnBalance_Infected_Badass_Midget"), tags=Tag.FightForSanctuary|Tag.MobFarm, rarities=(7,)),
     Enemy("Ghost", Pawn("PawnBalance_Ghost"), tags=Tag.FightForSanctuary),
     Enemy("Uranus", Pawn("PawnBalance_Uranus"), tags=Tag.FightForSanctuary|Tag.SlowEnemy),
     Enemy("Cassius", Pawn("PawnBalance_Anemone_Cassius"), tags=Tag.FightForSanctuary),
@@ -366,21 +534,22 @@ Enemies = (
     Enemy("Bandit Leader (Marauder)", Pawn("PawnBalance_MarauderBadass_Leader"), mission="The Vaughnguard"),
     Enemy("Haderax The Invincible",
         Behavior("GD_Anemone_SandWormBoss_1.Character.BodyDeath_Anemone_SandWormBoss_1:BehaviorProviderDefinition_2.Behavior_SpawnItems_5", inject=False),
-        # TODO
-        # GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi
-        # GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_PeakOpener
-        # GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Shield
-        # GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Articfact
-    tags=Tag.FightForSanctuary|Tag.RaidEnemy),
+        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi"),
+        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi_PeakOpener"),
+        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi_Shield"),
+        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi_Articfact"),
+    tags=Tag.FightForSanctuary|Tag.RaidEnemy, rarities=(75,75,75,75)),
 
-    Enemy("Chef Gouda Remsay", Pawn("PawnBalance_ButcherBoss"), mission="The Hunger Pangs"),
     Enemy("The Rat in the Hat", Pawn("PawnBalance_RatChef"), mission="The Hunger Pangs"),
+    Enemy("Chef Gouda Remsay", Pawn("PawnBalance_ButcherBoss"), mission="The Hunger Pangs"),
     Enemy("Chef Brulee", Pawn("PawnBalance_ButcherBoss2"), mission="The Hunger Pangs"),
     Enemy("Chef Bork Bork", Pawn("PawnBalance_ButcherBoss3"), mission="The Hunger Pangs"),
     Enemy("Glasspool, Tribute of Wurmwater", Pawn("PawnBalance_SandMale"), mission="The Hunger Pangs"),
     Enemy("William, Tribute of Wurmwater", Pawn("PawnBalance_SandFemale"), mission="The Hunger Pangs"),
     Enemy("Axel, Tribute of Opportunity", Pawn("PawnBalance_EngineerMale"), mission="The Hunger Pangs"),
     Enemy("Rose, Tribute of Opportunity", Pawn("PawnBalance_EngineerFemale"), mission="The Hunger Pangs"),
+    Enemy("Fiona, Tribute of Sanctuary", Pawn("PawnBalance_RaiderFemale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
+    Enemy("Max, Tribute of Sanctuary", Pawn("PawnBalance_RaiderMale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
     Enemy("Strip, Tribute of Southern Shelf", Pawn("PawnBalance_FleshripperFemale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
     Enemy("Flay, Tribute of Southern Shelf", Pawn("PawnBalance_FleshripperMale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
     Enemy("Fuse, Tribute of Frostburn", Pawn("PawnBalance_IncineratorMale"), tags=Tag.WattleGobbler|Tag.RareEnemy),
@@ -392,7 +561,7 @@ Enemies = (
     Enemy("Ravenous Wattle Gobbler",
         Pawn("PawnBalance_BigBird"),
         Pawn("PawnBalance_BigBird_HARD"),
-    tags=Tag.WattleGobbler),
+    tags=Tag.WattleGobbler|Tag.SlowEnemy),
 
     Enemy("The Abominable Mister Tinder Snowflake",
         Pawn("PawnBalance_SnowMan"),
@@ -406,11 +575,12 @@ Enemies = (
     Enemy("Pumpkin Kingpin/Jacques O'Lantern",
         Behavior("GD_PumpkinheadFlying.Character.DeathDef_Pumpkinheadflying:BehaviorProviderDefinition_0.Behavior_SpawnItems_209"),
         Behavior("GD_Flax_Lootables.IOs.IO_Pumpkin_BossLoot:BehaviorProviderDefinition_1.Behavior_SpawnItems_210", inject=False),
-    tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(3,3,3)),
-    Enemy("Clark the Combusted Cryptkeeper", Pawn("PawnBalance_UndeadFirePsycho_Giant"), tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(1,1,3,3)),
+    tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(33,33,33)),
+    Enemy("Clark the Combusted Cryptkeeper", Pawn("PawnBalance_UndeadFirePsycho_Giant"), tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(100,100,50)),
 
-    Enemy("Son of Crawmerax the Invincible", Pawn("PawnBalance_Crawmerax_Son"), tags=Tag.SonOfCrawmerax|Tag.SlowEnemy, rarities=(3,3,3)),
+    Enemy("Son of Crawmerax the Invincible", Pawn("PawnBalance_Crawmerax_Son"), tags=Tag.SonOfCrawmerax|Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("The Invincible Son of Crawmerax the Invincible",
+        # TODO test disappearing loot from pawn; maybe switch to behavior
         Pawn("PawnBalance_Crawmerax_Son_Raid"),
         Behavior("GD_Nasturtium_Lootables.IOs.IO_BossLootSpout:BehaviorProviderDefinition_0.Behavior_SpawnItems_502", inject=False),
         Behavior("GD_Nasturtium_Lootables.IOs.IO_BossLootSpout:BehaviorProviderDefinition_0.Behavior_SpawnItems_6", inject=False),
@@ -421,13 +591,13 @@ Enemies = (
 
     Enemy("BLNG Loader", Pawn("PawnBalance_BlingLoader"), mission="A Match Made on Pandora"),
     Enemy("Colin Zaford",
-        Pawn("PawnBalance_GoliathGroom"),
-        Pawn("PawnBalance_GoliathGroomRaid"),
+        Pawn("PawnBalance_GoliathGroom", evolved=5),
+        Pawn("PawnBalance_GoliathGroomRaid", evolved=5),
         Behavior("GD_GoliathGroom.Death.BodyDeath_GoliathGroom:BehaviorProviderDefinition_6.Behavior_SpawnItems_8", inject=False),
     tags=Tag.WeddingDayMassacre|Tag.SlowEnemy),
     Enemy("Bridget Hodunk",
-        Pawn("PawnBalance_GoliathBride"),
-        Pawn("PawnBalance_GoliathBrideRaid"),
+        Pawn("PawnBalance_GoliathBride", evolved=5),
+        Pawn("PawnBalance_GoliathBrideRaid", evolved=5),
         Behavior("GD_GoliathBride.Death.BodyDeath_GoliathBride:BehaviorProviderDefinition_6.Behavior_SpawnItems_12", inject=False),
     tags=Tag.WeddingDayMassacre|Tag.SlowEnemy),
     Enemy("Sigmand", Pawn("PawnBalance_Nast_ThresherWhite"), tags=Tag.WeddingDayMassacre),
@@ -439,16 +609,16 @@ Enemies = (
     Enemy("Stella", Pawn("PawnBalance_LoaderGirl"), mission="Learning to Love"),
     Enemy("Innuendobot 5000", Pawn("PawnBalance_Innuendobot_NPC"), mission="Learning to Love"),
 
-    Enemy("Digistruct Scorch", Pawn("PawnBalance_SpiderantScorch_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(2, 2)),
-    Enemy("Digistruct Dukino's Mom", Pawn("PawnBalance_Skagzilla_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 3, 3)),
-    Enemy("Digistruct Black Queen", Pawn("PawnBalance_SpiderantBlackQueen_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 3)),
-    Enemy("Bone Head v3.0", Pawn("PawnBalance_BoneHead_V3"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(2, 2)),
-    Enemy("Digistruct Doc Mercy", Pawn("PawnBalance_MrMercy_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 2)),
-    Enemy("Digistruct Assassin Wot", Pawn("PawnBalance_Assassin1_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 2, 3, 4)),
-    Enemy("Digistruct Assassin Oney", Pawn("PawnBalance_Assassin2_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 2, 3, 4)),
-    Enemy("Digistruct Assassin Reeth", Pawn("PawnBalance_Assassin3_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 2, 3, 4)),
-    Enemy("Digistruct Assassin Rouf", Pawn("PawnBalance_Assassin4_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 2, 3, 4)),
-    Enemy("Saturn v2.0", Pawn("PawnBalance_LoaderUltimateBadass_Digi"), tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 1, 2, 3)),
+    DigiEnemy("Digistruct Scorch", Pawn("PawnBalance_SpiderantScorch_Digi"), fallback="Scorch", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(50, 50)),
+    DigiEnemy("Digistruct Dukino's Mom", Pawn("PawnBalance_Skagzilla_Digi"), fallback="Dukino's Mom", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 33, 33)),
+    DigiEnemy("Digistruct Black Queen", Pawn("PawnBalance_SpiderantBlackQueen_Digi"), fallback="The Black Queen", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 33)),
+    DigiEnemy("Bone Head v3.0", Pawn("PawnBalance_BoneHead_V3"), fallback="Bone Head 2.0", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(50, 50)),
+    DigiEnemy("Digistruct Doc Mercy", Pawn("PawnBalance_MrMercy_Digi"), fallback="Doc Mercy", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 50)),
+    DigiEnemy("Digistruct Assassin Wot", Pawn("PawnBalance_Assassin1_Digi"), fallback="Assassin Wot", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 100, 50)),
+    DigiEnemy("Digistruct Assassin Oney", Pawn("PawnBalance_Assassin2_Digi"), fallback="Assassin Oney", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 100, 50)),
+    DigiEnemy("Digistruct Assassin Reeth", Pawn("PawnBalance_Assassin3_Digi"), fallback="Assassin Reeth", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 100, 50)),
+    DigiEnemy("Digistruct Assassin Rouf", Pawn("PawnBalance_Assassin4_Digi"), fallback="Assassin Rouf", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 100, 50)),
+    DigiEnemy("Saturn v2.0", Pawn("PawnBalance_LoaderUltimateBadass_Digi"), fallback="Saturn", tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 100, 50, 50)),
     Enemy("010011110100110101000111-010101110101010001001000",
         Pawn("PawnBalance_SpiderTank_Boss"),
         Behavior("GD_SpiderTank_Boss.Death.DeathDef_SpiderTank_Boss:BehaviorProviderDefinition_0.Behavior_SpawnItems_42", inject=False),
@@ -457,33 +627,5 @@ Enemies = (
         Behavior("GD_SpiderTank_Boss.Death.DeathDef_SpiderTank_Boss:BehaviorProviderDefinition_0.Behavior_SpawnItems_45", inject=False),
         Behavior("GD_SpiderTank_Boss.Death.DeathDef_SpiderTank_Boss:BehaviorProviderDefinition_0.Behavior_SpawnItems_46", inject=False),
         Behavior("GD_SpiderTank_Boss.Death.DeathDef_SpiderTank_Boss:BehaviorProviderDefinition_0.Behavior_SpawnItems_47", inject=False),
-    tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(1, 1, 1, 2, 2, 2, 3, 3, 3)),
+    tags=Tag.DigistructPeak|Tag.DigistructEnemy, rarities=(100, 100, 100, 50, 50, 50, 33, 33, 33)),
 )
-
-
-""",
-# Purge drop on death pools
-
-- non-badass magic folk
-
-- pete's burners
-
-- sandworms
-    PawnBalance_SandWorm_Queen
-    PawnBalance_InfectedSandWorm
-
-- badass infected midget
-    PawnBalance_Infected_Badass_Midget
-
-- new pandora soldiers
-    PawnBalance_Flamer
-    PawnBalance_NP_Enforcer
-    PawnBalance_NP_BadassSniper
-    PawnBalance_NP_Commander
-    PawnBalance_NP_Enforcer
-    PawnBalance_NP_Infecto
-    PawnBalance_NP_Lt_Angvar
-    PawnBalance_NP_Lt_Tetra
-    PawnBalance_NP_Medic
-
-"""

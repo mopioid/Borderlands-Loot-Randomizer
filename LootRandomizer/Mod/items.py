@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from unrealsdk import Log, FindObject, KeepAlive, UObject #type: ignore
 
-from . import defines, options, seed
-from .defines import BalancedItem, Probability, Tag, Hint, construct_object
+from . import defines
+from .defines import BalancedItem, Probability, Tag, construct_object
+from .hints import Hint
 
 import enum
 
@@ -93,20 +94,33 @@ class ItemPool:
 
         return self._pool
     
-    def validate(self) -> bool:
-        self.valid_items = [item for item in self.items if item.validate()]
-        if self.fallback and self.fallback.validate() and not (Tag.DragonKeep & seed.SelectedTags):
-            self.valid_items.append(self.fallback)
+    def items_for_tags(self, tags: Tag) -> Sequence[Item]:
+        items = [item for item in self.items if item.tags in tags]
 
-        return bool(self.valid_items)
+        if len(items) < len(self.items) and self.fallback and self.fallback.tags in tags:
+            items.append(self.fallback)
+
+        return items
+    
+    def apply_tags(self, tags: Tag) -> None:
+        self.valid_items = self.items_for_tags(tags)
+        if self._pool:
+            self._pool.BalancedItems = [item.balanced_item for item in self.valid_items]
 
     def prepare(self) -> None:
+        if not self._pool:
+            self.pool
+
         for item in self.valid_items:
             item.prepare()
 
     def revert(self) -> None:
-        for item in self.valid_items:
-            item.revert()
+        if self._pool:
+            for item in self.valid_items:
+                item.revert()
+
+
+DudItem = ItemPool("Nothing", Hint.Dud)
 
 
 class Item:
@@ -120,8 +134,10 @@ class Item:
         self,
         path: str,
         weight: Union[float, Character] = 1.0,
-        tags: Tag = Tag.BaseGame
+        tags: Tag = Tag(0)
     ) -> None:
+        if not (tags & defines.ContentTags):
+            tags |= Tag.BaseGame
         self.path = path; self.tags = tags; self.weight = weight
 
     def initialize(self) -> None:
@@ -139,9 +155,6 @@ class Item:
 
         return (None, self.inventory, probability, True)
 
-    def validate(self) -> bool:
-        return not (self.tags & ~seed.SelectedTags)
-    
     def prepare(self) -> None:
         pass
 
@@ -189,8 +202,8 @@ class ClassMod(Item):
     index: int
     _original_coms: Sequence[Any]
 
-    def __init__(self, path: str, index: int, weight: Character) -> None:
-        super().__init__(path, weight, Tag.DigistructPeak)
+    def __init__(self, path: str, index: int, weight: Character, tags: Tag = Tag(0)) -> None:
+        super().__init__(path, weight, tags)
         self.index = index
 
     def initialize(self) -> None:
@@ -214,7 +227,7 @@ class BlueAlignmentClassMod(Item):
 
     def prepare(self) -> None:
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
-        spec_data.WeightedParts = [self._original_parts[i] for i in (2, 3, 5, 6, 8, 9)]
+        spec_data.WeightedParts = tuple(self._original_parts[i] for i in (2, 3, 5, 6, 8, 9))
 
     def revert(self) -> None:
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
@@ -231,7 +244,7 @@ class PurpleAlignmentClassMod(Item):
 
     def prepare(self) -> None:
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
-        spec_data.WeightedParts = [self._original_parts[i] for i in (10, 11, 12, 13, 14, 15, 16, 17, 18)]
+        spec_data.WeightedParts = tuple(self._original_parts[10:19])
 
     def revert(self) -> None:
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
@@ -242,8 +255,8 @@ class Gen2ClassMod(Item):
     index: int
     _original_coms: Sequence[Any]
 
-    def __init__(self, path: str, index: int, weight: Character) -> None:
-        super().__init__(path, weight, Tag.DigistructPeak)
+    def __init__(self, path: str, index: int, weight: Character, tags: Tag = Tag(0)) -> None:
+        super().__init__(path, weight, tags)
         self.index = index
 
     def initialize(self) -> None:
@@ -261,8 +274,8 @@ class Fibber(Item):
     index: int
     _original_barrels: Sequence[Any]
 
-    def __init__(self, path: str, index: int) -> None:
-        super().__init__(path, 1.0, Tag.BaseGame)
+    def __init__(self, path: str, index: int, tags: Tag = Tag(0)) -> None:
+        super().__init__(path, 1.0, tags)
         self.index = index
 
     def initialize(self) -> None:
@@ -272,7 +285,7 @@ class Fibber(Item):
 
     def prepare(self) -> None:
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
-        barrels.WeightedParts = self._original_barrels[self.index],
+        barrels.WeightedParts = (self._original_barrels[self.index],)
 
     def revert(self) -> None:
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
@@ -282,8 +295,8 @@ class Fibber(Item):
 class BanditGrenade(Item):
     index: int
 
-    def __init__(self, path: str, index: int) -> None:
-        super().__init__(path, 1.0, Tag.BaseGame)
+    def __init__(self, path: str, index: int, tags: Tag = Tag(0)) -> None:
+        super().__init__(path, 1.0, tags)
         self.index = index
 
     def prepare(self) -> None:
@@ -291,3 +304,20 @@ class BanditGrenade(Item):
 
     def revert(self) -> None:
         self.inventory.Manufacturers[self.index].Grades[0].GameStageRequirement.MaxGameStage = 100
+
+
+class HyperionPistol(Item):
+    _original_barrels: Sequence[Any]
+
+    def initialize(self) -> None:
+        super().initialize()
+        barrels = self.inventory.RuntimePartListCollection.BarrelPartData
+        self._original_barrels = defines.convert_struct(barrels.WeightedParts)
+
+    def prepare(self) -> None:
+        barrels = self.inventory.RuntimePartListCollection.BarrelPartData
+        barrels.WeightedParts = tuple(self._original_barrels[:8])
+
+    def revert(self) -> None:
+        barrels = self.inventory.RuntimePartListCollection.BarrelPartData
+        barrels.WeightedParts = self._original_barrels

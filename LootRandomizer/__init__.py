@@ -13,18 +13,18 @@ if __name__ == "__main__":
         _this_module = mod.__class__.__module__
         break
 
-    from Mods.LootRandomizer import options, items, hints #type: ignore
-    from Mods.LootRandomizer import locations, enemies, missions, mission_list #type: ignore
+    from Mods.LootRandomizer.Mod import options, items, hints #type: ignore
+    from Mods.LootRandomizer.Mod import locations, enemies, missions, mission_list #type: ignore
 
     import sys, importlib
     for submodule_name in (
         "defines", "seed", "options", "hints", "items", "item_list",
-        "locations", "missions", "mission_list", "enemies", "enemy_list", # "misc",
+        "locations", "missions", "mission_list", "enemies", "enemy_list", "other_list",
     ):
-        importlib.reload(sys.modules["Mods.LootRandomizer." + submodule_name])
+        importlib.reload(sys.modules["Mods.LootRandomizer.Mod." + submodule_name])
 else:
-    from . import options, items, hints
-    from . import locations, enemies, missions, mission_list
+    from .Mod import options, items, hints
+    from .Mod import locations, enemies, missions, mission_list
 
 from typing import Sequence
 
@@ -32,8 +32,7 @@ from typing import Sequence
 class LootRandomizer(ModMenu.SDKMod):
     Name: str = "Loot Randomizer"
     Version: str = "1.0"
-    # TODO
-    Description: str = ""
+    Description: str = "Shuffles every item into new farm locations."
     Author: str = "mopioid"
     Types: ModMenu.ModTypes = ModMenu.ModTypes.Gameplay
     SaveEnabledState: ModMenu.EnabledSaveType = ModMenu.EnabledSaveType.LoadOnMainMenu
@@ -72,19 +71,3 @@ if __name__ == "__main__":
     options.mod_instance.Enable()
 else:
     ModMenu.RegisterMod(options.mod_instance)
-
-
-"""
-Features:
-- Every named enemy in the game made to be able to drop loot
-- Every side mission in the game made able to be repeated
-- Every enemy and mission hand tuned to adjust loot generosity
-- Categories to disable certain loot locations (e.g. "rare enemies" or "very long missions")
-- Hint items dropped by enemies to give an indiation of whether they are worth farming
-- Seeds save item locations across game sessions, and also can be shared with friends
-
-Compatibility:
-- Works with any overhauls that do not add items to the game (e.g. UCP, BL2fix, Reborn)
-- Works in co-op, with only the only host needing to run the mod
-- Seeds can be generated to accomodate any combinations of DLCs
-"""
