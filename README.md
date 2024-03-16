@@ -28,6 +28,12 @@ Next, navigate to Options > Mods, and you will see a section for Loot Randomizer
 
 To learn more about the seed you just created, navigate to Options > Mods > Loot Randomizer > Select Seed, and select the "View Seed Locations" button. This will open a text file listing every possible drop source that you can explore.
 
+To learn more about the items, locations, and seed generation in Loot Randomizer, see:
+
+https://github.com/mopioid/Borderlands-Loot-Randomizer/wiki/Items
+
+https://github.com/mopioid/Borderlands-Loot-Randomizer/wiki/Locations
+
 ## Support
 
 Loot Randomizer is the product of a couple hundred hours of loving labor. Tips are far from necessary, but if you appreciate the experience enough and would like to leave one, feel free to here! https://streamlabs.com/mopioid/tip
