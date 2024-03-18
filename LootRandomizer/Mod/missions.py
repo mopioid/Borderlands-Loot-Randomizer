@@ -7,7 +7,7 @@ from . import defines, locations, items
 from .defines import Tag, get_pawns, construct_object, construct_behaviorsequence_behavior
 from .locations import MapDropper
 
-from typing import Callable, Dict, List, Optional, Set
+from typing import Dict, List, Optional, Sequence, Set
 
 
 _mission_registry: Dict[str, Set[Mission]] = dict()
@@ -205,19 +205,22 @@ class Mission(locations.Location):
         *droppers: locations.Dropper,
         alt: bool = False,
         block_weapon: bool = False,
-        tags=Tag.BaseGame|Tag.ShortMission
+        tags: Tag = Tag(0),
+        rarities: Optional[Sequence[int]] = None
     ) -> None:
         self.path = path; self.alt = alt; self.block_weapon = block_weapon
 
-        if not tags & (defines.MissionTags | Tag.RaidEnemy):
+        if not tags & defines.MissionTags:
             tags |= Tag.ShortMission
+        if not tags & defines.ContentTags:
+            tags |= Tag.BaseGame
 
-        rarities: List[int] = [100]
+        if not rarities:
+            rarities = [100]
 
-        if   tags & Tag.LongMission:     rarities += (100,)
-        elif tags & Tag.VeryLongMission: rarities += (100,100)
-        if   tags & Tag.RaidEnemy:       rarities += (100,100)
-
+            if tags & Tag.LongMission:     rarities += (100,)
+            if tags & Tag.VeryLongMission: rarities += (100,100)
+            if tags & Tag.RaidEnemy:       rarities += (100,100)
 
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
 

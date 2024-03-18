@@ -127,6 +127,7 @@ class Seed:
 
         for location in version_locations:
             location.update_hint()
+            location.toggle_hint(True)
 
 
     def revert(self) -> None:

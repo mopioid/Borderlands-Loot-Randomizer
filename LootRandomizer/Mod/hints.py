@@ -1,12 +1,12 @@
 from unrealsdk import FindObject, KeepAlive #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
 
-from . import seed, options
+from . import seed, options, items
 from .defines import construct_object, set_command, show_dialog
 
 import enum
 
-from typing import Callable
+from typing import Callable, Optional
 
 
 class Hint(str, enum.Enum):
@@ -253,27 +253,49 @@ def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FSt
     if caller is not useitem_behavior:
         return True
 
-    if options.HintTrainingSeen.CurrentValue:
-        hint_inventory = params.SelfObject.DefinitionData.BalanceDefinition
-        for location in seed.AppliedSeed.locations:
-            if location.hint_inventory is hint_inventory:
-                location.toggle_hint(False)
-    else:
+    matched_location = None
+
+    hint_inventory = params.SelfObject.DefinitionData.BalanceDefinition
+    for location in seed.AppliedSeed.locations:
+        if location.hint_inventory is hint_inventory:
+            matched_location = location
+            break
+
+    if not matched_location:
+        return
+    
+    if (matched_location.item != items.DudItem) and (not options.HintTrainingSeen.CurrentValue):
         options.HintTrainingSeen.CurrentValue = True
         show_dialog(
-            "Welcome to Loot Randomizer!",
+            "Item Hints",
             (
                 "The object you just found is an item hint, indicating that the specified loot "
-                "source does indeed drop loot.\n\n"
+                "source does indeed drop loot in your seed.\n\n"
 
                 "You can configure the amount of information provided by loot hints via "
                 "Options > Mods > Loot Randomizer > Hint Display.\n\n"
 
-                "To dismiss loot hints for a given source, simply pick them up. You may reset your "
-                "dismissed hints via\n"
+                "To dismiss hints or duds for a given source, simply interact with them. You may "
+                "reset your dismissed hints via\n"
                 "Options > Mods > Loot Randomizer > Reset Dismissed Hints.\n\n"
             ),
             5
         )
+    elif (matched_location.item == items.DudItem) and (not options.DudTrainingSeen.CurrentValue):
+        options.DudTrainingSeen.CurrentValue = True
+        show_dialog(
+            "Dud Items",
+            (
+                "The object you just found is a dud item, indicating that the specified loot "
+                "source is included in your seed, but was not assigned an item.\n\n"
+
+                "To dismiss hints or duds for a given source, simply interact with them. You may "
+                "reset your dismissed hints via\n"
+                "Options > Mods > Loot Randomizer > Reset Dismissed Hints.\n\n"
+            ),
+            5
+        )
+    else:
+        location.toggle_hint(False)
 
     return False

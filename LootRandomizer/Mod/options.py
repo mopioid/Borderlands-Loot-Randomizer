@@ -309,6 +309,10 @@ HintTrainingSeen = ModMenu.Options.Hidden(
     Caption="Seen Hint Training",
     StartingValue=False
 )
+DudTrainingSeen = ModMenu.Options.Hidden(
+    Caption="Seen Dud Training",
+    StartingValue=False
+)
 
 Options = (
     _NewSeedOptions,
@@ -335,7 +339,9 @@ Options = (
         Callback=_ResetDismissedClicked
     ),
     _HintDisplay,
+
     HintTrainingSeen,
+    DudTrainingSeen,
 )
 
 
