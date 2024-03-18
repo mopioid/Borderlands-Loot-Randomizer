@@ -1487,14 +1487,14 @@ Locations = (
         # Cage still closed without savequit
     Mission("Palling Around", "GD_Sage_SM_PallingAround.M_Sage_PallingAround", tags=Tag.HammerlocksHunt),
         # Bulwark doesnt respawn without savequit
-    Mission("I Like My Monsters Rare", "GD_Sage_SM_RareSpawns.M_Sage_RareSpawns", tags=Tag.HammerlocksHunt|Tag.VeryLongMission),
+    Mission("I Like My Monsters Rare", "GD_Sage_SM_RareSpawns.M_Sage_RareSpawns", tags=Tag.HammerlocksHunt|Tag.VeryLongMission, rarities=(100, 100, 100, 100, 100, 100)),
     Mission("Ol' Pukey", "GD_Sage_SM_OldPukey.M_Sage_OldPukey", tags=Tag.HammerlocksHunt|Tag.LongMission),
         # Pukey no AI without savequit
     Mission("Nakayama-rama", "GD_Sage_SM_Nakarama.M_Sage_Nakayamarama", tags=Tag.HammerlocksHunt|Tag.LongMission),
         # Only 2 echos respawn without savequit
     Mission("The Rakk Dahlia Murder", "GD_Sage_SM_DahliaMurder.M_Sage_DahliaMurder", tags=Tag.HammerlocksHunt),
         # Rakkanoth doesnt respawn without savequit
-    Mission("Urine, You're Out", "GD_Sage_SM_Urine.M_Sage_Urine", tags=Tag.HammerlocksHunt|Tag.VeryLongMission),
+    Mission("Urine, You're Out", "GD_Sage_SM_Urine.M_Sage_Urine", tags=Tag.HammerlocksHunt|Tag.VeryLongMission, rarities=(100, 100, 100, 100, 100)),
         # Urine not reinteractable without savequit
     Mission("Follow The Glow", "GD_Sage_SM_FollowGlow.M_Sage_FollowGlow", tags=Tag.HammerlocksHunt),
         # Dribbles wave fight doesnt reset without savequit

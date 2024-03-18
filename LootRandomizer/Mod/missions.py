@@ -219,7 +219,7 @@ class Mission(locations.Location):
             rarities = [100]
 
             if tags & Tag.LongMission:     rarities += (100,)
-            if tags & Tag.VeryLongMission: rarities += (100,100)
+            if tags & Tag.VeryLongMission: rarities += (100,100,100)
             if tags & Tag.RaidEnemy:       rarities += (100,100)
 
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
