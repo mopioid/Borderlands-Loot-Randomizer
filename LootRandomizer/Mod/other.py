@@ -1,11 +1,11 @@
 from unrealsdk import Log, FindObject #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
 
-from . import defines, locations, enemies
+from . import defines, locations
 from .defines import Tag
-from .locations import Behavior, Interactive, VendingMachine
+from .locations import Interactive
 
-from typing import Sequence
+from typing import Optional, Sequence
 
 
 class Other(locations.Location):
@@ -14,10 +14,18 @@ class Other(locations.Location):
         name: str,
         *droppers: locations.Dropper,
         tags: Tag = Tag(0),
-        rarities: Sequence[int] = (100,)
+        rarities: Optional[Sequence[int]] = None
     ) -> None:
+        if not tags & defines.ContentTags:
+            tags |= Tag.BaseGame
         if not tags & defines.OtherTags:
             tags |= Tag.Miscellaneous
+
+        if not rarities:
+            if tags & Tag.Vendor:
+                rarities = (100, 100, 100, 100)
+            else:
+                rarities = (100,)
 
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
 
@@ -52,7 +60,7 @@ class MimicChest(Interactive):
 
         attachments = interactive.Loot[6].ItemAttachments
         for index in range(4):
-            attachments[index].ItemPool = pools[index] if pools else None
+            attachments[index].ItemPool = pools[0] if pools else None
 
 
 class DahlAbandonGrave(locations.MapDropper):
@@ -90,78 +98,7 @@ class GearysUnbreakableGear(Interactive):
         for index in range(3):
             attachments[index].ItemPool = pool
 
-
-Others = (
-    Other("Michael Mamaril",
-        Behavior("GD_JohnMamaril.Character.AIDef_JohnMamaril:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_92"),
-    ),
-    Other("Tip Moxxi",
-        Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_17"),
-        Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_23"),
-    ),
-    Other("Frostburn Canyon Cave Pool",
-        Behavior("Env_IceCanyon.InteractiveObjects.LootSpawner:BehaviorProviderDefinition_0.Behavior_SpawnItems_22"),
-    ),
-    Other("What's In The Box?",
-        Interactive("ObjectGrade_WhatsInTheBox"),
-    ),
-    Other("Tundra Express Snowman Head", TundraSnowmanHead()),
-
-    Other("Geary's Unbreakable Gear",
-        GearysUnbreakableGear("ObjectGrade_Eagle"),
-    tags=Tag.VeryLongMission),
-
-    Other("Oasis Seraph Vendor",
-        VendingMachine("GD_Orchid_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
-    tags=Tag.PiratesBooty|Tag.Vendor),
-
-    Other("Badass Crater Seraph Vendor",
-        VendingMachine("GD_Iris_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
-    tags=Tag.CampaignOfCarnage|Tag.Vendor),
-
-    Other("Torgue Vendor",
-        VendingMachine("GD_Iris_TorgueTokenVendor.Balance.Balance_TorgueTokenVendor"),
-    tags=Tag.CampaignOfCarnage|Tag.Vendor),
-
-    Other("Hunter's Grotto Seraph Vendor",
-        VendingMachine("GD_Sage_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
-    tags=Tag.HammerlocksHunt|Tag.Vendor),
-
-    Other("Mimic Chest",
-        enemies.Pawn("PawnBalance_Mimic"),
-        MimicChest("ObjectGrade_MimicChest"),
-        MimicChest("ObjectGrade_MimicChest_NoMimic"),
-    tags=Tag.DragonKeep, rarities=(25, 25, 25, 25)),
-
-    Other("Flamerock Refuge Seraph Vendor",
-        VendingMachine("GD_Aster_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
-    tags=Tag.DragonKeep|Tag.Vendor),
-
-    Other("Butt Stallion Fart",
-        Behavior("GD_ButtStallion_Proto.Character.AIDef_ButtStallion_Proto:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_66"),
-    tags=Tag.DragonKeep),
-
-    Other("Loot Leprechaun",
-        Behavior("GD_Nast_Leprechaun.Character.CharClass_Nast_Leprechaun:BehaviorProviderDefinition_5.Behavior_SpawnItems_26"),
-        Behavior("GD_Nast_Leprechaun.Character.CharClass_Nast_Leprechaun:BehaviorProviderDefinition_5.Behavior_SpawnItems_27"),
-    tags=Tag.WeddingDayMassacre, rarities=(7,)),
-
-    Other("Butt Stallion with Mysterious Amulet",
-        Behavior("GD_Anem_ButtStallion.Character.AIDef_Anem_ButtStallion:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_18"),
-        ButtstallionWithAmulet(),
-    tags=Tag.DragonKeep|Tag.FightForSanctuary),
-
-    Other("Dahl Abandon Grave",
-        Behavior("GD_Anemone_Balance_Treasure.InteractiveObjects.InteractiveObj_Brothers_Pile:BehaviorProviderDefinition_13.Behavior_SpawnItems_21"),
-        DahlAbandonGrave(),
-    tags=Tag.FightForSanctuary),
-)
-
-
-
 """
-- torgue vendors
-
 
 - haderax launcher chest
     # logic would require toothpick and retainer

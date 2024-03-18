@@ -61,17 +61,17 @@ def _ReloadSeeds() -> None:
     if selected_seed in _SeedsList.Choices:
         return
 
-    if seed.SelectedSeed:
-        seed.SelectedSeed.revert()
+    if seed.AppliedSeed:
+        seed.AppliedSeed.revert()
 
     _SeedsList.commit_CurrentValue(_SeedsList.Choices[0])
 
 
 def _SeedApplied() -> None:
-    if Tag.EnableHints in seed.SelectedSeed.tags:
+    if Tag.EnableHints in seed.AppliedSeed.tags:
         _HintDisplay.Choices = ("None", "Vague", "Spoiler")
-        _HintDisplay.StartingValue = _HintDisplay.Choices[1]
-        _HintDisplay.CurrentValue = _HintDisplay.Choices[1]
+        _HintDisplay.StartingValue = "Vague"
+
     else:
         _HintDisplay.Choices = ("None",)
         _HintDisplay.StartingValue = _HintDisplay.Choices[0]
@@ -97,7 +97,7 @@ def _NewSeedGenerateClicked() -> None:
     show_dialog(
         "Seed Generated and Applied",
         "You will now see the seed's randomization in your game.\n\n"
-        "You can review information about the seed in the Select Seed section of the Mods menu in Options.",
+        "You can review information about the seed in Loot Randomizer options.",
         1
     )
 
@@ -123,22 +123,22 @@ def _SelectSeedApplyClicked() -> None:
 
 
 def _SelectSeedGuideClicked() -> None:
-    seed = Seed.FromString(_SeedsList._LootRandomizer_staged)
-    os.startfile(seed.generate_guide())
+    os.startfile(seed.AppliedSeed.generate_guide())
 
 def _SelectSeedHintsClicked() -> None:
-    seed = Seed.FromString(_SeedsList._LootRandomizer_staged)
-    if Tag.EnableHints in seed.tags:
-        os.startfile(seed.generate_hints())
+    if Tag.EnableHints in seed.AppliedSeed.tags:
+        os.startfile(seed.AppliedSeed.generate_hints())
     else:
-        show_dialog("Cannot Open Hints", f"Hints and spoilers are disabled for seed {seed.string}.")
+        show_dialog("Cannot Open Hints", f"Hints and spoilers are disabled for seed {seed.AppliedSeed.string}.")
 
 def _SelectSeedSpoilersClicked() -> None:
-    seed = Seed.FromString(_SeedsList._LootRandomizer_staged)
-    if Tag.EnableHints in seed.tags:
-        os.startfile(seed.generate_spoilers())
+    if Tag.EnableHints in seed.AppliedSeed.tags:
+        os.startfile(seed.AppliedSeed.generate_spoilers())
     else:
-        show_dialog("Cannot Open Spoilers", f"Hints and spoilers are disabled for seed {seed.string}.")
+        show_dialog("Cannot Open Spoilers", f"Hints and spoilers are disabled for seed {seed.AppliedSeed.string}.")
+
+def _ResetDismissedClicked() -> None:
+    hints.ResetDismissed()
 
 
 def _WillowScrollingListOnClikEvent(caller: UObject, function: UFunction, params: FStruct) -> bool:
@@ -273,6 +273,12 @@ _NewSeedOptions = ModMenu.Options.Nested(
     Children=()
 )
 
+_EditSeedFileButton = CallbackField(
+    Caption="Edit Seeds",
+    Description="Open your Seeds.txt file in a text editor so that you may add or remove seeds.",
+    Callback=lambda: os.startfile(seeds_file)
+)
+
 _SelectSeedOptions = CallbackNested(
     Caption="Select Seed",
     Description="Select a seed from your list of saved seeds. Each seed defines a shuffling of loot sources that is consistent each time you play the seed.",
@@ -285,42 +291,52 @@ _SelectSeedOptions = CallbackNested(
             Description="Confirm selection of the above seed, and apply it to your game.",
             Callback=_SelectSeedApplyClicked
         ),
-        CallbackField(
-            Caption="OPEN SEED LOCATIONS",
-            Description="Open the text file listing every location that can be checked for items in this seed.",
-            Callback=_SelectSeedGuideClicked
-        ),
-        CallbackField(
-            Caption="OPEN SEED HINTS",
-            Description="Open the text file listing item hints for every location in this seed.",
-            Callback=_SelectSeedHintsClicked
-        ),
-        CallbackField(
-            Caption="OPEN SEED SPOILERS",
-            Description="Open the text file listing the exact item at every location in this seed.",
-            Callback=_SelectSeedSpoilersClicked
-        ),
     )
 )
 
-_EditSeedFileButton = CallbackField(
-    Caption="Edit Seeds",
-    Description="Open your Seeds.txt file in a text editor so that you may add or remove seeds.",
-    Callback=lambda: os.startfile(seeds_file)
-)
-
 _HintDisplay = CallbackSpinner(
-    Caption="Hints",
+    Caption="Hint Display",
     Description=(
         "How much information loot sources should reveal about their item drop. \"Vague\" will only"
         " describe rarity and type, while \"spoiler\" will name the exact item."
     ),
-    Callback=lambda value: hints.UpdateHints(_HintDisplay.CurrentValue),
+    Callback=hints.UpdateHints,
     Choices=("None", "Vague", "Spoiler"),
     StartingValue="Vague"
 )
 
-Options = (_NewSeedOptions, _SelectSeedOptions, _EditSeedFileButton, _HintDisplay)
+HintTrainingSeen = ModMenu.Options.Hidden(
+    Caption="Seen Hint Training",
+    StartingValue=False
+)
+
+Options = (
+    _NewSeedOptions,
+    _EditSeedFileButton,
+    _SelectSeedOptions,
+    CallbackField(
+        Caption="Open Seed Location List",
+        Description="Open the text file listing every location that can be checked for items in the selected seed.",
+        Callback=_SelectSeedGuideClicked
+    ),
+    CallbackField(
+        Caption="Open Seed Hint List",
+        Description="Open the text file listing item hints for every location in the selected seed.",
+        Callback=_SelectSeedHintsClicked
+    ),
+    CallbackField(
+        Caption="Open Seed Spoiler List",
+        Description="Open the text file listing the exact item at every location in the selected seed.",
+        Callback=_SelectSeedSpoilersClicked
+    ),
+    CallbackField(
+        Caption="Reset Dismissed Hints",
+        Description="Open the text file listing every location that can be checked for items in the selected seed.",
+        Callback=_ResetDismissedClicked
+    ),
+    _HintDisplay,
+    HintTrainingSeen,
+)
 
 
 class SeedHeader(ModMenu.Options.Field):
@@ -352,7 +368,7 @@ def Enable():
         try:
             selected_seed.apply()
             _SeedApplied()
-        except Exception as error:
+        except ValueError as error:
             Log(error)
     
     categories: Dict[str, List[Tag]] = dict()
@@ -375,4 +391,7 @@ def Enable():
 
 
 def Disable():
+    if seed.AppliedSeed:
+        seed.AppliedSeed.revert()
+
     RemoveHook("WillowGame.WillowScrollingList.OnClikEvent", "LootRandomizer")

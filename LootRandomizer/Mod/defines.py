@@ -217,7 +217,8 @@ def spawn_item(pool: UObject, context: UObject, callback: Callable[[UObject], No
 
     def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
         if caller is spawner:
-            callback(params.SpawnedLoot[0].Inv)
+            if len(params.SpawnedLoot):
+                callback(params.SpawnedLoot[0].Inv)
             RemoveHook("WillowGame.Behavior_SpawnLootAroundPoint.PlaceSpawnedItems", f"LootRandomizer.{id(spawner)}")
         return True
     RunHook("WillowGame.Behavior_SpawnLootAroundPoint.PlaceSpawnedItems", f"LootRandomizer.{id(spawner)}", hook)
@@ -253,4 +254,4 @@ def construct_behaviorsequence_behavior(
 
 
 def show_dialog(title: str, message: str, duration: float = 0) -> None:
-    get_pc().GFxUIManager.ShowTrainingDialog(message, title, duration, 0, True)
+    get_pc().GFxUIManager.ShowTrainingDialog(message, title, duration, 0, False)

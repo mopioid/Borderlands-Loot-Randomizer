@@ -1,20 +1,24 @@
 from __future__ import annotations
 
-from . import defines, options, items, hints, item_list, mission_list, enemy_list, other_list
+from unrealsdk import Log #type: ignore
+
+from . import defines, options, items, hints
 from .defines import Tag, seeds_dir
 from .locations import Location
 from .items import ItemPool
 
 from base64 import b32encode, b32decode
-import random, os
+import random, os, importlib
 
 from typing import Callable, List, Optional, Sequence
+from types import ModuleType
 
 
-Version = 1
+Version = 2
+SupportedVersions = (1,2)
 
 
-SelectedSeed: Optional[Seed] = None
+AppliedSeed: Optional[Seed] = None
 
 
 def _stringify(data: bytes) -> str:
@@ -29,9 +33,11 @@ class Seed:
     version: int
     tags: Tag
 
-    _locations: Optional[Sequence[Location]] = None
-    _items: Optional[Sequence[ItemPool]] = None
-    _item_count: int
+    version_module: ModuleType
+
+    locations: Sequence[Location]
+    items: Sequence[ItemPool]
+    item_count: int
 
     def __init__(self, data: bytes, version: int, tags: Tag, string: str) -> None:
         self.data = data; self.version = version; self.tags = tags; self.string = string
@@ -61,44 +67,80 @@ class Seed:
         return cls(data, version, Tag(tags), _stringify(data))
 
 
-    @property
-    def locations(self) -> Sequence[Location]:
-        if self._locations is None:
-            self._locations = (
-                *(enemy for enemy in enemy_list.Enemies if enemy.tags in self.tags),
-                *(mission for mission in mission_list.Missions if mission.tags in self.tags),
-                *(other for other in other_list.Others if other.tags in self.tags),
+    def apply(self) -> None:
+        global AppliedSeed
+
+        if self.version not in SupportedVersions:
+            raise ValueError(
+                f"Seed {self.string} is the incorrect version for this release of Loot Randomizer. "
+                "If you would like to play it, please install a version of Loot Randomizer that "
+                f"specifies a seed version of {self.version}."
             )
-        return self._locations
+        
+        missing_dlcs = ""
+        for tag in Tag:
+            if (tag in defines.ContentTags) and (tag in self.tags) and (tag not in options.OwnedContent):
+                missing_dlcs += "\n &#x2022; " + tag.content_title
 
-    @property
-    def items(self) -> Sequence[ItemPool]:
-        if self._items is None:
-            randomizer = random.Random(self.data)
+        if missing_dlcs != "":
+            raise ValueError(f"Seed {self.string} requires additional DLCs to play:{missing_dlcs}")
 
-            self._items = [item for item in item_list.Items if item.items_for_tags(self.tags)]
-            self._item_count = len(self._items)
+        if AppliedSeed:
+            AppliedSeed.revert()
 
-            location_count = len(self.locations)
-            item_count = len(self._items)
+        AppliedSeed = self
 
-            if location_count < item_count:
-                self._items = randomizer.sample(self._items, location_count)
+        self.version_module = importlib.import_module(f".seedversions.v{self.version}", __package__)
+        version_locations = self.version_module.Locations
+        version_items = self.version_module.Items
 
-            elif location_count == item_count:
-                randomizer.shuffle(self._items)
+        for location in version_locations:
+            location.enable()
+        for item in version_items:
+            item.enable()
 
-            elif self.tags & Tag.DuplicateItems:
-                self._items *= (location_count // item_count)
-                self._items += randomizer.sample(self._items, location_count % item_count)
-                randomizer.shuffle(self._items)
+        self.locations = tuple(location for location in version_locations if location.tags in self.tags)
+        self.items = [item for item in version_items if item.valid_items]
 
-            else:
-                self._items += [items.DudItem] * (location_count - item_count)
-                randomizer.shuffle(self._items)
-            
-        return self._items
-    
+        location_count = len(self.locations)
+        item_count = self.item_count = len(self.items)
+
+        randomizer = random.Random(self.data)
+
+        if location_count < item_count:
+            self.items = randomizer.sample(self.items, location_count)
+
+        elif location_count == item_count:
+            randomizer.shuffle(self.items)
+
+        elif self.tags & Tag.DuplicateItems:
+            self.items *= (location_count // item_count)
+            self.items += randomizer.sample(self.items, location_count % item_count)
+            randomizer.shuffle(self.items)
+
+        else:
+            self.items += [items.DudItem] * (location_count - item_count)
+            randomizer.shuffle(self.items)
+
+        for location, item in zip(self.locations, self.items):
+            location.item = item
+
+        for location in version_locations:
+            location.update_hint()
+
+
+    def revert(self) -> None:
+        global AppliedSeed
+        AppliedSeed = None
+
+        for location in self.locations:
+            location.item = None
+
+        for location in self.version_module.Locations:
+            location.disable()
+        for item in self.version_module.Items:
+            item.disable()
+
 
     def generate_file(self, name: str, formatter: Callable[[int, Location], str]) -> str:
         path = os.path.join(seeds_dir, f"{self.string} {name}.txt")
@@ -107,12 +149,12 @@ class Seed:
 
         with open(path, 'w') as file:
             self.items
-            item_warning = " (not all accessible)" if self._item_count > len(self.locations) else ""
+            item_warning = " (not all accessible)" if self.item_count > len(self.locations) else ""
 
             file.write(
                 f"{name} for Loot Randomizer Seed {self.string}\n\n"
                 f"Total locations: {len(self.locations)}\n"
-                f"Total items: {self._item_count}{item_warning}\n\n"
+                f"Total items: {self.item_count}{item_warning}\n\n"
             )
             for tag in Tag:
                 file.write(f"{tag.caption}: {'On' if (tag in self.tags) else 'Off'}\n")
@@ -146,106 +188,70 @@ class Seed:
         return self.generate_file("Spoilers", lambda item, location: f"{location}\t-\t{item.name}")
 
 
-    def apply(self) -> None:
-        global SelectedSeed
+# def generate_wikis() -> None:
+#     from html import escape
 
-        if self.version != Version:
-            raise Exception(
-                f"Seed {self.string} is the incorrect version for this release of Loot Randomizer. "
-                "If you would like to play it, please install a version of Loot Randomizer that "
-                f"specifies a seed version of {self.version}."
-            )
-        
-        missing_dlcs = ""
-        for tag in Tag:
-            if (tag in defines.ContentTags) and (tag in self.tags) and (tag not in options.OwnedContent):
-                missing_dlcs += "\n &#x2022; " + tag.content_title
+#     with open(os.path.join(seeds_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
+#         def write_location(location: Location, type: str) -> None:
+#             rolls: List[str] = []
+#             for rarity in reversed(sorted(location._rarities)):
+#                 rolls.append(f"<kbd>{rarity}%</kbd>")
 
-        if missing_dlcs != "":
-            raise Exception(f"Seed {self.string} requires additional DLCs to play:{missing_dlcs}")
+#             if len(rolls) <= 4:
+#                 rolls_string = ' '.join(rolls)
+#             else:
+#                 rolls_string = f"{' '.join(rolls[:4])}<br />{' '.join(rolls[4:])}"
 
-        if SelectedSeed:
-            SelectedSeed.revert()
+#             settings: List[str] = []
+#             for tag in Tag:
+#                 if (tag not in defines.ContentTags) and (tag in location.tags):
+#                     settings.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
-        SelectedSeed = self
+#             if len(settings) <= 2:
+#                 settings_string = ' '.join(settings)
+#             else:
+#                 settings_string = f"{' '.join(settings[:2])}<br />{' '.join(settings[2:])}"
 
-        for location, item in zip(self.locations, self.items):
-            item.apply_tags(self.tags)
-            location.apply_tags(self.tags)
-            location.item = item
+#             file.write(f"| {type} | {escape(location.name)} | {rolls_string} | {settings_string} |\n")
 
-    def revert(self) -> None:
-        global SelectedSeed
-        SelectedSeed = None
-        
-        for location in self.locations:
-            location.item = None
+#         for content_tag in Tag:
+#             if not content_tag & defines.ContentTags:
+#                 continue
 
+#             enemies  = tuple(   enemy for   enemy in   enemy_list.Enemies  if content_tag in   enemy.tags )
+#             missions = tuple( mission for mission in mission_list.Missions if content_tag in mission.tags )
+#             others   = tuple(   other for   other in   other.Others   if content_tag in   other.tags )
 
-def generate_wikis() -> None:
-    from html import escape
+#             if not (len(enemies) or len(missions) or len(others)):
+#                 continue
 
-    with open(os.path.join(seeds_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
-        def write_location(location: Location, type: str) -> None:
-            rolls: List[str] = []
-            for rarity in reversed(sorted(location._rarities)):
-                rolls.append(f"<kbd>{rarity}%</kbd>")
+#             file.write(f"\n### {escape(content_tag.content_title)}\n")
+#             file.write("\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n")
 
-            if len(rolls) <= 4:
-                rolls_string = ' '.join(rolls)
-            else:
-                rolls_string = f"{' '.join(rolls[:4])}<br />{' '.join(rolls[4:])}"
+#             for enemy   in enemies:  write_location(enemy,   "Enemy"  )
+#             for mission in missions: write_location(mission, "Mission")
+#             for other   in others:   write_location(other,   "Other"  )
 
-            settings: List[str] = []
-            for tag in Tag:
-                if (tag not in defines.ContentTags) and (tag in location.tags):
-                    settings.append(f"<kbd>{escape(tag.caption)}</kbd>")
+#     with open(os.path.join(seeds_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
+#         for hint in hints.Hint:
+#             if hint is hints.Hint.Dud:
+#                 continue
 
-            if len(settings) <= 2:
-                settings_string = ' '.join(settings)
-            else:
-                settings_string = f"{' '.join(settings[:2])}<br />{' '.join(settings[2:])}"
+#             file.write(f"\n### {escape(hint)}s\n")
+#             file.write("\n| **Item** | **Required Content** |\n| - | - |\n")
 
-            file.write(f"| {type} | {escape(location.name)} | {rolls_string} | {settings_string} |\n")
+#             for item in item_list.Items:
+#                 if item.vague_hint is not hint:
+#                     continue
 
-        for content_tag in Tag:
-            if not content_tag & defines.ContentTags:
-                continue
+#                 content = ""
+#                 fallback_content = ""
 
-            enemies  = tuple(   enemy for   enemy in   enemy_list.Enemies  if content_tag in   enemy.tags )
-            missions = tuple( mission for mission in mission_list.Missions if content_tag in mission.tags )
-            others   = tuple(   other for   other in   other_list.Others   if content_tag in   other.tags )
+#                 for tag in Tag:
+#                     if tag & defines.ContentTags:
+#                         if tag in item.items[0].tags:
+#                             content = f"<kbd>{escape(tag.caption)}</kbd>"
+#                         elif item.fallback and tag in item.fallback.tags:
+#                             fallback_content = f"or <kbd>{escape(tag.caption)}</kbd>"
 
-            if not (len(enemies) or len(missions) or len(others)):
-                continue
-
-            file.write(f"\n### {escape(content_tag.content_title)}\n")
-            file.write("\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n")
-
-            for enemy   in enemies:  write_location(enemy,   "Enemy"  )
-            for mission in missions: write_location(mission, "Mission")
-            for other   in others:   write_location(other,   "Other"  )
-
-    with open(os.path.join(seeds_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
-        for hint in hints.Hint:
-            if hint is hints.Hint.Dud:
-                continue
-
-            file.write(f"\n### {escape(hint)}s\n")
-            file.write("\n| **Item** | **Required Content** |\n| - | - |\n")
-
-            for item in item_list.Items:
-                if item.vague_hint is not hint:
-                    continue
-
-                content = ""
-                fallback_content = ""
-
-                for tag in Tag:
-                    if tag & defines.ContentTags:
-                        if tag in item.items[0].tags:
-                            content = f"<kbd>{escape(tag.caption)}</kbd>"
-                        elif item.fallback and tag in item.fallback.tags:
-                            fallback_content = f"or <kbd>{escape(tag.caption)}</kbd>"
-
-                file.write(f"| {escape(item.name)} | {content}{fallback_content} |\n")
+#                 file.write(f"| {escape(item.name)} | {content}{fallback_content} |\n")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unrealsdk import Log, FindObject, KeepAlive, UObject #type: ignore
 
-from . import defines
+from . import defines, seed
 from .defines import BalancedItem, Probability, Tag, construct_object
 from .hints import Hint
 
@@ -94,18 +94,16 @@ class ItemPool:
 
         return self._pool
     
-    def items_for_tags(self, tags: Tag) -> Sequence[Item]:
-        items = [item for item in self.items if item.tags in tags]
+    def enable(self) -> None:
+        seed_tags = seed.AppliedSeed.tags
+        self.valid_items = [item for item in self.items if item.tags in seed_tags]
 
-        if len(items) < len(self.items) and self.fallback and self.fallback.tags in tags:
-            items.append(self.fallback)
+        if len(self.valid_items) < len(self.items):
+            if self.fallback and self.fallback.tags in seed_tags:
+                self.valid_items.append(self.fallback)
 
-        return items
-    
-    def apply_tags(self, tags: Tag) -> None:
-        self.valid_items = self.items_for_tags(tags)
-        if self._pool:
-            self._pool.BalancedItems = [item.balanced_item for item in self.valid_items]
+    def disable(self) -> None:
+        self.valid_items = ()
 
     def prepare(self) -> None:
         if not self._pool:
@@ -130,6 +128,8 @@ class Item:
 
     inventory: Optional[UObject] = None
 
+    _original_gamestages: Sequence[int]
+
     def __init__(
         self,
         path: str,
@@ -142,6 +142,10 @@ class Item:
 
     def initialize(self) -> None:
         self.inventory = FindObject("InventoryBalanceDefinition", self.path)
+        self._original_gamestages = tuple(
+            manufacturer.Grades[0].GameStageRequirement.MinGameStage
+            for manufacturer in self.inventory.Manufacturers
+        )
 
     @property
     def balanced_item(self) -> BalancedItem:
@@ -156,23 +160,6 @@ class Item:
         return (None, self.inventory, probability, True)
 
     def prepare(self) -> None:
-        pass
-
-    def revert(self) -> None:
-        pass
-
-
-class Relic(Item):
-    _original_gamestages: Sequence[int]
-
-    def initialize(self) -> None:
-        super().initialize()
-        self._original_gamestages = tuple(
-            manufacturer.Grades[0].GameStageRequirement.MinGameStage
-            for manufacturer in self.inventory.Manufacturers
-        )
-
-    def prepare(self) -> None:
         for manufacturer in self.inventory.Manufacturers:
             manufacturer.Grades[0].GameStageRequirement.MinGameStage = 1
 
@@ -181,7 +168,7 @@ class Relic(Item):
             manufacturer.Grades[0].GameStageRequirement.MinGameStage = gamestage
 
 
-class PurpleRelic(Relic):
+class PurpleRelic(Item):
     _original_weight: Probability
 
     def initialize(self) -> None:
@@ -211,6 +198,7 @@ class ClassMod(Item):
         self._original_coms = tuple(self.inventory.BaseDefinition.ClassModDefinitions)
 
     def prepare(self) -> None:
+        super().prepare()
         self.inventory.BaseDefinition.ClassModDefinitions = self.inventory.BaseDefinition.ClassModDefinitions[self.index],
 
     def revert(self) -> None:
@@ -226,10 +214,12 @@ class BlueAlignmentClassMod(Item):
         self._original_parts = defines.convert_struct(spec_data.WeightedParts)
 
     def prepare(self) -> None:
+        super().prepare()
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
         spec_data.WeightedParts = tuple(self._original_parts[i] for i in (2, 3, 5, 6, 8, 9))
 
     def revert(self) -> None:
+        super().prepare()
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
         spec_data.WeightedParts = self._original_parts
 
@@ -243,10 +233,12 @@ class PurpleAlignmentClassMod(Item):
         self._original_parts = defines.convert_struct(spec_data.WeightedParts)
 
     def prepare(self) -> None:
+        super().prepare()
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
         spec_data.WeightedParts = tuple(self._original_parts[10:19])
 
     def revert(self) -> None:
+        super().prepare()
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
         spec_data.WeightedParts = self._original_parts
 
@@ -264,9 +256,11 @@ class Gen2ClassMod(Item):
         self._original_coms = tuple(self.inventory.ClassModDefinitions)
 
     def prepare(self) -> None:
+        super().prepare()
         self.inventory.ClassModDefinitions = self.inventory.ClassModDefinitions[self.index],
 
     def revert(self) -> None:
+        super().prepare()
         self.inventory.ClassModDefinitions = self._original_coms
 
 
@@ -284,10 +278,12 @@ class Fibber(Item):
         self._original_barrels = defines.convert_struct(barrels.WeightedParts)
 
     def prepare(self) -> None:
+        super().prepare()
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
         barrels.WeightedParts = (self._original_barrels[self.index],)
 
     def revert(self) -> None:
+        super().prepare()
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
         barrels.WeightedParts = self._original_barrels
 
@@ -300,9 +296,11 @@ class BanditGrenade(Item):
         self.index = index
 
     def prepare(self) -> None:
+        super().prepare()
         self.inventory.Manufacturers[self.index].Grades[0].GameStageRequirement.MaxGameStage = 0
 
     def revert(self) -> None:
+        super().prepare()
         self.inventory.Manufacturers[self.index].Grades[0].GameStageRequirement.MaxGameStage = 100
 
 
@@ -315,9 +313,11 @@ class HyperionPistol(Item):
         self._original_barrels = defines.convert_struct(barrels.WeightedParts)
 
     def prepare(self) -> None:
+        super().prepare()
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
         barrels.WeightedParts = tuple(self._original_barrels[:8])
 
     def revert(self) -> None:
+        super().prepare()
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
         barrels.WeightedParts = self._original_barrels

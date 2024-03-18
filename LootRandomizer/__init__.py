@@ -14,17 +14,19 @@ if __name__ == "__main__":
         break
 
     from Mods.LootRandomizer.Mod import options, items, hints #type: ignore
-    from Mods.LootRandomizer.Mod import locations, enemies, missions, mission_list #type: ignore
+    from Mods.LootRandomizer.Mod import locations, enemies, missions #type: ignore
 
     import sys, importlib
     for submodule_name in (
-        "defines", "seed", "options", "hints", "items", "item_list",
-        "locations", "missions", "mission_list", "enemies", "enemy_list", "other_list",
+        "defines", "seed", "options", "hints", "items", "locations", "missions", "enemies", "other",
+        "seedversions.v1", "seedversions.v2"
     ):
-        importlib.reload(sys.modules["Mods.LootRandomizer.Mod." + submodule_name])
+        module = sys.modules.get("Mods.LootRandomizer.Mod." + submodule_name)
+        if module:
+            importlib.reload(module)
 else:
     from .Mod import options, items, hints
-    from .Mod import locations, enemies, missions, mission_list
+    from .Mod import locations, enemies, missions
 
 from typing import Sequence
 
@@ -41,7 +43,6 @@ class LootRandomizer(ModMenu.SDKMod):
 
 
     def Enable(self):
-        mission_list.Enable()
         hints.Enable()
         items.Enable()
         locations.Enable()
@@ -58,7 +59,6 @@ class LootRandomizer(ModMenu.SDKMod):
         locations.Disable()
         items.Disable()
         hints.Disable()
-        mission_list.Disable()
         super().Disable()
 
 

@@ -1,8 +1,8 @@
 from unrealsdk import FindObject, KeepAlive #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
 
-from . import seed
-from .defines import construct_object, set_command
+from . import seed, options
+from .defines import construct_object, set_command, show_dialog
 
 import enum
 
@@ -158,7 +158,7 @@ DudDescriptions = (
     "The real loot was the friends we met along the way.",
     "Think this will give me superpowers?",
     "Consult your doctor if you experience nasuea, swelling, or shortness of breath.",
-    "Send your complaints to https://www.twitch.tv/mopioid.",
+    "Send your complaints to<br>www.twitch.tv/mopioid.",
     "Well, this is embarrassing.",
     "Drowns sorrows.",
     "Don't look at me like that.",
@@ -168,7 +168,8 @@ DudDescriptions = (
     "Signs point to no.",
     "Do not pass Go.",
     "I'm With Stupid ^",
-    "I don't want to live on this planet anymore..."
+    "I don't want to live on this planet anymore...",
+    "GOOD. BUT WHERE IS GUN PILE?",
 )
 
 
@@ -183,6 +184,9 @@ hintitem_mesh: UObject = None
 duditem_mesh: UObject = None
 hintitem_pickupflag: UObject = None
 duditem_pickupflag: UObject = None
+
+
+# TODO - make dud item for mission turnins (clone relic?)
 
 
 def Enable() -> None:
@@ -235,19 +239,41 @@ def Disable() -> None:
     RemoveHook("WillowGame.Behavior_LocalCustomEvent.ApplyBehaviorToContext", "LootRandomizer")
 
 
-def UpdateHints(setting: str) -> None:
-    if useitem_template and seed.SelectedSeed:
-        for location in seed.SelectedSeed.locations:
+def UpdateHints() -> None:
+    if useitem_template and seed.AppliedSeed:
+        for location in seed.AppliedSeed.locations:
             location.update_hint()
 
+def ResetDismissed() -> None:
+    if useitem_template and seed.AppliedSeed:
+        for location in seed.AppliedSeed.locations:
+            location.toggle_hint(True)
 
 def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FStruct) -> bool:
     if caller is not useitem_behavior:
         return True
 
-    hint_inventory = params.SelfObject.DefinitionData.BalanceDefinition
-    for location in seed.SelectedSeed.locations:
-        if location.hint_inventory is hint_inventory:
-            location.update_hint(False)
+    if options.HintTrainingSeen.CurrentValue:
+        hint_inventory = params.SelfObject.DefinitionData.BalanceDefinition
+        for location in seed.AppliedSeed.locations:
+            if location.hint_inventory is hint_inventory:
+                location.toggle_hint(False)
+    else:
+        options.HintTrainingSeen.CurrentValue = True
+        show_dialog(
+            "Welcome to Loot Randomizer!",
+            (
+                "The object you just found is an item hint, indicating that the specified loot "
+                "source does indeed drop loot.\n\n"
+
+                "You can configure the amount of information provided by loot hints via "
+                "Options > Mods > Loot Randomizer > Hint Display.\n\n"
+
+                "To dismiss loot hints for a given source, simply pick them up. You may reset your "
+                "dismissed hints via\n"
+                "Options > Mods > Loot Randomizer > Reset Dismissed Hints.\n\n"
+            ),
+            5
+        )
 
     return False

@@ -77,6 +77,10 @@ class Location:
     @property
     def rarities(self) -> Sequence[int]:
         return (0,) if self.item is items.DudItem else self._rarities
+    
+    @rarities.setter
+    def rarities(self, rarities: Sequence[int]) -> None:
+        self._rarities = rarities
 
     @property
     def hint_pool(self) -> UObject: #ItemPoolDefinition
@@ -94,7 +98,8 @@ class Location:
             self._hint_pool.bAutoReadyItems = False
             self._hint_pool.BalancedItems = ((None, hint_inventory, (1, None, None, 1), True),)
 
-            self.update_hint(True)
+            self.update_hint()
+            self.toggle_hint(True)
 
         return self._hint_pool
 
@@ -102,16 +107,11 @@ class Location:
     def hint_inventory(self) -> Optional[UObject]: #InventoryBalanceDefinition
         return self.hint_pool.BalancedItems[0].InvBalanceDefinition if self._hint_pool else None
 
-    def update_hint(self, set_enabled: Optional[bool] = None) -> None:
-        if not self.hint_inventory:
+    def update_hint(self) -> None:
+        if not (self.hint_inventory and self.item):
             return
 
         useitem = self.hint_inventory.InventoryDefinition
-        if set_enabled is not None:
-            useitem.PickupLifeSpan = 0 if set_enabled else 0.000001
-
-        if not self.item:
-            return
 
         if self.item == items.DudItem:
             useitem.NonCompositeStaticMesh = hints.duditem_mesh
@@ -135,10 +135,20 @@ class Location:
 
         defines.set_command(useitem.Presentation, "DescriptionLocReference", hint_caption)
         defines.set_command(useitem.CustomPresentations[0], "Description", hint_text)
-        
 
-    def apply_tags(self, tags: Tag) -> None:
-        pass
+
+    def toggle_hint(self, set_enabled: bool):
+        if self.hint_inventory:
+            self.hint_inventory.InventoryDefinition.PickupLifeSpan = 0 if set_enabled else 0.000001
+
+
+    def enable(self) -> None:
+        for dropper in self.droppers:
+            dropper.enable()
+
+    def disable(self) -> None:
+        for dropper in self.droppers:
+            dropper.disable()
 
     def __str__(self) -> str:
         raise NotImplementedError
@@ -153,6 +163,9 @@ class Dropper:
     def prepare_pools(self) -> Sequence[UObject]:
         if not self.location.item:
             return ()
+        
+        if self.location.item is items.DudItem:
+            return (self.location.hint_pool,) * len(self.location.rarities)
 
         self.location.item.prepare()
         defines.do_next_tick(self.location.item.revert)
@@ -181,9 +194,18 @@ class MapDropper(Dropper):
         if map_names:
             self.map_names = map_names
 
+    def enable(self) -> None:
+        super().enable()
+
         for map_name in self.map_names:
             registry = map_registry.setdefault(map_name.lower(), set())
             registry.add(self)
+
+    def disable(self) -> None:
+        super().disable()
+        registry = map_registry.get(map_name.lower())
+        if registry:
+            registry.discard(self)
 
     def entered_map(self) -> None:
         raise NotImplementedError
@@ -198,11 +220,19 @@ class Behavior(Dropper):
 
     def __init__(self, path: str, inject: bool = True) -> None:
         self.path = path; self._inject = inject
-        registry = behavior_registry.setdefault(self.path, set())
-        registry.add(self)
 
     def should_inject(self, uobject: Optional[UObject] = None) -> bool:
         return super().should_inject() and self._inject
+    
+    def enable(self) -> None:
+        super().enable()
+        registry = behavior_registry.setdefault(self.path, set())
+        registry.add(self)
+
+    def disable(self) -> None:
+        registry = behavior_registry.get(self.path)
+        if registry:
+            registry.discard(self)
 
 
 class Interactive(Dropper):
@@ -210,14 +240,20 @@ class Interactive(Dropper):
 
     def __init__(self, path: str) -> None:
         self.path = path
-        if interactive_registry.get(path):
-            raise ValueError(f"Dropper already exists for '{path}'")
-        interactive_registry[path] = self
 
     def inject(self, interactive: UObject) -> None:
         pools = self.prepare_pools()
         pool = pools[0] if pools else None
         interactive.Loot[0].ItemAttachments[0].ItemPool = pool
+
+    def enable(self) -> None:
+        if interactive_registry.get(self.path):
+            raise ValueError(f"Dropper already exists for '{self.path}'")
+        interactive_registry[self.path] = self
+
+    def disable(self) -> None:
+        if interactive_registry.get(self.path):
+            del interactive_registry[self.path]
 
 
 class VendingMachine(Dropper):
@@ -225,9 +261,17 @@ class VendingMachine(Dropper):
 
     def __init__(self, path: str) -> None:
         self.path = path
-        if vending_registry.get(path):
-            raise ValueError(f"Dropper already exists for '{path}'")
-        vending_registry[path] = self
+
+    def enable(self) -> None:
+        super().enable()
+        if vending_registry.get(self.path):
+            raise ValueError(f"Dropper already exists for '{self.path}'")
+        vending_registry[self.path] = self
+
+    def disable(self) -> None:
+        super().disable()
+        if vending_registry.get(self.path):
+            del vending_registry[self.path]
 
 
 def MapChanged(new_map_name: str) -> None:
@@ -321,9 +365,15 @@ def _PopulationFactoryVendingMachine(caller: UObject, function: UFunction, param
         return True
     
     pools = dropper.prepare_pools()
-    pool = pools[0] if pools else None
+    if pools:
+        pool = pools[0]
+        pool.Quantity.BaseValueConstant = 7
+        def revert(): pool.Quantity.BaseValueConstant = 1
+        defines.do_next_tick(revert)
+    else:
+        pool = None
 
-    balance.DefaultLoot[0].ItemAttachments[0].ItemPool = None
+    balance.DefaultLoot[0].ItemAttachments[0].ItemPool = pool
     balance.DefaultLoot[1].ItemAttachments[0].ItemPool = pool
 
     return True
