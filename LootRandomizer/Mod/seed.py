@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unrealsdk import Log #type: ignore
 
-from . import defines, options, items, hints
+from . import defines, options, items, hints, enemies, missions, other
 from .defines import Tag, seeds_dir
 from .locations import Location
 from .items import ItemPool
@@ -189,70 +189,75 @@ class Seed:
         return self.generate_file("Spoilers", lambda item, location: f"{location}\t-\t{item.name}")
 
 
-# def generate_wikis() -> None:
-#     from html import escape
+def generate_wikis(version: int) -> None:
+    from html import escape
 
-#     with open(os.path.join(seeds_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
-#         def write_location(location: Location, type: str) -> None:
-#             rolls: List[str] = []
-#             for rarity in reversed(sorted(location._rarities)):
-#                 rolls.append(f"<kbd>{rarity}%</kbd>")
+    all_tags = Tag(0)
+    for tag in Tag:
+        all_tags |= tag
 
-#             if len(rolls) <= 4:
-#                 rolls_string = ' '.join(rolls)
-#             else:
-#                 rolls_string = f"{' '.join(rolls[:4])}<br />{' '.join(rolls[4:])}"
+    dummy_seed = Seed.Generate(all_tags)
+    dummy_seed.apply()
 
-#             settings: List[str] = []
-#             for tag in Tag:
-#                 if (tag not in defines.ContentTags) and (tag in location.tags):
-#                     settings.append(f"<kbd>{escape(tag.caption)}</kbd>")
+    with open(os.path.join(seeds_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
+        for content_tag in Tag:
+            if not content_tag & defines.ContentTags:
+                continue
 
-#             if len(settings) <= 2:
-#                 settings_string = ' '.join(settings)
-#             else:
-#                 settings_string = f"{' '.join(settings[:2])}<br />{' '.join(settings[2:])}"
+            locations = tuple(location for location in dummy_seed.locations if content_tag & location.tags)
+            if not locations:
+                continue
 
-#             file.write(f"| {type} | {escape(location.name)} | {rolls_string} | {settings_string} |\n")
+            file.write(f"\n### {escape(content_tag.content_title)}\n")
+            file.write("\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n")
 
-#         for content_tag in Tag:
-#             if not content_tag & defines.ContentTags:
-#                 continue
+            for location in locations:
+                rolls: List[str] = []
+                for rarity in reversed(sorted(location._rarities)):
+                    rolls.append(f"<kbd>{rarity}%</kbd>")
 
-#             enemies  = tuple(   enemy for   enemy in   enemy_list.Enemies  if content_tag in   enemy.tags )
-#             missions = tuple( mission for mission in mission_list.Missions if content_tag in mission.tags )
-#             others   = tuple(   other for   other in   other.Others   if content_tag in   other.tags )
+                if len(rolls) <= 4:
+                    rolls_string = ' '.join(rolls)
+                else:
+                    rolls_string = f"{' '.join(rolls[:4])}<br />{' '.join(rolls[4:])}"
 
-#             if not (len(enemies) or len(missions) or len(others)):
-#                 continue
+                settings: List[str] = []
+                for tag in Tag:
+                    if (tag not in defines.ContentTags) and (tag in location.tags):
+                        settings.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
-#             file.write(f"\n### {escape(content_tag.content_title)}\n")
-#             file.write("\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n")
+                if len(settings) <= 2:
+                    settings_string = ' '.join(settings)
+                else:
+                    settings_string = f"{' '.join(settings[:2])}<br />{' '.join(settings[2:])}"
 
-#             for enemy   in enemies:  write_location(enemy,   "Enemy"  )
-#             for mission in missions: write_location(mission, "Mission")
-#             for other   in others:   write_location(other,   "Other"  )
+                if isinstance(location, enemies.Enemy): category = "Enemy"
+                elif isinstance(location, missions.Mission): category = "Mission"
+                else: category = "Other"
 
-#     with open(os.path.join(seeds_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
-#         for hint in hints.Hint:
-#             if hint is hints.Hint.Dud:
-#                 continue
+                file.write(f"| {category} | {escape(location.name)} | {rolls_string} | {settings_string} |\n")
+                
 
-#             file.write(f"\n### {escape(hint)}s\n")
-#             file.write("\n| **Item** | **Required Content** |\n| - | - |\n")
+    with open(os.path.join(seeds_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
+        for hint in hints.Hint:
+            if hint is hints.Hint.Dud:
+                continue
 
-#             for item in item_list.Items:
-#                 if item.vague_hint is not hint:
-#                     continue
+            file.write(f"\n### {escape(hint)}s\n")
+            file.write("\n| **Item** | **Required Content** |\n| - | - |\n")
 
-#                 content = ""
-#                 fallback_content = ""
+            for item in dummy_seed.version_module.Items:
+                if item.vague_hint is not hint:
+                    continue
 
-#                 for tag in Tag:
-#                     if tag & defines.ContentTags:
-#                         if tag in item.items[0].tags:
-#                             content = f"<kbd>{escape(tag.caption)}</kbd>"
-#                         elif item.fallback and tag in item.fallback.tags:
-#                             fallback_content = f"or <kbd>{escape(tag.caption)}</kbd>"
+                content = ""
+                fallback_content = ""
 
-#                 file.write(f"| {escape(item.name)} | {content}{fallback_content} |\n")
+                for tag in Tag:
+                    if tag & defines.ContentTags:
+                        if tag in item.items[0].tags:
+                            content = f"<kbd>{escape(tag.caption)}</kbd>"
+                        elif item.fallback and tag in item.fallback.tags:
+                            fallback_content = f"or <kbd>{escape(tag.caption)}</kbd>"
+
+                file.write(f"| {escape(item.name)} | {content}{fallback_content} |\n")

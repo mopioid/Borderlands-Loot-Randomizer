@@ -102,6 +102,8 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
         return True
 
     mission.item.prepare()
+    defines.do_next_tick(mission.item.revert)
+
     mission.reward.RewardItemPools = (mission.item.pool,)
 
     if mission.item == items.DudItem:

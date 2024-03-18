@@ -177,10 +177,12 @@ class PurpleRelic(Item):
         self._original_weight = defines.convert_struct(weights[3])
 
     def prepare(self) -> None:
+        super().prepare()
         weights = self.inventory.PartListCollection.ConsolidatedAttributeInitData
         weights[3] = (0, None, None, 0)
 
     def revert(self) -> None:
+        super().revert()
         weights = self.inventory.PartListCollection.ConsolidatedAttributeInitData
         weights[3] = self._original_weight
 
@@ -199,9 +201,12 @@ class ClassMod(Item):
 
     def prepare(self) -> None:
         super().prepare()
-        self.inventory.BaseDefinition.ClassModDefinitions = self.inventory.BaseDefinition.ClassModDefinitions[self.index],
+        self.inventory.BaseDefinition.ClassModDefinitions = (
+            self.inventory.BaseDefinition.ClassModDefinitions[self.index],
+        )
 
     def revert(self) -> None:
+        super().revert()
         self.inventory.BaseDefinition.ClassModDefinitions = self._original_coms
 
 
@@ -219,7 +224,7 @@ class BlueAlignmentClassMod(Item):
         spec_data.WeightedParts = tuple(self._original_parts[i] for i in (2, 3, 5, 6, 8, 9))
 
     def revert(self) -> None:
-        super().prepare()
+        super().revert()
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
         spec_data.WeightedParts = self._original_parts
 
@@ -238,7 +243,7 @@ class PurpleAlignmentClassMod(Item):
         spec_data.WeightedParts = tuple(self._original_parts[10:19])
 
     def revert(self) -> None:
-        super().prepare()
+        super().revert()
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
         spec_data.WeightedParts = self._original_parts
 
@@ -256,11 +261,11 @@ class Gen2ClassMod(Item):
         self._original_coms = tuple(self.inventory.ClassModDefinitions)
 
     def prepare(self) -> None:
-        super().prepare()
+        super().revert()
         self.inventory.ClassModDefinitions = self.inventory.ClassModDefinitions[self.index],
 
     def revert(self) -> None:
-        super().prepare()
+        super().revert()
         self.inventory.ClassModDefinitions = self._original_coms
 
 
@@ -283,7 +288,7 @@ class Fibber(Item):
         barrels.WeightedParts = (self._original_barrels[self.index],)
 
     def revert(self) -> None:
-        super().prepare()
+        super().revert()
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
         barrels.WeightedParts = self._original_barrels
 
@@ -300,7 +305,7 @@ class BanditGrenade(Item):
         self.inventory.Manufacturers[self.index].Grades[0].GameStageRequirement.MaxGameStage = 0
 
     def revert(self) -> None:
-        super().prepare()
+        super().revert()
         self.inventory.Manufacturers[self.index].Grades[0].GameStageRequirement.MaxGameStage = 100
 
 
@@ -318,6 +323,6 @@ class HyperionPistol(Item):
         barrels.WeightedParts = tuple(self._original_barrels[:8])
 
     def revert(self) -> None:
-        super().prepare()
+        super().revert()
         barrels = self.inventory.RuntimePartListCollection.BarrelPartData
         barrels.WeightedParts = self._original_barrels

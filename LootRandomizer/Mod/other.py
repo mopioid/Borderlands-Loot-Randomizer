@@ -94,8 +94,8 @@ class GearysUnbreakableGear(Interactive):
                 loot_configuration.Weight = (0, None, None, 0)
 
         attachments = interactive.Loot[1].ItemAttachments
-        attachments[3].ItemPool = money
-        for index in range(3):
+        # attachments[3].ItemPool = money
+        for index in range(4):
             attachments[index].ItemPool = pool
 
 """
