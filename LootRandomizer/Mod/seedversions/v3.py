@@ -1132,7 +1132,7 @@ Locations = (
         Behavior("GD_PumpkinheadFlying.Character.DeathDef_Pumpkinheadflying:BehaviorProviderDefinition_0.Behavior_SpawnItems_209"),
         Behavior("GD_Flax_Lootables.IOs.IO_Pumpkin_BossLoot:BehaviorProviderDefinition_1.Behavior_SpawnItems_210", inject=False),
     tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(33,33,33)),
-    Enemy("Clark the Combusted Cryptkeeper", Pawn("PawnBalance_UndeadFirePsycho_Giant"), tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(100,100,50)),
+    Enemy("Clark the Combusted Cryptkeeper", Pawn("PawnBalance_UndeadFirePsycho_Giant"), tags=Tag.BloodyHarvest|Tag.SlowEnemy|Tag.MissionEnemy|Tag.VeryLongMission),
 
     Enemy("Son of Crawmerax the Invincible", Pawn("PawnBalance_Crawmerax_Son"), tags=Tag.SonOfCrawmerax|Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("The Invincible Son of Crawmerax the Invincible",
@@ -1288,7 +1288,7 @@ Locations = (
         # echo giver disappears
     Mission("Safe and Sound (Turn in Marcus)", "GD_Z2_SafeAndSound.M_SafeAndSound"),
     Mission("Safe and Sound (Turn in Moxxi)", "GD_Z2_SafeAndSound.M_SafeAndSound", alt=True),
-    Mission("Perfectly Peaceful", "GD_Z1_PerfectlyPeaceful.M_PerfectlyPeaceful", rarities=(100, 100)),
+    Mission("Perfectly Peaceful", "GD_Z1_PerfectlyPeaceful.M_PerfectlyPeaceful", tags=Tag.LongMission),
     Mission("Swallowed Whole", "GD_Z3_SwallowedWhole.M_SwallowedWhole"),
     Mission("The Cold Shoulder", "GD_Z3_ColdShoulder.M_ColdShoulder"),
     Mission("Note for Self-Person", "gd_z2_notetoself.M_NoteToSelf",

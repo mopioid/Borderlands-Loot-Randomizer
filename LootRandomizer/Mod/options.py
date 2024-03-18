@@ -300,7 +300,7 @@ _HintDisplay = CallbackSpinner(
         "How much information loot sources should reveal about their item drop. \"Vague\" will only"
         " describe rarity and type, while \"spoiler\" will name the exact item."
     ),
-    Callback=hints.UpdateHints,
+    Callback=lambda value: hints.UpdateHints(),
     Choices=("None", "Vague", "Spoiler"),
     StartingValue="Vague"
 )

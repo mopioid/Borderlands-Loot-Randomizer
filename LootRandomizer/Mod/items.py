@@ -261,7 +261,7 @@ class Gen2ClassMod(Item):
         self._original_coms = tuple(self.inventory.ClassModDefinitions)
 
     def prepare(self) -> None:
-        super().revert()
+        super().prepare()
         self.inventory.ClassModDefinitions = self.inventory.ClassModDefinitions[self.index],
 
     def revert(self) -> None:
