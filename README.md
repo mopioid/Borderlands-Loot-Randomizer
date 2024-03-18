@@ -2,7 +2,7 @@
 
 [Discord](https://discord.gg/C37HvmvBbS)&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;[Donate](https://streamlabs.com/mopioid/tip)
 
-<hr>
+![Face McTwisty](https://i.imgur.com/OIZ9Ab4.jpeg)
 
 Loot Randomizer is a mod for Borderlands 2 that provides repeated new playthrough experiences, by means of shuffling every item in the game into new drop locations.
 
@@ -27,6 +27,12 @@ To get started playing Loot Randomizer, first enable the mod from the Mods menu 
 Next, navigate to Options > Mods, and you will see a section for Loot Randomizer. Begin by clicking "New Seed," configuring your preferred options, and clicking "Generate" to create and apply it. You can now start exploring in game!
 
 To learn more about the seed you just created, navigate to Options > Mods > Loot Randomizer > Select Seed, and select the "View Seed Locations" button. This will open a text file listing every possible drop source that you can explore.
+
+To learn more about the items, locations, and seed generation in Loot Randomizer, see:
+
+https://github.com/mopioid/Borderlands-Loot-Randomizer/wiki/Items
+
+https://github.com/mopioid/Borderlands-Loot-Randomizer/wiki/Locations
 
 ## Support
 
