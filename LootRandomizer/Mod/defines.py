@@ -147,7 +147,7 @@ def set_command(uobject: UObject, attribute: str, value: str):
     get_pc().ConsoleCommand(f"set {UObject.PathName(uobject)} {attribute} {value}")
 
 
-def convert_struct(fstruct: Any) -> Tuple[Any, ...]:
+def convert_struct(fstruct: Any) -> Any:
     iterator: Optional[Iterator] = None
     try: iterator = iter(fstruct)
     except: pass

@@ -256,13 +256,13 @@ def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FSt
     matched_location = None
 
     hint_inventory = params.SelfObject.DefinitionData.BalanceDefinition
-    for location in seed.AppliedSeed.locations:
+    for location in seed.AppliedSeed.locations: #type: ignore
         if location.hint_inventory is hint_inventory:
             matched_location = location
             break
 
     if not matched_location:
-        return
+        return False
     
     if (matched_location.item != items.DudItem) and (not options.HintTrainingSeen.CurrentValue):
         options.HintTrainingSeen.CurrentValue = True

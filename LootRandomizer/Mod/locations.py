@@ -4,22 +4,19 @@ from unrealsdk import Log, FindAll, FindObject, GetEngine, KeepAlive  #type: ign
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
 
 from . import defines, options, hints, items
-from .defines import Tag, Probability, construct_object
+from .defines import Tag, construct_object
 from .items import ItemPool
 
 import random
 
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, TypeVar
+try: from typing import Self
+except: pass
 
-ItemPoolList = List[Tuple[UObject, Probability]]
 
+# ItemPoolList = List[Tuple[UObject, Probability]]
 
-map_name: str = "menumap"
-map_registry: Dict[str, Set[MapDropper]] = dict()
-
-behavior_registry: Dict[str, Set[Behavior]] = dict()
-interactive_registry: Dict[str, Interactive] = dict()
-vending_registry: Dict[str, VendingMachine] = dict()
+money_pool: UObject
 
 
 pool_whitelist = (
@@ -31,23 +28,22 @@ pool_whitelist = (
 
 
 def Enable() -> None:
+    global money_pool
+    money_pool = FindObject("ItemPoolDefinition", "GD_Itempools.AmmoAndResourcePools.Pool_Money_1_BIG")
+
     # RunHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer", _PostCommitMapChange)
     RunHook("Engine.GameInfo.SetGameType", "LootRandomizer", _InitGame)
     RunHook("WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext", "LootRandomizer", _Behavior_SpawnItems)
-    RunHook("WillowGame.WillowInteractiveObject.UsedBy", "LootRandomizer", _UsedBy)
     RunHook("WillowGame.WillowPlayerController.ClientSetPawnLocation", "LootRandomizer", _SetPawnLocation)
-    RunHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer", _GrantNewMarketingCodeBonuses)
-    RunHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer", _PopulationFactoryVendingMachine)
+    RunHook("Engine.Behavior_Destroy.ApplyBehaviorToContext", "LootRandomizer", _Behavior_Destroy)
 
 
 def Disable() -> None:
     # RemoveHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer")
     RemoveHook("Engine.GameInfo.SetGameType", "LootRandomizer")
     RemoveHook("WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext", "LootRandomizer")
-    RemoveHook("WillowGame.WillowInteractiveObject.UsedBy", "LootRandomizer")
     RemoveHook("WillowGame.WillowPlayerController.ClientSetPawnLocation", "LootRandomizer")
-    RemoveHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer")
-    RemoveHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer")
+    RemoveHook("Engine.Behavior_Destroy.ApplyBehaviorToContext", "LootRandomizer")
 
 
 class Location:
@@ -65,14 +61,19 @@ class Location:
         name: str,
         *droppers: Dropper,
         tags: Tag,
-        rarities: Sequence[int] = (100,)
+        rarities: Optional[Sequence[int]] = None
     ) -> None:
+        for dropper in droppers:
+            dropper.location = self # This is a circular reference; Location objects are static.
+
         if not tags & defines.ContentTags:
             tags |= Tag.BaseGame
 
+        if rarities is None:
+            rarities = (100,)
+
         self.name = name; self.droppers = droppers; self.tags = tags; self._rarities = rarities
-        for dropper in droppers:
-            dropper.location = self # This is a circular reference; Location objects are static.
+
 
     @property
     def rarities(self) -> Sequence[int]:
@@ -157,27 +158,33 @@ class Location:
 class Dropper:
     location: Location
 
-    def should_inject(self, uobject: Optional[UObject] = None) -> bool:
-        return self.location.item is not None
+    def prepare_pools(self, count: Optional[int] = None, pad_money: bool = True) -> Sequence[UObject]:
+        padding = money_pool if pad_money else None
 
-    def prepare_pools(self) -> Sequence[UObject]:
-        if not self.location.item:
+        if count is None:
+            count = len(self.location.rarities)
+        if not count:
             return ()
-        
+
+        if not self.location.item:
+            return (padding,) * count
+
         if self.location.item is items.DudItem:
-            return (self.location.hint_pool,) * len(self.location.rarities)
+            return (self.location.hint_pool,) * count
 
         self.location.item.prepare()
-        defines.do_next_tick(self.location.item.revert)
 
         pools: List[UObject] = []
 
-        for rarity in self.location.rarities:
-            if rarity >= random.randint(1, 100):
+        for index in range(count):
+            if index >= len(self.location.rarities):
+                pools.append(padding)
+            elif random.randint(1, 100) <= self.location.rarities[index]:
                 pools.append(self.location.item.pool)
             else:
                 pools.append(self.location.hint_pool)
         
+        random.shuffle(pools)
         return pools
     
     def enable(self) -> None:
@@ -187,25 +194,33 @@ class Dropper:
         pass
 
 
-class MapDropper(Dropper):
-    map_names: Sequence[str] = ()
+class RegistrantDropper(Dropper):
+    Registries: Dict[str, Set[Self]]
 
-    def __init__(self, *map_names: str) -> None:
-        if map_names:
-            self.map_names = map_names
+    paths: Sequence[str]
+
+    def __init__(self, *paths: str) -> None:
+        self.paths = paths
 
     def enable(self) -> None:
-        super().enable()
-
-        for map_name in self.map_names:
-            registry = map_registry.setdefault(map_name.lower(), set())
-            registry.add(self)
+        for path in self.paths:
+            registry = self.Registries.setdefault(path, set())
+            registry.add(self) #type: ignore
 
     def disable(self) -> None:
-        super().disable()
-        registry = map_registry.get(map_name.lower())
-        if registry:
-            registry.discard(self)
+        for path in self.paths:
+            registry = self.Registries.get(path)
+            if registry:
+                registry.discard(self) #type: ignore
+                if not registry:
+                    del self.Registries[path]
+
+
+class MapDropper(RegistrantDropper):
+    Registries = dict()
+
+    def __init__(self, *map_names: str) -> None:
+        super().__init__(*(map_name.lower() for map_name in map_names))
 
     def entered_map(self) -> None:
         raise NotImplementedError
@@ -214,76 +229,34 @@ class MapDropper(Dropper):
         pass
 
 
-class Behavior(Dropper):
-    path: str
-    _inject: bool
+class Behavior(RegistrantDropper):
+    Registries = dict()
 
-    def __init__(self, path: str, inject: bool = True) -> None:
-        self.path = path; self._inject = inject
+    inject: bool
 
-    def should_inject(self, uobject: Optional[UObject] = None) -> bool:
-        return super().should_inject() and self._inject
-    
-    def enable(self) -> None:
-        super().enable()
-        registry = behavior_registry.setdefault(self.path, set())
-        registry.add(self)
-
-    def disable(self) -> None:
-        registry = behavior_registry.get(self.path)
-        if registry:
-            registry.discard(self)
+    def __init__(self, *paths: str, inject: bool = True) -> None:
+        self.inject = inject
+        super().__init__(*paths)
 
 
-class Interactive(Dropper):
-    path: str
-
-    def __init__(self, path: str) -> None:
-        self.path = path
-
-    def inject(self, interactive: UObject) -> None:
-        pools = self.prepare_pools()
-        pool = pools[0] if pools else None
-        interactive.Loot[0].ItemAttachments[0].ItemPool = pool
-
-    def enable(self) -> None:
-        if interactive_registry.get(self.path):
-            raise ValueError(f"Dropper already exists for '{self.path}'")
-        interactive_registry[self.path] = self
-
-    def disable(self) -> None:
-        if interactive_registry.get(self.path):
-            del interactive_registry[self.path]
+class PreventDestroy(RegistrantDropper):
+    Registries = dict()
 
 
-class VendingMachine(Dropper):
-    path: str
-
-    def __init__(self, path: str) -> None:
-        self.path = path
-
-    def enable(self) -> None:
-        super().enable()
-        if vending_registry.get(self.path):
-            raise ValueError(f"Dropper already exists for '{self.path}'")
-        vending_registry[self.path] = self
-
-    def disable(self) -> None:
-        super().disable()
-        if vending_registry.get(self.path):
-            del vending_registry[self.path]
-
+map_name: str = "menumap"
 
 def MapChanged(new_map_name: str) -> None:
     global map_name
+
+    new_map_name = new_map_name.lower()
     if new_map_name == map_name:
         return
 
-    for map_dropper in map_registry.get(map_name, ()):
+    for map_dropper in MapDropper.Registries.get(map_name, ()):
         map_dropper.exited_map()
     
     map_name = new_map_name
-    for map_dropper in map_registry.get(map_name, ()):
+    for map_dropper in MapDropper.Registries.get(map_name, ()):
         map_dropper.entered_map()
 
 
@@ -292,7 +265,7 @@ def MapChanged(new_map_name: str) -> None:
 #     return True
 
 def _SetPawnLocation(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    MapChanged(GetEngine().GetCurrentWorldInfo().GetMapName().lower())
+    MapChanged(GetEngine().GetCurrentWorldInfo().GetMapName())
     return True
 
 
@@ -303,7 +276,7 @@ def _InitGame(caller: UObject, function: UFunction, params: FStruct) -> bool:
 
 
 def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    registry = behavior_registry.get(UObject.PathName(caller))
+    registry = Behavior.Registries.get(UObject.PathName(caller))
     if not registry:
         return True
     
@@ -311,7 +284,7 @@ def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) 
     poollist = [pool for pool in original_poollist if pool[0] and pool[0].Name in pool_whitelist]
 
     for dropper in registry:
-        if dropper.should_inject(caller):
+        if dropper.inject:
             poollist += [(pool, (1, None, None, 1)) for pool in dropper.prepare_pools()]
             break
 
@@ -345,53 +318,14 @@ def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) 
     return True
 
 
-def _UsedBy(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    balance = caller.BalanceDefinitionState.BalanceDefinition
-    if not balance:
-        return True
-    
-    dropper = interactive_registry.get(balance.Name)
-    if dropper:
-        dropper.inject(caller)
+def _Behavior_Destroy(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    return UObject.PathName(caller) not in PreventDestroy.Registries
 
-    return True
-
-
-def _PopulationFactoryVendingMachine(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    balance = params.Opportunity.PopulationDef.ActorArchetypeList[0].SpawnFactory.ObjectBalanceDefinition
-
-    dropper = vending_registry.get(UObject.PathName(balance))
-    if not dropper:
-        return True
-    
-    pools = dropper.prepare_pools()
-    if pools:
-        pool = pools[0]
-        pool.Quantity.BaseValueConstant = 7
-        def revert(): pool.Quantity.BaseValueConstant = 1
-        defines.do_next_tick(revert)
-    else:
-        pool = None
-
-    balance.DefaultLoot[0].ItemAttachments[0].ItemPool = pool
-    balance.DefaultLoot[1].ItemAttachments[0].ItemPool = pool
-
-    return True
-
-
-def _GrantNewMarketingCodeBonuses(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    premier = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_PremierClub")
-    collectors = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_Collectors")
-
-    premier_items = tuple(premier.UnlockItems[0].UnlockItems)
-    collectors_items = tuple(collectors.UnlockItems[0].UnlockItems)
-
-    premier.UnlockItems[0].UnlockItems = ()
-    collectors.UnlockItems[0].UnlockItems = ()
-
-    def revert_unlocks(premier_items = premier_items, collectors_items = collectors_items) -> None:
-        premier.UnlockItems[0].UnlockItems = premier_items
-        collectors.UnlockItems[0].UnlockItems = collectors_items
-
-    defines.do_next_tick(revert_unlocks)
-    return True
+"""
+TODO
+purge locations not within the scope of any seed:
+    - stinkpot from no beard
+    - sandhawk from whoops
+    - haderax launcher chest
+    - giraffe DLC final turn-in
+"""

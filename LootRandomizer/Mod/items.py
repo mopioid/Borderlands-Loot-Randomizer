@@ -112,6 +112,8 @@ class ItemPool:
         for item in self.valid_items:
             item.prepare()
 
+        defines.do_next_tick(self.revert)
+
     def revert(self) -> None:
         if self._pool:
             for item in self.valid_items:

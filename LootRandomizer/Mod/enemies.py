@@ -6,10 +6,10 @@ from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ig
 from . import seed, defines, enemies, locations
 from .missions import Mission
 from .defines import Tag, construct_object
-from .locations import Dropper, MapDropper, Interactive
+from .locations import Dropper, Location, MapDropper, RegistrantDropper
 from .items import ItemPool
 
-from typing import Dict, Optional, Set, Sequence
+from typing import Optional, Set, Sequence
 
 
 def Enable() -> None:
@@ -19,41 +19,7 @@ def Disable() -> None:
     RemoveHook("WillowGame.WillowAIPawn.Died", "LootRandomizer")
 
 
-balance_registry: Dict[str, Set[Pawn]] = dict()
-
-
-def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    balance = caller.BalanceDefinitionState.BalanceDefinition
-    balance = UObject.PathName(balance).split(".")[-1]
-    if not balance:
-        return True
-    
-    registry = balance_registry.get(balance)
-    if not registry:
-        return True
-    
-    pools = [
-        defines.convert_struct(pool) for pool in caller.ItemPoolList
-        if pool.ItemPool and pool.ItemPool.Name in locations.pool_whitelist
-    ]
-
-    for dropper in registry:
-        if dropper.should_inject(caller):
-            pools += [(pool, (1, None, None, 1)) for pool in dropper.prepare_pools()]
-            break
-
-    caller.ItemPoolList = pools
-
-    if caller.Weapon:
-        caller.Weapon.bDropOnDeath = False
-    for item in caller.EquippedItems:
-        if item:
-            item.bDropOnDeath = False
-
-    return True
-
-
-class Enemy(locations.Location):
+class Enemy(Location):
     mission: Optional[str]
 
     specified_tags: Tag
@@ -62,7 +28,7 @@ class Enemy(locations.Location):
     def __init__(
         self,
         name: str,
-        *droppers: locations.Dropper,
+        *droppers: Dropper,
         tags: Tag = Tag(0),
         mission: Optional[str] = None,
         rarities: Optional[Sequence[int]] = None
@@ -75,11 +41,14 @@ class Enemy(locations.Location):
     def enable(self) -> None:
         super().enable()
 
-        self.tags = self.specified_tags
-        self.rarities = self.specified_rarities
+        if not seed.AppliedSeed:
+            raise Exception(f"Attempted to enable '{self}' with no seed applied.")
+
+        tags = self.specified_tags
+        rarities = self.specified_rarities
 
         if self.mission:
-            self.tags |= Tag.MissionEnemy
+            tags |= Tag.MissionEnemy
 
             matched_mission: Optional[Mission] = None
             for location in seed.AppliedSeed.version_module.Locations:
@@ -90,36 +59,40 @@ class Enemy(locations.Location):
             if not matched_mission:
                 raise ValueError(f"Failed to match mission {self.mission}")
             
-            self.tags |= matched_mission.tags
+            tags |= matched_mission.tags
 
-        if not self.tags & defines.EnemyTags:
-            self.tags |= Tag.UniqueEnemy
+        if not tags & defines.EnemyTags:
+            tags |= Tag.UniqueEnemy
 
-        if not self.rarities:
-            self.rarities = []
+        if not rarities:
+            rarities = []
 
-            if self.tags & Tag.SlowEnemy:       self.rarities += (33,)
-            if self.tags & Tag.MobFarm:         self.rarities += (3,)
-            if self.tags & Tag.RareEnemy:       self.rarities += (33,)
-            if self.tags & Tag.VeryRareEnemy:   self.rarities += (100,50,50)
-            if self.tags & Tag.EvolvedEnemy:    self.rarities += (50,50)
-            if self.tags & Tag.RaidEnemy:       self.rarities += (100,100,50,50)
+            if tags & Tag.SlowEnemy:       rarities += (33,)
+            if tags & Tag.MobFarm:         rarities += (3,)
+            if tags & Tag.RareEnemy:       rarities += (33,)
+            if tags & Tag.VeryRareEnemy:   rarities += (100,50,50)
+            if tags & Tag.EvolvedEnemy:    rarities += (50,50)
+            if tags & Tag.RaidEnemy:       rarities += (100,100,50,50)
 
-            if self.tags & Tag.MissionEnemy:    self.rarities += (50,)
-            if self.tags & Tag.LongMission:     self.rarities += (50,)
-            if self.tags & Tag.VeryLongMission: self.rarities += (100,50)
+            if tags & Tag.MissionEnemy:    rarities += (50,)
+            if tags & Tag.LongMission:     rarities += (50,)
+            if tags & Tag.VeryLongMission: rarities += (100,50)
 
-            if not self.rarities:               self.rarities += (15,)
+            if not rarities:               rarities += (15,)
 
-        if not (self.tags & defines.ContentTags):
-            self.tags |= Tag.BaseGame
+        if not (tags & defines.ContentTags):
+            tags |= Tag.BaseGame
+
+        self.tags = tags; self.rarities = rarities
 
 
     def __str__(self) -> str:
         return f"Enemy: {self.name}"
 
 
-class Pawn(locations.Dropper):
+class Pawn(RegistrantDropper):
+    Registries = dict()
+
     balance: str
     transform: Optional[int]
     evolved: Optional[int]
@@ -130,32 +103,16 @@ class Pawn(locations.Dropper):
         transform: Optional[int] = None,
         evolved: Optional[int] = None
     ) -> None:
-        self.balance = balance; self.transform = transform; self.evolved = evolved
+        self.transform = transform; self.evolved = evolved
+        super().__init__(balance)
 
-        super().__init__()
 
-    def enable(self) -> None:
-        super().enable()
-        registry = balance_registry.setdefault(self.balance, set())
-        registry.add(self)
-
-    def disable(self) -> None:
-        registry = balance_registry.get(self.balance)
-        if registry:
-            registry.discard(self)
-
-    def should_inject(self, uobject: Optional[UObject] = None) -> bool:
-        if uobject is None:
-            raise ValueError(f"Pawn(\"{self.balance}\") for {self.location} asked to inject None")
-        
-        if not super().should_inject(uobject):
-            return False
-
+    def should_inject(self, pawn: UObject) -> bool:
         if self.transform is not None:
-            return self.transform == uobject.TransformType
+            return self.transform == pawn.TransformType
 
-        if self.evolved == uobject.TransformType:
-            return Tag.EvolvedEnemy not in self.location.applied_tags
+        if self.evolved == pawn.TransformType:
+            return Tag.EvolvedEnemy not in seed.AppliedSeed.tags #type: ignore
 
         return True
 
@@ -213,6 +170,14 @@ class MonsterTruck(MapDropper):
         RemoveHook("Engine.Pawn.Died", f"LootRandomizer.{id(self)}")
 
 
+class PetesBurner(Pawn):
+    def should_inject(self, pawn: UObject) -> bool:
+        return (
+            pawn.Allegiance.Name == "Iris_Allegiance_DragonGang"
+            and locations.map_name == "Iris_DL2_P".lower()
+        )
+
+
 _doctorsorders_midgets: Set[str] = set()
 
 def _spawn_midget(caller: UObject, function: UFunction, params: FStruct) -> bool:
@@ -220,19 +185,22 @@ def _spawn_midget(caller: UObject, function: UFunction, params: FStruct) -> bool
         _doctorsorders_midgets.add(UObject.PathName(params.SpawnedActor))
     return True
 
+
 class Midget(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
         return (
-            UObject.PathName(pawn) not in _doctorsorders_midgets and
-            UObject.PathName(pawn.MySpawnPoint) != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
+            (UObject.PathName(pawn) not in _doctorsorders_midgets) and
+            (UObject.PathName(pawn.MySpawnPoint) != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26")
         )
 
+
 class DoctorsOrdersMidget(Pawn):
-    def should_inject(self, pawn: UObject) -> None:
+    def should_inject(self, pawn: UObject) -> bool:
         return UObject.PathName(pawn) in _doctorsorders_midgets
 
+
 class SpaceCowboyMidget(Pawn):
-    def should_inject(self, pawn: UObject) -> None:
+    def should_inject(self, pawn: UObject) -> bool:
         return UObject.PathName(pawn.MySpawnPoint) == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
 
 class DoctorsOrdersMidgetRegistry(MapDropper):
@@ -248,17 +216,19 @@ class DoctorsOrdersMidgetRegistry(MapDropper):
         RemoveHook("WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput", f"LootRandomizer.{id(self)}")
 
 
-class HaderaxChest(Interactive):
-    def inject(self, interactive: UObject) -> None:
-        pools = self.prepare_pools()
-        
-        money = FindObject("ItemPoolDefinition", "GD_Itempools.AmmoAndResourcePools.Pool_Money_1_BIG")
-        pool = pools[0] if pools else money
+class Haderax(MapDropper):
+    def __init__(self, *map_names: str) -> None:
+        super().__init__("SandwormLair_P")
 
-        for loot in interactive.Loot:
-            loot.ItemAttachments[0].ItemPool = pool
-            for index in (1, 2, 3, 8, 9, 10, 11):
-                loot.ItemAttachments[index].ItemPool = money
+    def entered_map(self) -> None:
+        digicrate_peakopener = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_PeakOpener")
+        digicrate_shield = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Shield")
+        digicrate_artifact = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Articfact")
+
+        digicrate_peakopener.DefaultInteractiveObject = None
+        digicrate_shield.DefaultInteractiveObject = None
+        digicrate_artifact.DefaultInteractiveObject = None
+
 
 
 class DigiEnemy(Enemy):
@@ -281,10 +251,14 @@ class DigiEnemy(Enemy):
     @property
     def fallback_enemy(self) -> Enemy:
         if not self._fallback_enemy:
-            for location in seed.AppliedSeed.version_module.Locations:
+            for location in seed.AppliedSeed.version_module.Locations: #type: ignore
                 if isinstance(location, Enemy) and location.name == self.fallback:
                     self._fallback_enemy = location
                     break
+
+        if not self._fallback_enemy:
+            raise Exception(f"Failed to find fallback enemy for {self}")
+
         return self._fallback_enemy
 
     @property
@@ -298,3 +272,34 @@ class DigiEnemy(Enemy):
     @property
     def hint_pool(self) -> UObject: #ItemPoolDefinition
         return super().hint_pool if self._item else self.fallback_enemy.hint_pool
+
+
+def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    balance = caller.BalanceDefinitionState.BalanceDefinition
+    balance = UObject.PathName(balance).split(".")[-1]
+    if not balance:
+        return True
+    
+    registry = Pawn.Registries.get(balance)
+    if not registry:
+        return True
+    
+    pools = [
+        defines.convert_struct(pool) for pool in caller.ItemPoolList
+        if pool.ItemPool and pool.ItemPool.Name in locations.pool_whitelist
+    ]
+
+    for dropper in registry:
+        if dropper.should_inject(caller):
+            pools += [(pool, (1, None, None, 1)) for pool in dropper.prepare_pools()]
+            break
+
+    caller.ItemPoolList = pools
+
+    if caller.Weapon:
+        caller.Weapon.bDropOnDeath = False
+    for item in caller.EquippedItems:
+        if item:
+            item.bDropOnDeath = False
+
+    return True

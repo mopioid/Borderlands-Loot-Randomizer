@@ -1,18 +1,29 @@
 from unrealsdk import Log, FindObject #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
 
-from . import defines, locations
-from .defines import Tag
-from .locations import Interactive
+from . import defines
+from .defines import Tag, do_next_tick
+from .locations import Dropper, Location, MapDropper, RegistrantDropper
 
 from typing import Optional, Sequence
 
 
-class Other(locations.Location):
+def Enable() -> None:
+    RunHook("WillowGame.Behavior_AttachItems.ApplyBehaviorToContext", "LootRandomizer", _Behavior_AttachItems)
+    RunHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer", _PopulationFactoryVendingMachine)
+    RunHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer", _GrantNewMarketingCodeBonuses)
+
+def Disable() -> None:
+    RemoveHook("WillowGame.Behavior_AttachItems.ApplyBehaviorToContext", "LootRandomizer")
+    RemoveHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer")
+    RemoveHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer")
+
+
+class Other(Location):
     def __init__(
         self,
         name: str,
-        *droppers: locations.Dropper,
+        *droppers: Dropper,
         tags: Tag = Tag(0),
         rarities: Optional[Sequence[int]] = None
     ) -> None:
@@ -22,10 +33,10 @@ class Other(locations.Location):
             tags |= Tag.Miscellaneous
 
         if not rarities:
-            if tags & Tag.Vendor:
-                rarities = (100, 100, 100, 100)
-            else:
-                rarities = (100,)
+            rarities = [100]
+            if   tags & Tag.Vendor:          rarities *= 8
+            elif tags & Tag.LongMission:     rarities += (100,)
+            elif tags & Tag.VeryLongMission: rarities += (100,100,100)
 
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
 
@@ -33,37 +44,45 @@ class Other(locations.Location):
         return f"Other: {self.name}"
 
 
-class TundraSnowmanHead(locations.MapDropper):
-    def __init__(self, *map_names: str) -> None:
-        super().__init__("tundraexpress_p")
+class VendingMachine(RegistrantDropper):
+    Registries = dict()
 
-    def entered_map(self) -> None:
-        def head_hurt(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if UObject.PathName(caller) != "GD_Episode07Data.IO_SnowManHead:BehaviorProviderDefinition_0.Behavior_DamageSourceSwitch_14":
-                return True
+    def inject(self, balance: UObject) -> None:
+        # TODO
 
-            pools = self.prepare_pools()
-            pool = pools[0] if pools else None
+        pool = self.prepare_pools(1)[0]
 
-            params.ContextObject.Loot[0].ItemAttachments[0].ItemPool = pool
-            return True
-        
-        RunHook("WillowGame.Behavior_DamageSourceSwitch.ApplyBehaviorToContext", "LootRandomizer.TundraSnowmanHead", head_hurt)
+        pool.Quantity.BaseValueConstant = len(self.location.rarities) - 1
+        def revert(): pool.Quantity.BaseValueConstant = 1
+        defines.do_next_tick(revert)
 
-    def exited_map(self) -> None:
-        RemoveHook("WillowGame.Behavior_DamageSourceSwitch.ApplyBehaviorToContext", "LootRandomizer.TundraSnowmanHead")
+        balance.DefaultLoot[0].ItemAttachments[0].ItemPool = pool
+        balance.DefaultLoot[1].ItemAttachments[0].ItemPool = pool
 
 
-class MimicChest(Interactive):
-    def inject(self, interactive: UObject) -> None:
-        pools = self.prepare_pools()
+class Attachment(RegistrantDropper):
+    Registries = dict()
 
-        attachments = interactive.Loot[6].ItemAttachments
-        for index in range(4):
-            attachments[index].ItemPool = pools[0] if pools else None
+    configuration: int
+    attachments: Sequence[int]
+
+    def __init__(self, path: str, *attachments: int, configuration: int = 0) -> None:
+        self.configuration = configuration; self.attachments = attachments if attachments else (0,)
+        super().__init__(path)
+
+    def inject(self, obj: UObject) -> None:
+        pools = self.prepare_pools(len(self.attachments))
+
+        for index, loot_configuration in enumerate(obj.Loot):
+            if index != self.configuration:
+                loot_configuration.Weight = (0, None, None, 0)
+
+        obj_attachments = obj.Loot[self.configuration].ItemAttachments
+        for index, pool in zip(self.attachments, pools):
+            obj_attachments[index].ItemPool = pool
 
 
-class DahlAbandonGrave(locations.MapDropper):
+class DahlAbandonGrave(MapDropper):
     def __init__(self) -> None:
         super().__init__("OldDust_P")
 
@@ -72,7 +91,7 @@ class DahlAbandonGrave(locations.MapDropper):
         grave_bpd.BehaviorSequences[2].BehaviorData2[3].Behavior = grave_bpd.BehaviorSequences[2].BehaviorData2[5].Behavior
 
 
-class ButtstallionWithAmulet(locations.MapDropper):
+class ButtstallionWithAmulet(MapDropper):
     def __init__(self) -> None:
         super().__init__("BackBurner_P")
 
@@ -83,22 +102,51 @@ class ButtstallionWithAmulet(locations.MapDropper):
         butt_ai.BehaviorSequences[5].BehaviorData2[20].OutputLinks.ArrayIndexAndLength = butt_ai.BehaviorSequences[5].BehaviorData2[26].OutputLinks.ArrayIndexAndLength
 
 
-class GearysUnbreakableGear(Interactive):
-    def inject(self, interactive: UObject) -> None:
-        pools = self.prepare_pools()
-        money = FindObject("ItemPoolDefinition", "GD_Itempools.AmmoAndResourcePools.Pool_Money_1_BIG")
-        pool = pools[0] if pools else money
+def _Behavior_AttachItems(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    obj = params.ContextObject
+    if not obj and obj.BalanceDefinitionState:
+        return True
 
-        for index, loot_configuration in enumerate(interactive.Loot):
-            if index != 1:
-                loot_configuration.Weight = (0, None, None, 0)
+    balance = obj.BalanceDefinitionState.BalanceDefinition
+    if not balance:
+        return True
 
-        attachments = interactive.Loot[1].ItemAttachments
-        # attachments[3].ItemPool = money
-        for index in range(4):
-            attachments[index].ItemPool = pool
+    attachments = Attachment.Registries.get(balance.Name)
+    if attachments:
+        next(iter(attachments)).inject(obj)
+
+    return True
+
+def _PopulationFactoryVendingMachine(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    balance = params.Opportunity.PopulationDef.ActorArchetypeList[0].SpawnFactory.ObjectBalanceDefinition
+    if balance:
+        vendors = VendingMachine.Registries.get(UObject.PathName(balance))
+        if vendors:
+            next(iter(vendors)).inject(balance)
+    return True
+
+
+def _GrantNewMarketingCodeBonuses(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    premier = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_PremierClub")
+    collectors = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_Collectors")
+
+    premier_items = tuple(premier.UnlockItems[0].UnlockItems)
+    collectors_items = tuple(collectors.UnlockItems[0].UnlockItems)
+
+    premier.UnlockItems[0].UnlockItems = ()
+    collectors.UnlockItems[0].UnlockItems = ()
+
+    def revert_unlocks(premier_items = premier_items, collectors_items = collectors_items) -> None:
+        premier.UnlockItems[0].UnlockItems = premier_items
+        collectors.UnlockItems[0].UnlockItems = collectors_items
+
+    do_next_tick(revert_unlocks)
+    return True
+
 
 """
+- torgue arena white gun chest
+
 
 - haderax launcher chest
     # logic would require toothpick and retainer
@@ -125,8 +173,6 @@ class GearysUnbreakableGear(Interactive):
     # GD_Aster_AmuletDoNothingData.VendingMachineGrades.ObjectGrade_VendingMachine_Pendant
     # note that logic requires amulet for buttstallion
 tags=Tag.DragonKeep|Tag.LongMission),
-
-
 - Butt Stallion Legendary Fart
     Behavior("GD_ButtStallion_Proto.Character.AIDef_ButtStallion_Proto:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_66"),
 

@@ -3,16 +3,14 @@ from __future__ import annotations
 from unrealsdk import Log, FindObject, FindAll, GetEngine, KeepAlive #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
 
-from . import defines, locations, items
+from . import defines, items
 from .defines import Tag, get_pawns, construct_object, construct_behaviorsequence_behavior
-from .locations import MapDropper
+from .locations import Location, Dropper, MapDropper, RegistrantDropper
 
-from typing import Dict, List, Optional, Sequence, Set
+from typing import Callable, Dict, List, Optional, Sequence, Set
 
 
 _mission_registry: Dict[str, Set[Mission]] = dict()
-_missioninv_registry: Dict[str, MissionInventory] = dict()
-_behaviordestroy_registry: Set[str] = set()
 
 
 def Enable() -> None:
@@ -25,7 +23,6 @@ def Enable() -> None:
 
     RunHook("WillowGame.WillowMissionItem.MissionDenyPickup", "LootRandomizer", _MissionDenyPickup)
     RunHook("Engine.WillowInventory.PickupAssociated", "LootRandomizer", _PickupAssociated)
-    RunHook("Engine.Behavior_Destroy.ApplyBehaviorToContext", "LootRandomizer", _Behavior_Destroy)
 
 
 def Disable() -> None:
@@ -38,7 +35,6 @@ def Disable() -> None:
 
     RemoveHook("Engine.WillowInventory.PickupAssociated", "LootRandomizer")
     RemoveHook("WillowGame.WillowMissionItem.MissionDenyPickup", "LootRandomizer")
-    RemoveHook("Engine.Behavior_Destroy.ApplyBehaviorToContext", "LootRandomizer")
 
 
 def get_tracker() -> UObject:
@@ -51,7 +47,7 @@ def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> boo
     if not registry:
         return True
 
-    delegates: List[MissionStatusDelegate] = []
+    delegates: List[Callable[[], None]] = []
     for mission in registry:
         for dropper in mission.droppers:
             if isinstance(dropper, MissionStatusDelegate):
@@ -102,8 +98,6 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
         return True
 
     mission.item.prepare()
-    defines.do_next_tick(mission.item.revert)
-
     mission.reward.RewardItemPools = (mission.item.pool,)
 
     if mission.item == items.DudItem:
@@ -112,10 +106,7 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
     for pri in GetEngine().GetCurrentWorldInfo().GRI.PRIArray:
         pc = pri.Owner
 
-        bonuses = len(mission.rarities)
-        if pc is defines.get_pc():
-            bonuses -= 1
-
+        bonuses = len(mission.rarities) + (-1 if pc is defines.get_pc() else 1)
         if not bonuses:
             return True
 
@@ -141,11 +132,17 @@ def _MissionDenyPickup(caller: UObject, function: UFunction, params: FStruct) ->
     if not itemdef:
         return True
 
-    missioninv = _missioninv_registry.get(UObject.PathName(itemdef))
-    if not missioninv:
+    inventories = MissionInventory.Registries.get(UObject.PathName(itemdef))
+    if not inventories:
         return True
 
-    if get_tracker().GetMissionStatus(missioninv.location.uobject) not in (0, 4):
+    Log()
+
+    mission = next(iter(inventories)).location
+    if not isinstance(mission, Mission):
+        raise Exception(f"Found mission inventory dropper for non-mission {mission}")
+
+    if get_tracker().GetMissionStatus(mission.uobject) not in (0, 4):
         return True
 
     # Don't judge me; this is literally how the game does it.
@@ -158,7 +155,7 @@ def _MissionDenyPickup(caller: UObject, function: UFunction, params: FStruct) ->
 
 def _PickupAssociated(caller: UObject, function: UFunction, params: FStruct) -> bool:
     itemdef = caller.GetInventoryDefinition()
-    if not (itemdef and UObject.PathName(itemdef) in _missioninv_registry):
+    if not (itemdef and UObject.PathName(itemdef) in MissionInventory.Registries):
         return True
     
     def enable_pickup(pickup = params.Pickup):
@@ -168,25 +165,7 @@ def _PickupAssociated(caller: UObject, function: UFunction, params: FStruct) -> 
     return True
 
 
-def _Behavior_Destroy(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    return UObject.PathName(caller) not in _behaviordestroy_registry
-
-
-class PreventDestroy(locations.Dropper):
-    path: str
-    def __init__(self, path) -> None:
-        self.path = path
-
-    def enable(self) -> None:
-        super().enable()
-        _behaviordestroy_registry.add(self.path)
-
-    def enable(self) -> None:
-        super().enable()
-        _behaviordestroy_registry.discard(self.path)
-
-
-class Mission(locations.Location):
+class Mission(Location):
     path: str
     alt: bool
     block_weapon: bool
@@ -196,15 +175,15 @@ class Mission(locations.Location):
     repeatable: bool
     mission_weapon: UObject
 
-    reward_items: List[UObject]
-    reward_pools: List[UObject]
+    reward_items: Sequence[UObject]
+    reward_pools: Sequence[UObject]
     reward_xp_scale: Optional[int] = None
 
     def __init__(
         self,
         name: str,
         path: str,
-        *droppers: locations.Dropper,
+        *droppers: Dropper,
         alt: bool = False,
         block_weapon: bool = False,
         tags: Tag = Tag(0),
@@ -219,7 +198,6 @@ class Mission(locations.Location):
 
         if not rarities:
             rarities = [100]
-
             if tags & Tag.LongMission:     rarities += (100,)
             if tags & Tag.VeryLongMission: rarities += (100,100,100)
             if tags & Tag.RaidEnemy:       rarities += (100,100)
@@ -281,21 +259,9 @@ class Mission(locations.Location):
         return f"Mission: {self.name}"
 
 
-class MissionInventory(locations.Dropper):
-    path: str
-    def __init__(self, path: str) -> None:
-        self.path = path
-
-    def enable(self) -> None:
-        super().enable()
-        if _missioninv_registry.get(self.path):
-            raise ValueError(f"Dropper already exists for '{self.path}'")
-        _missioninv_registry[self.path] = self
-
-    def disable(self) -> None:
-        super().disable()
-        if _missioninv_registry.get(self.path):
-            del _missioninv_registry[self.path]
+class MissionInventory(RegistrantDropper):
+    Registries = dict()
+    # TODO: fix string sequence init
 
 
 class MissionStatusDelegate:
@@ -306,7 +272,9 @@ class MissionStatusDelegate:
         pass
 
 
-class MissionObject(locations.MapDropper, MissionStatusDelegate):
+class MissionObject(MissionStatusDelegate, MapDropper):
+    location: Mission
+
     path: str
 
     def __init__(self, path: str, *map_names: str) -> None:
@@ -370,7 +338,6 @@ class MissionGiver(MissionObject):
         return giver
 
 
-
 class DocMercy(MissionGiver):
     def __init__(self) -> None:
         super().__init__("Frost_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_413.MissionDirectivesDefinition_0", False, False, "Frost_P")
@@ -382,10 +349,15 @@ class DocMercy(MissionGiver):
 
 
 class Loader1340(MapDropper):
+    location: Mission
+
     def __init__(self) -> None:
         super().__init__("dam_p")
 
     def entered_map(self) -> None:
+        if get_tracker().GetMissionStatus(self.location.uobject) == 0:
+            return
+
         toggle = FindObject("SeqAct_Toggle", "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqAct_Toggle_1")
 
         loaded0 = FindObject("SeqEvent_LevelLoaded", "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqEvent_LevelLoaded_0")
@@ -412,6 +384,8 @@ class WillTheBandit(MapDropper):
 
 
 class McShooty(MissionStatusDelegate, MapDropper):
+    location: Mission
+
     def __init__(self) -> None:
         super().__init__("Grass_Cliffs_P")
 
@@ -488,6 +462,8 @@ class WrittenByTheVictor(MapDropper):
 
 
 class GreatEscape(MissionStatusDelegate, MapDropper):
+    location: Mission
+
     def __init__(self) -> None:
         super().__init__("CraterLake_P")
 
@@ -512,7 +488,10 @@ class GreatEscape(MissionStatusDelegate, MapDropper):
 
 
 class MessageInABottle(MapDropper, MissionStatusDelegate):
-    path: str
+    location: Mission
+
+    path: Optional[str]
+
     def __init__(self, path: Optional[str], map_name: str) -> None:
         self.path = path
         super().__init__(map_name)
@@ -575,6 +554,8 @@ class LostSouls(MissionGiver):
 
 
 class MyDeadBrother(MapDropper):
+    location: Mission
+
     def __init__(self) -> None:
         super().__init__("Dungeon_P")
 
@@ -628,3 +609,8 @@ class GrandmaStoryRaid(MapDropper):
         granma_ai = FindObject("AIBehaviorProviderDefinition", "GD_Allium_TorgueGranma.Character.AIDef_Torgue:AIBehaviorProviderDefinition_0")
         granma_ai.BehaviorSequences[1].EventData2[0].OutputLinks.ArrayIndexAndLength = 655361
         granma_ai.BehaviorSequences[1].EventData2[3].OutputLinks.ArrayIndexAndLength = 655361
+
+
+"""
+TODO: Re-fix Clayton not spawning after Enkindling
+"""

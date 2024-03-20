@@ -1,23 +1,22 @@
 from ..defines import Tag
 from ..hints import Hint
 
-from ..locations import Behavior, Interactive, VendingMachine
+from ..items import Character, ItemPool, Item
+from ..items import ClassMod, BlueAlignmentClassMod, PurpleAlignmentClassMod, Gen2ClassMod
+from ..items import PurpleRelic, BanditGrenade, Fibber, HyperionPistol
+
+from ..locations import Behavior, PreventDestroy
 
 from ..enemies import Enemy, Pawn, Midget, DoctorsOrdersMidget, DoctorsOrdersMidgetRegistry
-from ..enemies import Leviathan, MonsterTruck, SpaceCowboyMidget, HaderaxChest, DigiEnemy
-
-from ..other import Other, TundraSnowmanHead, GearysUnbreakableGear, MimicChest
-from ..other import ButtstallionWithAmulet, DahlAbandonGrave
+from ..enemies import Leviathan, MonsterTruck, PetesBurner, SpaceCowboyMidget, Haderax, DigiEnemy
 
 from ..missions import Mission, MissionGiver, MissionInventory, MissionObject, MissionPickup
-from ..missions import PreventDestroy
 from ..missions import WillTheBandit, DocMercy, Loader1340, McShooty, PoeticLicense
 from ..missions import WrittenByTheVictor, BFFs, GreatEscape, MessageInABottle, RollInsight
 from ..missions import LostSouls, MyDeadBrother, OddestCouple, EchoesOfThePast, GrandmaStoryRaid
 
-from ..items import Character, ItemPool, Item
-from ..items import ClassMod, BlueAlignmentClassMod, PurpleAlignmentClassMod, Gen2ClassMod
-from ..items import PurpleRelic, BanditGrenade, Fibber, HyperionPistol
+from ..other import Other, Attachment, VendingMachine
+from ..other import ButtstallionWithAmulet, DahlAbandonGrave
 
 
 Items = (
@@ -911,12 +910,12 @@ Locations = (
 
     Enemy("Gladiator Goliath", Pawn("Iris_PawnBalance_ArenaGoliath", evolved=5), mission="Tier 2 Battle: Appetite for Destruction"),
     Enemy("Pete's Burner",
-        Pawn("Iris_PawnBalance_BikerMidget"),
-        Pawn("Iris_PawnBalance_BikerBruiser"),
-        Pawn("Iris_PawnBalance_Biker"),
-        Pawn("Iris_PawnBalance_BikerBadass"),
-        Pawn("Iris_PawnBalance_BigBiker"),
-        Pawn("Iris_PawnBalance_BigBikerBadass"),
+        PetesBurner("Iris_PawnBalance_BikerMidget"),
+        PetesBurner("Iris_PawnBalance_BikerBruiser"),
+        PetesBurner("Iris_PawnBalance_Biker"),
+        PetesBurner("Iris_PawnBalance_BikerBadass"),
+        PetesBurner("Iris_PawnBalance_BigBiker"),
+        PetesBurner("Iris_PawnBalance_BigBikerBadass"),
     tags=Tag.CampaignOfCarnage|Tag.MobFarm),
     Enemy("Hamhock the Ham", Pawn("Iris_PawnBalance_BB_Hamlock"), mission="Mother-Lover (Turn in Scooter)"),
     Enemy("Anonymous Troll Face", Pawn("Iris_PawnBalance_SayFaceTroll"), mission="Say That To My Face"),
@@ -1089,12 +1088,10 @@ Locations = (
     Enemy("Bandit Leader (Nomad)", Pawn("PawnBalance_NomadBadass_Leader"), mission="The Vaughnguard"),
     Enemy("Bandit Leader (Marauder)", Pawn("PawnBalance_MarauderBadass_Leader"), mission="The Vaughnguard"),
     Enemy("Haderax The Invincible",
+        Attachment("ObjectGrade_DalhEpicCrate_Digi", *range(12), configuration=0),
         Behavior("GD_Anemone_SandWormBoss_1.Character.BodyDeath_Anemone_SandWormBoss_1:BehaviorProviderDefinition_2.Behavior_SpawnItems_5", inject=False),
-        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi"),
-        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi_PeakOpener"),
-        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi_Shield"),
-        HaderaxChest("ObjectGrade_DalhEpicCrate_Digi_Articfact"),
-    tags=Tag.FightForSanctuary|Tag.RaidEnemy, rarities=(75,75,75,75)),
+        Haderax(),
+    tags=Tag.FightForSanctuary|Tag.RaidEnemy),
 
     Enemy("The Rat in the Hat", Pawn("PawnBalance_RatChef"), mission="The Hunger Pangs"),
     Enemy("Chef Gouda Remsay", Pawn("PawnBalance_ButcherBoss"), mission="The Hunger Pangs"),
@@ -1630,23 +1627,20 @@ Locations = (
 
 
 
-    Other("Michael Mamaril",
-        Behavior("GD_JohnMamaril.Character.AIDef_JohnMamaril:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_92"),
-    ),
+    Other("Michael Mamaril", Behavior("GD_JohnMamaril.Character.AIDef_JohnMamaril:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_92")),
     Other("Tip Moxxi",
         Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_17"),
         Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_23"),
     ),
-    Other("Frostburn Canyon Cave Pool",
-        Behavior("Env_IceCanyon.InteractiveObjects.LootSpawner:BehaviorProviderDefinition_0.Behavior_SpawnItems_22"),
+    Other("Frostburn Canyon Cave Pool", Behavior("Env_IceCanyon.InteractiveObjects.LootSpawner:BehaviorProviderDefinition_0.Behavior_SpawnItems_22")),
+    Other("What's In The Box?", Attachment("ObjectGrade_WhatsInTheBox")),
+    Other("Tundra Express Snowman Head",
+        Attachment("BD_Ep7_SnowManHead_Ammo"),
+        Attachment("BD_Ep7_SnowManHead_FlareGun"),
     ),
-    Other("What's In The Box?",
-        Interactive("ObjectGrade_WhatsInTheBox"),
-    ),
-    Other("Tundra Express Snowman Head", TundraSnowmanHead()),
 
     Other("Geary's Unbreakable Gear",
-        GearysUnbreakableGear("ObjectGrade_Eagle"),
+        Attachment("ObjectGrade_Eagle", 0, 1, 2, 3, configuration=1),
     tags=Tag.VeryLongMission),
 
     Other("Oasis Seraph Vendor",
@@ -1667,8 +1661,8 @@ Locations = (
 
     Other("Mimic Chest",
         Pawn("PawnBalance_Mimic"),
-        MimicChest("ObjectGrade_MimicChest"),
-        MimicChest("ObjectGrade_MimicChest_NoMimic"),
+        Attachment("ObjectGrade_MimicChest", 0, 1, 2, 3, configuration=6),
+        Attachment("ObjectGrade_MimicChest_NoMimic", 0, 1, 2, 3, configuration=6),
     tags=Tag.DragonKeep, rarities=(25, 25, 25, 25)),
 
     Other("Flamerock Refuge Seraph Vendor",

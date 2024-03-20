@@ -62,7 +62,7 @@ def _ReloadSeeds() -> None:
         return
 
     if seed.AppliedSeed:
-        seed.AppliedSeed.revert()
+        seed.AppliedSeed.unapply()
 
     _SeedsList.commit_CurrentValue(_SeedsList.Choices[0])
 
@@ -398,6 +398,6 @@ def Enable():
 
 def Disable():
     if seed.AppliedSeed:
-        seed.AppliedSeed.revert()
+        seed.AppliedSeed.unapply()
 
     RemoveHook("WillowGame.WillowScrollingList.OnClikEvent", "LootRandomizer")

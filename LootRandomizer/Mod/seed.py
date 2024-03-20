@@ -86,7 +86,7 @@ class Seed:
             raise ValueError(f"Seed {self.string} requires additional DLCs to play:{missing_dlcs}")
 
         if AppliedSeed:
-            AppliedSeed.revert()
+            AppliedSeed.unapply()
 
         AppliedSeed = self
 
@@ -130,7 +130,7 @@ class Seed:
             location.toggle_hint(True)
 
 
-    def revert(self) -> None:
+    def unapply(self) -> None:
         global AppliedSeed
         AppliedSeed = None
 
