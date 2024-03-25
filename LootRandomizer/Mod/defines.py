@@ -3,18 +3,15 @@ from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ig
 
 import enum, os
 
-from typing import Any, Callable, Generator, Iterator, List, Optional, Tuple, Union
-
-
-Probability = Tuple[float, UObject, UObject, float]
-BalancedItem = Tuple[UObject, UObject, Probability, bool]
+from typing import Any, Callable, Generator, Iterator, List, Optional, Union
 
 
 Package: UPackage = ConstructObject("Package", None, "LootRandomizer")
 KeepAlive(Package)
 
 
-seeds_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Seeds")
+mod_dir = os.path.dirname(os.path.dirname(__file__))
+seeds_dir = os.path.join(mod_dir, "Seeds")
 seeds_file = os.path.join(seeds_dir, "Seed List.txt")
 
 
@@ -70,7 +67,9 @@ class Tag(enum.IntFlag):
     DuplicateItems     = enum.auto()
     EnableHints        = enum.auto()
 
+    Excluded           = 0x1 << 36
 
+AllTags     = Tag(0)
 ContentTags = Tag(0)
 MissionTags = Tag(0)
 EnemyTags   = Tag(0)
@@ -105,7 +104,7 @@ for tag, category, default, caption, description in (
     (Tag.MercenaryDay,       Category.Content,  True,  "Mercenary Day",        f"Include items and locations from {Tag.MercenaryDay.content_title}."),
     (Tag.WeddingDayMassacre, Category.Content,  True,  "Wedding Day Massacre", f"Include items and locations from {Tag.WeddingDayMassacre.content_title}."),
     (Tag.SonOfCrawmerax,     Category.Content,  True,  "Son Of Crawmerax",     f"Include items and locations from {Tag.SonOfCrawmerax.content_title}."),
-    (Tag.UVHMPack,           Category.Content,  True,  "UVHM Pack",            f"Include items and from {Tag.UVHMPack.content_title}."),
+    (Tag.UVHMPack,           Category.Content,  True,  "UVHM Pack",            f"Include items from {Tag.UVHMPack.content_title}."),
     (Tag.DigistructPeak,     Category.Content,  True,  "Digistruct Peak",      f"Include items and locations from {Tag.DigistructPeak.content_title}."),
 
     (Tag.ShortMission,       Category.Missions, True,  "Short Missions",       "Assign items to short side missions."),
@@ -130,9 +129,8 @@ for tag, category, default, caption, description in (
     (Tag.EnableHints,        Category.Settings, True,  "Allow Hints",          "Whether this seed should generate a spoiler log, and also whether hints should be allowed while playing it."),
 ):
     tag.category = category; tag.default = default; tag.caption = caption; tag.description = description
-    if not hasattr(tag, "content_title"): tag.content_title = None
-    if not hasattr(tag, "dlc_path"):      tag.dlc_path      = None
 
+    AllTags |= tag
     if category == Category.Content:  ContentTags |= tag
     if category == Category.Missions: MissionTags |= tag
     if category == Category.Enemies:  EnemyTags   |= tag
@@ -141,6 +139,9 @@ for tag, category, default, caption, description in (
 
 def get_pc() -> UObject:
     return GetEngine().GamePlayers[0].Actor
+
+def get_missiontracker() -> UObject:
+    return get_pc().WorldInfo.GRI.MissionTracker
 
 
 def set_command(uobject: UObject, attribute: str, value: str):
@@ -208,6 +209,20 @@ def do_next_tick(*routines: Callable[[], None]) -> None:
         return True
     RunHook("Engine.Interaction.Tick", f"LootRandomizer.{id(routines)}", hook)
 
+def tick_while(routine: Callable[[], bool]) -> None:
+    if not routine():
+        return
+
+    def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        result = False
+        try:
+            result = routine()
+        finally:
+            if not result:
+                RemoveHook("Engine.Interaction.Tick", f"LootRandomizer.{id(routine)}")
+            return True
+    RunHook("Engine.Interaction.Tick", f"LootRandomizer.{id(routine)}", hook)
+
 
 def spawn_item(pool: UObject, context: UObject, callback: Callable[[UObject], None]) -> None:
     spawner = ConstructObject("Behavior_SpawnLootAroundPoint")
@@ -255,3 +270,26 @@ def construct_behaviorsequence_behavior(
 
 def show_dialog(title: str, message: str, duration: float = 0) -> None:
     get_pc().GFxUIManager.ShowTrainingDialog(message, title, duration, 0, False)
+
+def show_confirmation(title: str, message: str, on_confirm: Callable[[], None]) -> None:
+    dialog = get_pc().GFxUIManager.ShowDialog()
+    dialog.SetText(title, message)
+    dialog.bNoCancel = False
+    dialog.AppendButton("Confirm", "Confirm", "")
+    dialog.AppendButton("Cancel", "Cancel", "")
+    dialog.SetDefaultButton("Cancel", True)
+    dialog.ApplyLayout()
+
+    def unhook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        RemoveHook("WillowGame.WillowGFxDialogBox.Cancelled", "LootRandomizer")
+        RemoveHook("WillowGame.WillowGFxDialogBox.Accepted", "LootRandomizer")
+        return True
+
+    def confirmed(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        unhook(caller, function, params)
+        if caller.CurrentSelection == 0:
+            on_confirm()
+        return True
+
+    RunHook("WillowGame.WillowGFxDialogBox.Cancelled", "LootRandomizer", unhook)
+    RunHook("WillowGame.WillowGFxDialogBox.Accepted", "LootRandomizer", confirmed)

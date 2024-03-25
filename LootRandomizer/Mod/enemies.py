@@ -3,7 +3,7 @@ from __future__ import annotations
 from unrealsdk import Log, FindObject, GetEngine  #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
 
-from . import seed, defines, enemies, locations
+from . import seed, defines, locations
 from .missions import Mission
 from .defines import Tag, construct_object
 from .locations import Dropper, Location, MapDropper, RegistrantDropper
@@ -39,10 +39,9 @@ class Enemy(Location):
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
 
     def enable(self) -> None:
-        super().enable()
+        from . import catalog
 
-        if not seed.AppliedSeed:
-            raise Exception(f"Attempted to enable '{self}' with no seed applied.")
+        super().enable()
 
         tags = self.specified_tags
         rarities = self.specified_rarities
@@ -51,7 +50,7 @@ class Enemy(Location):
             tags |= Tag.MissionEnemy
 
             matched_mission: Optional[Mission] = None
-            for location in seed.AppliedSeed.version_module.Locations:
+            for location in catalog.Locations:
                 if isinstance(location, Mission) and location.name == self.mission:
                     matched_mission = location
                     break
@@ -61,7 +60,7 @@ class Enemy(Location):
             
             tags |= matched_mission.tags
 
-        if not tags & defines.EnemyTags:
+        if not (tags & defines.EnemyTags):
             tags |= Tag.UniqueEnemy
 
         if not rarities:
@@ -72,7 +71,7 @@ class Enemy(Location):
             if tags & Tag.RareEnemy:       rarities += (33,)
             if tags & Tag.VeryRareEnemy:   rarities += (100,50,50)
             if tags & Tag.EvolvedEnemy:    rarities += (50,50)
-            if tags & Tag.RaidEnemy:       rarities += (100,100,50,50)
+            if tags & Tag.RaidEnemy:       rarities += (100,100,100,50,50,50)
 
             if tags & Tag.MissionEnemy:    rarities += (50,)
             if tags & Tag.LongMission:     rarities += (50,)
@@ -98,13 +97,12 @@ class Pawn(RegistrantDropper):
     evolved: Optional[int]
 
     def __init__(self,
-        balance: str,
-        *,
+        *balance: str,
         transform: Optional[int] = None,
         evolved: Optional[int] = None
     ) -> None:
         self.transform = transform; self.evolved = evolved
-        super().__init__(balance)
+        super().__init__(*balance)
 
 
     def should_inject(self, pawn: UObject) -> bool:
@@ -112,7 +110,7 @@ class Pawn(RegistrantDropper):
             return self.transform == pawn.TransformType
 
         if self.evolved == pawn.TransformType:
-            return Tag.EvolvedEnemy not in seed.AppliedSeed.tags #type: ignore
+            return not (seed.AppliedTags & Tag.EvolvedEnemy)
 
         return True
 
@@ -134,7 +132,7 @@ class Leviathan(MapDropper):
 
             spawner = construct_object("Behavior_SpawnLootAroundPoint")
 
-            spawner.ItemPools = self.prepare_pools()
+            spawner.ItemPools = self.location.prepare_pools()
             spawner.SpawnVelocity = (-400, -1800, -400)
             spawner.SpawnVelocityRelativeTo = 1
             spawner.CustomLocation = ((1200, -66000, 3000), None, "")
@@ -159,7 +157,7 @@ class MonsterTruck(MapDropper):
                 return True
 
             spawner = construct_object("Behavior_SpawnLootAroundPoint")
-            spawner.ItemPools = self.prepare_pools()
+            spawner.ItemPools = self.location.prepare_pools()
 
             spawner.ApplyBehaviorToContext(caller, (), None, None, None, ())
             return True
@@ -174,7 +172,7 @@ class PetesBurner(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
         return (
             pawn.Allegiance.Name == "Iris_Allegiance_DragonGang"
-            and locations.map_name == "Iris_DL2_P".lower()
+            and locations.map_name == "Iris_DL2_P".casefold()
         )
 
 
@@ -233,8 +231,8 @@ class Haderax(MapDropper):
 
 class DigiEnemy(Enemy):
     fallback: str
+    fallback_enemy: Enemy
 
-    _fallback_enemy: Optional[Enemy] = None
     _item: Optional[ItemPool] = None
 
     def __init__(
@@ -248,18 +246,17 @@ class DigiEnemy(Enemy):
         self.fallback = fallback
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
 
-    @property
-    def fallback_enemy(self) -> Enemy:
-        if not self._fallback_enemy:
-            for location in seed.AppliedSeed.version_module.Locations: #type: ignore
-                if isinstance(location, Enemy) and location.name == self.fallback:
-                    self._fallback_enemy = location
-                    break
+    def enable(self) -> None:
+        from . import catalog
+
+        super().enable()
+
+        for location in catalog.Locations:
+            if isinstance(location, Enemy) and location.name == self.fallback:
+                self._fallback_enemy = location
 
         if not self._fallback_enemy:
             raise Exception(f"Failed to find fallback enemy for {self}")
-
-        return self._fallback_enemy
 
     @property
     def item(self) -> Optional[ItemPool]:
@@ -291,7 +288,7 @@ def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
 
     for dropper in registry:
         if dropper.should_inject(caller):
-            pools += [(pool, (1, None, None, 1)) for pool in dropper.prepare_pools()]
+            pools += [(pool, (1, None, None, 1)) for pool in dropper.location.prepare_pools()]
             break
 
     caller.ItemPoolList = pools

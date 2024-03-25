@@ -3,8 +3,8 @@ from __future__ import annotations
 from unrealsdk import Log, FindAll, FindObject, GetEngine, KeepAlive  #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
 
-from . import defines, options, hints, items
-from .defines import Tag, construct_object
+from . import defines, options, hints, items, seed
+from .defines import Tag, construct_object, get_pc
 from .items import ItemPool
 
 import random
@@ -13,8 +13,6 @@ from typing import Dict, List, Optional, Sequence, Set, TypeVar
 try: from typing import Self
 except: pass
 
-
-# ItemPoolList = List[Tuple[UObject, Probability]]
 
 money_pool: UObject
 
@@ -66,7 +64,7 @@ class Location:
         for dropper in droppers:
             dropper.location = self # This is a circular reference; Location objects are static.
 
-        if not tags & defines.ContentTags:
+        if not (tags & defines.ContentTags):
             tags |= Tag.BaseGame
 
         if rarities is None:
@@ -124,13 +122,13 @@ class Location:
             useitem.NonCompositeStaticMesh = hints.hintitem_mesh
             useitem.PickupFlagIcon = hints.hintitem_pickupflag
 
-            if options._HintDisplay.CurrentValue == "None":
+            if options.HintDisplay.CurrentValue == "None":
                 hint_caption = "&nbsp;"
                 hint_text = "?"
-            if options._HintDisplay.CurrentValue == "Vague":
+            if options.HintDisplay.CurrentValue == "Vague":
                 hint_caption = "Item Hint"
                 hint_text = self.item.vague_hint.formatter(self.item.vague_hint)
-            if options._HintDisplay.CurrentValue == "Spoiler":
+            if options.HintDisplay.CurrentValue == "Spoiler":
                 hint_caption = "Item Spoiler"
                 hint_text = self.item.vague_hint.formatter(self.item.name)
 
@@ -142,7 +140,47 @@ class Location:
         if self.hint_inventory:
             self.hint_inventory.InventoryDefinition.PickupLifeSpan = 0 if set_enabled else 0.000001
 
+    def prepare_pools(self, count: Optional[int] = None, pad_money: bool = True) -> Sequence[UObject]:
+        padding = money_pool if pad_money else None
 
+        if count is None:
+            count = len(self.rarities)
+        if not count:
+            return ()
+
+        if not self.item:
+            return (padding,) * count
+
+        if self.item is items.DudItem:
+            if seed.AppliedSeed:
+                seed.AppliedSeed.update_tracker(self, True)
+            return (self.hint_pool,) * count
+
+        self.item.prepare()
+
+        pools: List[UObject] = []
+        hint_seen = False
+        item_seen = False
+
+        for index in range(count):
+            if index >= len(self.rarities):
+                pools.append(padding)
+            elif random.randint(1, 100) <= self.rarities[index]:
+                pools.append(self.item.pool)
+                item_seen = True
+            else:
+                pools.append(self.hint_pool)
+                hint_seen = True
+
+        if seed.AppliedSeed:
+            if item_seen:
+                seed.AppliedSeed.update_tracker(self, True)
+            elif hint_seen:
+                seed.AppliedSeed.update_tracker(self, False)
+        
+        random.shuffle(pools)
+        return pools
+    
     def enable(self) -> None:
         for dropper in self.droppers:
             dropper.enable()
@@ -158,35 +196,6 @@ class Location:
 class Dropper:
     location: Location
 
-    def prepare_pools(self, count: Optional[int] = None, pad_money: bool = True) -> Sequence[UObject]:
-        padding = money_pool if pad_money else None
-
-        if count is None:
-            count = len(self.location.rarities)
-        if not count:
-            return ()
-
-        if not self.location.item:
-            return (padding,) * count
-
-        if self.location.item is items.DudItem:
-            return (self.location.hint_pool,) * count
-
-        self.location.item.prepare()
-
-        pools: List[UObject] = []
-
-        for index in range(count):
-            if index >= len(self.location.rarities):
-                pools.append(padding)
-            elif random.randint(1, 100) <= self.location.rarities[index]:
-                pools.append(self.location.item.pool)
-            else:
-                pools.append(self.location.hint_pool)
-        
-        random.shuffle(pools)
-        return pools
-    
     def enable(self) -> None:
         pass
 
@@ -220,7 +229,7 @@ class MapDropper(RegistrantDropper):
     Registries = dict()
 
     def __init__(self, *map_names: str) -> None:
-        super().__init__(*(map_name.lower() for map_name in map_names))
+        super().__init__(*(map_name.casefold() for map_name in map_names))
 
     def entered_map(self) -> None:
         raise NotImplementedError
@@ -248,10 +257,6 @@ map_name: str = "menumap"
 def MapChanged(new_map_name: str) -> None:
     global map_name
 
-    new_map_name = new_map_name.lower()
-    if new_map_name == map_name:
-        return
-
     for map_dropper in MapDropper.Registries.get(map_name, ()):
         map_dropper.exited_map()
     
@@ -261,11 +266,23 @@ def MapChanged(new_map_name: str) -> None:
 
 
 # def _PostCommitMapChange(caller: UObject, function: UFunction, params: FStruct) -> bool:
-#     MapChanged(GetEngine().GetCurrentWorldInfo().GetMapName().lower())
+#     new_map_name = str(GetEngine().GetCurrentWorldInfo().GetMapName()).casefold()
+#     if new_map_name != map_name:
+#         MapChanged(new_map_name)
 #     return True
 
 def _SetPawnLocation(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    MapChanged(GetEngine().GetCurrentWorldInfo().GetMapName())
+    new_map_name = str(GetEngine().GetCurrentWorldInfo().GetMapName()).casefold()
+    if new_map_name == map_name:
+        return True
+
+    def wait_missiontracker() -> bool:
+        if get_pc().WorldInfo.GRI and get_pc().WorldInfo.GRI.MissionTracker:
+            MapChanged(new_map_name)
+            return False
+        return True
+    defines.tick_while(wait_missiontracker)
+
     return True
 
 
@@ -285,7 +302,7 @@ def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) 
 
     for dropper in registry:
         if dropper.inject:
-            poollist += [(pool, (1, None, None, 1)) for pool in dropper.prepare_pools()]
+            poollist += [(pool, (1, None, None, 1)) for pool in dropper.location.prepare_pools()]
             break
 
     caller.ItemPoolList = poollist
@@ -320,12 +337,3 @@ def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) 
 
 def _Behavior_Destroy(caller: UObject, function: UFunction, params: FStruct) -> bool:
     return UObject.PathName(caller) not in PreventDestroy.Registries
-
-"""
-TODO
-purge locations not within the scope of any seed:
-    - stinkpot from no beard
-    - sandhawk from whoops
-    - haderax launcher chest
-    - giraffe DLC final turn-in
-"""

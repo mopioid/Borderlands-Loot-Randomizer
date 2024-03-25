@@ -5,7 +5,7 @@ from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: i
 
 from Mods import ModMenu #type: ignore
 
-from .defines import Tag, seeds_file, seeds_dir, show_dialog
+from .defines import Tag, seeds_file, seeds_dir, show_dialog, show_confirmation
 from .seed import Seed
 from . import defines, hints, seed
 
@@ -15,6 +15,9 @@ from typing import Callable, Dict, List, Optional, Sequence, Set
 
 
 mod_instance: ModMenu.SDKMod
+
+def SaveSettings() -> None:
+    ModMenu.SaveModSettings(mod_instance)
 
 
 OwnedContent = Tag.BaseGame
@@ -68,14 +71,14 @@ def _ReloadSeeds() -> None:
 
 
 def _SeedApplied() -> None:
-    if Tag.EnableHints in seed.AppliedSeed.tags:
-        _HintDisplay.Choices = ("None", "Vague", "Spoiler")
-        _HintDisplay.StartingValue = "Vague"
+    if Tag.EnableHints in seed.AppliedTags:
+        HintDisplay.Choices = ("None", "Vague", "Spoiler")
+        HintDisplay.StartingValue = "Vague"
 
     else:
-        _HintDisplay.Choices = ("None",)
-        _HintDisplay.StartingValue = _HintDisplay.Choices[0]
-        _HintDisplay.CurrentValue = _HintDisplay.Choices[0]
+        HintDisplay.Choices = ("None",)
+        HintDisplay.StartingValue = HintDisplay.Choices[0]
+        HintDisplay.CurrentValue = HintDisplay.Choices[0]
 
 
 def _NewSeedGenerateClicked() -> None:
@@ -92,7 +95,7 @@ def _NewSeedGenerateClicked() -> None:
 
     _SeedsList.Choices.append(new_seed.string)
     _SeedsList.commit_CurrentValue(new_seed.string)
-    ModMenu.SaveModSettings(mod_instance)
+    SaveSettings()
 
     show_dialog(
         "Seed Generated and Applied",
@@ -117,27 +120,77 @@ def _SelectSeedApplyClicked() -> None:
         return
 
     _SeedsList.commit_CurrentValue()
-    ModMenu.SaveModSettings(mod_instance)
+    SaveSettings()
     _SeedApplied()
     show_dialog("Seed Applied", "You will now see the seed's randomization in your game.")
 
 
-def _SelectSeedGuideClicked() -> None:
-    os.startfile(seed.AppliedSeed.generate_guide())
+def _SeedTrackerClicked() -> None:
+    if not seed.AppliedSeed:
+        return
+    os.startfile(seed.AppliedSeed.generate_tracker())
 
-def _SelectSeedHintsClicked() -> None:
-    if Tag.EnableHints in seed.AppliedSeed.tags:
-        os.startfile(seed.AppliedSeed.generate_hints())
-    else:
-        show_dialog("Cannot Open Hints", f"Hints and spoilers are disabled for seed {seed.AppliedSeed.string}.")
+def _PopulateHintsClicked() -> None:
+    if not seed.AppliedSeed:
+        return
 
-def _SelectSeedSpoilersClicked() -> None:
-    if Tag.EnableHints in seed.AppliedSeed.tags:
-        os.startfile(seed.AppliedSeed.generate_spoilers())
-    else:
-        show_dialog("Cannot Open Spoilers", f"Hints and spoilers are disabled for seed {seed.AppliedSeed.string}.")
+    seed_string = seed.AppliedSeed.string
+
+    if Tag.EnableHints not in seed.AppliedTags:
+        show_dialog(
+            "Cannot Populate Hints",
+            f"Hints and spoilers are disabled for seed {seed_string}."
+        )
+        return
+
+    def confirmed(seed = seed.AppliedSeed) -> None:
+        seed.populate_hints()
+        show_dialog(
+            "Filled In Tracker Hints",
+            f"The hints for seed {seed.string} have been filled in."
+        )
+
+    show_confirmation(
+        "Fill In Tracker Hints?",
+        (
+            f"This will add a hint for every location to the tracker for seed {seed_string}. "
+            "This can only be undone by deleting the tracker file to create a new one."
+        ),
+        confirmed
+    )
+
+def _PopulateSpoilersClicked() -> None:
+    if not seed.AppliedSeed:
+        return
+
+    seed_string = seed.AppliedSeed.string
+
+    if Tag.EnableHints not in seed.AppliedTags:
+        show_dialog(
+            "Cannot Populate Spoilers",
+            f"Hints and spoilers are disabled for seed {seed_string}."
+        )
+        return
+
+    def confirmed(seed = seed.AppliedSeed) -> None:
+        seed.populate_spoilers()
+        show_dialog(
+            "Filled In Tracker Spoilers",
+            f"The spoilers for seed {seed.string} have been filled in."
+        )
+
+    show_confirmation(
+        "Fill In Tracker Spoilers?",
+        (
+            f"This will add a spoiler for every location to the tracker for seed {seed_string}. "
+            "This can only be undone by deleting the tracker file to create a new one."
+        ),
+        confirmed
+    )
+
 
 def _ResetDismissedClicked() -> None:
+    show_dialog("Dismissed Hints Reset", "All hints items will now appear again.")
     hints.ResetDismissed()
 
 
@@ -204,8 +257,8 @@ class CallbackSpinner(ModMenu.Options.Spinner):
         Caption: str,
         Description: str,
         Callback: Callable[[str], None],
-        StartingValue: Optional[str] = None,
-        Choices: Optional[Sequence[str]] = None,
+        StartingValue: str,
+        Choices: Sequence[str],
         *,
         IsHidden: bool = False,
     ):
@@ -233,7 +286,7 @@ class SeedListSpinner(ModMenu.Options.Spinner):
         self,
         Caption: str,
         Description: str,
-        Choices: Optional[Sequence[str]] = None,
+        Choices: Sequence[str],
         *,
         IsHidden: bool = False,
     ):
@@ -269,7 +322,10 @@ _SeedsList = SeedListSpinner(
 
 _NewSeedOptions = ModMenu.Options.Nested(
     Caption="New Seed",
-    Description="Create a new seed. Each seed defines a shuffling of loot sources that is consistent each time you play the seed.",
+    Description=(
+        "Create a new seed. Each seed defines a shuffling of loot sources that is consistent each "
+        "time you play the seed."
+    ),
     Children=()
 )
 
@@ -281,7 +337,10 @@ _EditSeedFileButton = CallbackField(
 
 _SelectSeedOptions = CallbackNested(
     Caption="Select Seed",
-    Description="Select a seed from your list of saved seeds. Each seed defines a shuffling of loot sources that is consistent each time you play the seed.",
+    Description=(
+        "Select a seed from your list of saved seeds. Each seed defines a shuffling of loot "
+        "sources that is consistent each time you play the seed."
+    ),
     Callback=_ReloadSeeds,
     Children=(
         _SeedsList,
@@ -294,7 +353,16 @@ _SelectSeedOptions = CallbackNested(
     )
 )
 
-_HintDisplay = CallbackSpinner(
+AutoLog = ModMenu.Options.Boolean(
+    Caption="Automatically Track Drops",
+    Description=(
+        "When a location drops its hint or item, whether to automatically record that information "
+        "in the seed's tracker."
+    ),
+    StartingValue=True
+)
+
+HintDisplay = CallbackSpinner(
     Caption="Hint Display",
     Description=(
         "How much information loot sources should reveal about their item drop. \"Vague\" will only"
@@ -314,31 +382,42 @@ DudTrainingSeen = ModMenu.Options.Hidden(
     StartingValue=False
 )
 
+
 Options = (
     _NewSeedOptions,
     _EditSeedFileButton,
     _SelectSeedOptions,
     CallbackField(
-        Caption="Open Seed Location List",
-        Description="Open the text file listing every location that can be checked for items in the selected seed.",
-        Callback=_SelectSeedGuideClicked
+        Caption="Open Seed Tracker",
+        Description=(
+            "Open the text file listing every location and what has been found in the selected "
+            "seed."
+        ),
+        Callback=_SeedTrackerClicked
     ),
-    CallbackField(
-        Caption="Open Seed Hint List",
-        Description="Open the text file listing item hints for every location in the selected seed.",
-        Callback=_SelectSeedHintsClicked
+    ModMenu.Options.Nested(
+        Caption="Configure Seed Tracker",
+        Description="",
+        Children=(
+            AutoLog,
+            CallbackField(
+                Caption="FILL IN TRACKER HINTS",
+                Description="Add a hint for every location to the tracker for the selected seed.",
+                Callback=_PopulateHintsClicked
+            ),
+            CallbackField(
+                Caption="FILL IN TRACKER SPOILERS",
+                Description="Add a spoiler for every location to the tracker for the selected seed.",
+                Callback=_PopulateSpoilersClicked
+            ),
+        )
     ),
-    CallbackField(
-        Caption="Open Seed Spoiler List",
-        Description="Open the text file listing the exact item at every location in the selected seed.",
-        Callback=_SelectSeedSpoilersClicked
-    ),
+    HintDisplay,
     CallbackField(
         Caption="Reset Dismissed Hints",
-        Description="Open the text file listing every location that can be checked for items in the selected seed.",
+        Description="Revert every dismissed hint so that they drop in game again.",
         Callback=_ResetDismissedClicked
     ),
-    _HintDisplay,
 
     HintTrainingSeen,
     DudTrainingSeen,
@@ -354,7 +433,7 @@ class SeedOption(ModMenu.Options.Spinner):
     def __init__(self, tag: Tag) -> None:
         if (tag & defines.ContentTags) and not (tag & OwnedContent):
             StartingValue = "Off"
-            Choices = ("Off",)
+            Choices: Sequence[str] = ("Off",)
         else:
             Choices = ("Off", "On")
             StartingValue = "On" if tag.default else "Off"
@@ -366,7 +445,8 @@ class SeedOption(ModMenu.Options.Spinner):
 def Enable():
     global OwnedContent
     for tag in Tag:
-        if tag.dlc_path and FindObject("DownloadableItemSetDefinition", tag.dlc_path).CanUse():
+        dlc_path = getattr(tag, "dlc_path", None)
+        if dlc_path and FindObject("DownloadableItemSetDefinition", tag.dlc_path).CanUse():
             OwnedContent |= tag
 
     if _SeedsList.CurrentValue != "":
@@ -377,10 +457,11 @@ def Enable():
         except ValueError as error:
             Log(error)
     
-    categories: Dict[str, List[Tag]] = dict()
+    categories: Dict[str, List[Tag]] = dict() #type: ignore
     for tag in Tag:
-        tag_list = categories.setdefault(tag.category, [])
-        tag_list.append(tag)
+        if hasattr(tag, "category"):
+            tag_list = categories.setdefault(tag.category, [])
+            tag_list.append(tag)
 
     _NewSeedOptions.Children = []
 

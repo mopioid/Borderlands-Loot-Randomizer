@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unrealsdk import Log #type: ignore
 
-from . import defines, options, items, hints, enemies, missions, other
+from . import defines, options, items, hints, enemies, missions, catalog
 from .defines import Tag, seeds_dir
 from .locations import Location
 from .items import ItemPool
@@ -10,15 +10,38 @@ from .items import ItemPool
 from base64 import b32encode, b32decode
 import random, os, importlib
 
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Set
 from types import ModuleType
 
 
-Version = 2
-SupportedVersions = (1,2)
+CurrentVersion = 3
+SupportedVersions = (1,2,3)
 
 
 AppliedSeed: Optional[Seed] = None
+AppliedTags: Tag = Tag(0)
+
+
+class SeedEntry:
+    __slots__ = ("name", "tags")
+
+    name: str
+    tags: Tag
+
+    def __init__(self, name: str, tags: Tag) -> None:
+        self.name = name; self.tags = tags
+
+    def match_item(self) -> ItemPool:
+        for item in catalog.Items:
+            if item.name == self.name:
+                return item
+        raise ValueError(f"Could not locate item for seed entry '{self.name}'")
+
+    def match_location(self) -> Location:
+        for location in catalog.Locations:
+            if str(location) == self.name:
+                return location
+        raise ValueError(f"Could not locate location for seed entry '{self.name}'")
 
 
 def _stringify(data: bytes) -> str:
@@ -43,14 +66,14 @@ class Seed:
         self.data = data; self.version = version; self.tags = tags; self.string = string
 
     @classmethod
-    def Generate(cls, tags: Tag) -> Seed:
+    def Generate(cls, tags: Tag, version: int = CurrentVersion) -> Seed:
         value = random.getrandbits(30) << 42
         value |= tags.value << 6
-        value |= Version
+        value |= version
 
         data = value.to_bytes(length=9, byteorder='big')
 
-        return cls(data, Version, tags, _stringify(data))
+        return cls(data, version, tags, _stringify(data))
 
     @classmethod
     def FromString(cls, string: str) -> Seed:
@@ -68,7 +91,7 @@ class Seed:
 
 
     def apply(self) -> None:
-        global AppliedSeed
+        global AppliedSeed, AppliedTags
 
         if self.version not in SupportedVersions:
             raise ValueError(
@@ -79,8 +102,9 @@ class Seed:
         
         missing_dlcs = ""
         for tag in Tag:
-            if (tag in defines.ContentTags) and (tag in self.tags) and (tag not in options.OwnedContent):
-                missing_dlcs += "\n &#x2022; " + tag.content_title
+            content_title = getattr(tag, "content_title", None)
+            if content_title and (tag & self.tags) and not (tag & options.OwnedContent):
+                missing_dlcs += "\n &#x2022; " + content_title
 
         if missing_dlcs != "":
             raise ValueError(f"Seed {self.string} requires additional DLCs to play:{missing_dlcs}")
@@ -89,18 +113,17 @@ class Seed:
             AppliedSeed.unapply()
 
         AppliedSeed = self
+        AppliedTags = self.tags
 
         self.version_module = importlib.import_module(f".seedversions.v{self.version}", __package__)
-        version_locations = self.version_module.Locations
-        version_items = self.version_module.Items
+        version_items: Sequence[SeedEntry] = self.version_module.Items
+        version_locations: Sequence[SeedEntry] = self.version_module.Locations
 
-        for location in version_locations:
-            location.enable()
-        for item in version_items:
-            item.enable()
+        self.items = [entry.match_item() for entry in version_items if entry.tags & self.tags]
+        self.locations = tuple(entry.match_location() for entry in version_locations if entry.tags in self.tags)
 
-        self.locations = tuple(location for location in version_locations if location.tags in self.tags)
-        self.items = [item for item in version_items if item.valid_items]
+        for item in self.items:
+            item.apply(self.tags)
 
         location_count = len(self.locations)
         item_count = self.item_count = len(self.items)
@@ -125,90 +148,140 @@ class Seed:
         for location, item in zip(self.locations, self.items):
             location.item = item
 
-        for location in version_locations:
+        for location in self.locations:
             location.update_hint()
             location.toggle_hint(True)
 
+        self.generate_tracker()
+
 
     def unapply(self) -> None:
-        global AppliedSeed
+        global AppliedSeed, AppliedTags
         AppliedSeed = None
+        AppliedTags = Tag(0)
 
         for location in self.locations:
             location.item = None
 
-        for location in self.version_module.Locations:
-            location.disable()
-        for item in self.version_module.Items:
-            item.disable()
 
-
-    def generate_file(self, name: str, formatter: Callable[[int, Location], str]) -> str:
-        path = os.path.join(seeds_dir, f"{self.string} {name}.txt")
+    def generate_tracker(self) -> str:
+        path = os.path.join(seeds_dir, f"{self.string}.txt")
         if os.path.exists(path):
             return path
 
         with open(path, 'w') as file:
-            self.items
             item_warning = " (not all accessible)" if self.item_count > len(self.locations) else ""
 
             file.write(
-                f"{name} for Loot Randomizer Seed {self.string}\n\n"
+                f"Loot Randomizer Seed {self.string}\n\n"
                 f"Total locations: {len(self.locations)}\n"
                 f"Total items: {self.item_count}{item_warning}\n\n"
             )
             for tag in Tag:
-                file.write(f"{tag.caption}: {'On' if (tag in self.tags) else 'Off'}\n")
+                caption = getattr(tag, "caption", None)
+                if caption:
+                    file.write(f"{tag.caption}: {'On' if (tag in self.tags) else 'Off'}\n")
 
             for tag in Tag:
                 if not tag & defines.ContentTags & self.tags:
                     continue
 
-                entries = tuple(
-                    (item, location) for item, location in zip(self.items, self.locations)
-                    if tag in location.tags
-                )
-                if not len(entries):
+                locations = tuple(location for location in self.locations if tag in location.tags)
+                if not len(locations):
                     continue
 
                 file.write(f"\n{tag.content_title}\n")
 
-                for item, location in entries:
-                    file.write(formatter(item, location) + "\n")
+                for location in locations:
+                    file.write(f"{location}\n")
         
         return path
 
 
-    def generate_guide(self) -> str:
-        return self.generate_file("Locations", lambda item, location: str(location))
+    def update_tracker(self, location: Location, drop: bool) -> None:
+        if not (location.item and options.AutoLog.CurrentValue):
+            return
+        
+        if options.HintDisplay.CurrentValue == 'None' and not drop:
+            return
 
-    def generate_hints(self) -> str:
-        return self.generate_file("Hints", lambda item, location: f"{location}\t-\t{item.vague_hint}")
+        location_name = str(location)
+        
+        path = self.generate_tracker()
 
-    def generate_spoilers(self) -> str:
-        return self.generate_file("Spoilers", lambda item, location: f"{location}\t-\t{item.name}")
+        with open(path, 'r') as file:
+            lines = file.readlines()
+
+        for index in range(len(lines)):
+            if not lines[index].startswith(location_name):
+                continue
+
+            line = lines[index].strip()
+            item_name = location.item.name
+
+            if line.endswith(item_name):
+                return
+
+            if drop or options.HintDisplay.CurrentValue == 'Spoiler':
+                lines[index] = f"{location_name} - {item_name}\n"
+                break
+            
+            hint_name = location.item.vague_hint.value
+            if line[len(location_name):].endswith(hint_name):
+                return
+            
+            lines[index] = f"{location_name} - {hint_name}\n"
+            break
+
+        with open(path, 'w') as file:
+            file.writelines(lines)
+
+
+    def populate_tracker(self, formatter: Callable[[ItemPool], str]) -> None:
+        path = self.generate_tracker()
+
+        with open(path, 'r') as file:
+            log = file.readlines()
+
+        for location, item in zip(self.locations, self.items):
+            location_name = str(location)
+            for index in range(len(log)):
+                if log[index].startswith(location_name):
+                    if not log[index].strip().endswith(item.name):
+                        log[index] = f"{location_name} - {formatter(item)}\n"
+
+        with open(path, 'w') as file:
+            file.writelines(log)
+
+
+    def populate_hints(self) -> None:
+        self.populate_tracker(lambda item: item.vague_hint.value)
+
+    def populate_spoilers(self) -> None:
+        self.populate_tracker(lambda item: item.name)
 
 
 def generate_wikis(version: int) -> None:
     from html import escape
 
-    all_tags = Tag(0)
-    for tag in Tag:
-        all_tags |= tag
-
-    dummy_seed = Seed.Generate(all_tags)
+    dummy_seed = Seed.Generate(defines.AllTags)
     dummy_seed.apply()
+    version_items: Sequence[SeedEntry] = dummy_seed.version_module.Items
+    version_locations: Sequence[SeedEntry] = dummy_seed.version_module.Locations
 
     with open(os.path.join(seeds_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
         for content_tag in Tag:
-            if not content_tag & defines.ContentTags:
+            content_title = getattr(content_tag, "content_title", None)
+            if not content_title:
                 continue
 
-            locations = tuple(location for location in dummy_seed.locations if content_tag & location.tags)
+            locations = tuple(
+                location.match_location() for location in version_locations if content_tag & location.tags
+            )
             if not locations:
                 continue
 
-            file.write(f"\n### {escape(content_tag.content_title)}\n")
+            file.write(f"\n### {escape(content_title)}\n")
             file.write("\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n")
 
             for location in locations:
@@ -223,6 +296,9 @@ def generate_wikis(version: int) -> None:
 
                 settings: List[str] = []
                 for tag in Tag:
+                    caption = getattr(tag, "caption", None)
+                    if caption == None:
+                        continue
                     if (tag not in defines.ContentTags) and (tag in location.tags):
                         settings.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
@@ -246,18 +322,39 @@ def generate_wikis(version: int) -> None:
             file.write(f"\n### {escape(hint)}s\n")
             file.write("\n| **Item** | **Required Content** |\n| - | - |\n")
 
-            for item in dummy_seed.version_module.Items:
+            for item_entry in version_items:
+                item = item_entry.match_item()
                 if item.vague_hint is not hint:
                     continue
 
-                content = ""
-                fallback_content = ""
+                content: List[str] = []
 
                 for tag in Tag:
                     if tag & defines.ContentTags:
-                        if tag in item.items[0].tags:
-                            content = f"<kbd>{escape(tag.caption)}</kbd>"
-                        elif item.fallback and tag in item.fallback.tags:
-                            fallback_content = f"or <kbd>{escape(tag.caption)}</kbd>"
+                        if tag & item.tags:
+                            content.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
-                file.write(f"| {escape(item.name)} | {content}{fallback_content} |\n")
+                file.write(f"| {escape(item.name)} | {' or '.join(content)} |\n")
+
+
+def generate_seedversion() -> None:
+    with open(os.path.join(defines.mod_dir, "Mod", "seedversions", f"v{CurrentVersion}.py"), 'w', encoding='utf-8') as file:
+        file.write(
+            "from ..seed import SeedEntry\n"
+            "from ..defines import Tag\n"
+            "\n\n"
+            "Items = (\n"
+        )
+
+        for item in catalog.Items:
+            tag_string = "|".join(f"Tag.{tag.name}" for tag in Tag if (tag & item.tags))
+            file.write(f"    SeedEntry(\"{item.name}\", {tag_string}),\n")
+
+        file.write(f")\n\n\n")
+        file.write(f"Locations = (\n")
+
+        for location in catalog.Locations:
+            tag_string = "|".join(f"Tag.{tag.name}" for tag in Tag if tag in location.tags)
+            file.write(f"    SeedEntry(\"{location}\", {tag_string}),\n")
+
+        file.write(f")\n")

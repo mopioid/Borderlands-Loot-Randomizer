@@ -18,7 +18,7 @@ Loot Randomizer works in co-op, with the best experience if all players run the 
 
 ## Installation
 
-See: [Installation](https://github.com/mopioid/Borderlands-Loot-Randomizer/wiki/Installation).
+See: https://github.com/mopioid/Borderlands-Loot-Randomizer/wiki/Installation
 
 ## Getting Started
 
@@ -36,4 +36,4 @@ https://github.com/mopioid/Borderlands-Loot-Randomizer/wiki/Locations
 
 ## Support
 
-Loot Randomizer is the product of a couple hundred hours of loving labor. Tips are far from necessary, but if you appreciate the experience enough and would like to leave one, feel free to here! https://streamlabs.com/mopioid/tip
+Loot Randomizer is the product of hundreds of hours of loving labor. Tips are far from necessary, but if you appreciate the experience enough and would like to leave one, feel free to here! https://streamlabs.com/mopioid/tip

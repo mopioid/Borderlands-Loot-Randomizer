@@ -186,9 +186,6 @@ hintitem_pickupflag: UObject = None
 duditem_pickupflag: UObject = None
 
 
-# TODO - make dud item for mission turnins (clone relic?)
-
-
 def Enable() -> None:
     global inventory_template, useitem_template, presentation_template, custompresentation_template
     global useitem_behavior, hintitem_mesh, duditem_mesh, hintitem_pickupflag, duditem_pickupflag
@@ -266,6 +263,7 @@ def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FSt
     
     if (matched_location.item != items.DudItem) and (not options.HintTrainingSeen.CurrentValue):
         options.HintTrainingSeen.CurrentValue = True
+        options.SaveSettings()
         show_dialog(
             "Item Hints",
             (
@@ -283,6 +281,7 @@ def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FSt
         )
     elif (matched_location.item == items.DudItem) and (not options.DudTrainingSeen.CurrentValue):
         options.DudTrainingSeen.CurrentValue = True
+        options.SaveSettings()
         show_dialog(
             "Dud Items",
             (

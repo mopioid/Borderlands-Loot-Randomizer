@@ -4,7 +4,8 @@ from unrealsdk import Log, FindObject, FindAll, GetEngine, KeepAlive #type: igno
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
 
 from . import defines, items
-from .defines import Tag, get_pawns, construct_object, construct_behaviorsequence_behavior
+from .defines import Tag, get_pawns, get_missiontracker
+from .defines import construct_object, construct_behaviorsequence_behavior
 from .locations import Location, Dropper, MapDropper, RegistrantDropper
 
 from typing import Callable, Dict, List, Optional, Sequence, Set
@@ -14,8 +15,6 @@ _mission_registry: Dict[str, Set[Mission]] = dict()
 
 
 def Enable() -> None:
-    RunHook("WillowGame.QuestAcceptGFxMovie.GetRewardPresentations", "LootRandomizer", lambda c,f,p: False)
-    RunHook("WillowGame.StatusMenuExGFxMovie.GetRewardPresentations", "LootRandomizer", lambda c,f,p: False)
     RunHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer", lambda c,f,p: False)
 
     RunHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer", _AcceptMission)
@@ -26,8 +25,6 @@ def Enable() -> None:
 
 
 def Disable() -> None:
-    RemoveHook("WillowGame.QuestAcceptGFxMovie.GetRewardPresentations", "LootRandomizer")
-    RemoveHook("WillowGame.StatusMenuExGFxMovie.GetRewardPresentations", "LootRandomizer")
     RemoveHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer")
 
     RemoveHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer")
@@ -35,10 +32,6 @@ def Disable() -> None:
 
     RemoveHook("Engine.WillowInventory.PickupAssociated", "LootRandomizer")
     RemoveHook("WillowGame.WillowMissionItem.MissionDenyPickup", "LootRandomizer")
-
-
-def get_tracker() -> UObject:
-    return GetEngine().GetCurrentWorldInfo().GRI.MissionTracker
 
 
 def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
@@ -54,7 +47,7 @@ def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> boo
                 delegates.append(dropper.accepted)
 
     def play_kickoff(missiondef=missiondef):
-        tracker = get_tracker()
+        tracker = get_missiontracker()
         tracker.PlayKickoff(missiondef)
         tracker.SetKickoffHeard(missiondef)
 
@@ -68,11 +61,13 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
     if not registry:
         return True
 
-    playthrough = caller.GetCurrentPlaythrough()
-    mission_index = caller.NativeGetMissionIndex(missiondef)
-    mission_data = caller.MissionPlaythroughs[playthrough].MissionList[mission_index]
+    pc = defines.get_pc()
+
+    playthrough = pc.GetCurrentPlaythrough()
+    mission_index = pc.NativeGetMissionIndex(missiondef)
+    mission_data = pc.MissionPlaythroughs[playthrough].MissionList[mission_index]
     mission_level = mission_data.GameStage
-    alt_reward, _ = missiondef.ShouldGrantAlternateReward(list(mission_data.ObjectivesProgress))
+    alt_reward, _ = missiondef.ShouldGrantAlternateReward(tuple(mission_data.ObjectivesProgress))
 
     def revert():
         mission.reward.RewardItemPools = ()
@@ -93,12 +88,8 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
     if not (mission and mission.item):
         return True
 
-    if mission.item == items.DudItem:
-        mission.reward.RewardItemPools = (mission.hint_pool,)
-        return True
-
-    mission.item.prepare()
-    mission.reward.RewardItemPools = (mission.item.pool,)
+    pool = mission.prepare_pools(1)[0]
+    mission.reward.RewardItemPools = (pool,)
 
     if mission.item == items.DudItem:
         return True
@@ -106,9 +97,11 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
     for pri in GetEngine().GetCurrentWorldInfo().GRI.PRIArray:
         pc = pri.Owner
 
-        bonuses = len(mission.rarities) + (-1 if pc is defines.get_pc() else 1)
+        bonuses = len(mission.rarities)
+        if pc is defines.get_pc():
+            bonuses -= 1
         if not bonuses:
-            return True
+            continue
 
         def loot_callback(item: UObject, pc=pc) -> None:
             definition_data = item.DefinitionData
@@ -136,13 +129,11 @@ def _MissionDenyPickup(caller: UObject, function: UFunction, params: FStruct) ->
     if not inventories:
         return True
 
-    Log()
-
     mission = next(iter(inventories)).location
     if not isinstance(mission, Mission):
         raise Exception(f"Found mission inventory dropper for non-mission {mission}")
 
-    if get_tracker().GetMissionStatus(mission.uobject) not in (0, 4):
+    if get_missiontracker().GetMissionStatus(mission.uobject) not in (0, 4):
         return True
 
     # Don't judge me; this is literally how the game does it.
@@ -185,7 +176,7 @@ class Mission(Location):
         path: str,
         *droppers: Dropper,
         alt: bool = False,
-        block_weapon: bool = False,
+        block_weapon: bool = True,
         tags: Tag = Tag(0),
         rarities: Optional[Sequence[int]] = None
     ) -> None:
@@ -200,7 +191,7 @@ class Mission(Location):
             rarities = [100]
             if tags & Tag.LongMission:     rarities += (100,)
             if tags & Tag.VeryLongMission: rarities += (100,100,100)
-            if tags & Tag.RaidEnemy:       rarities += (100,100)
+            if tags & Tag.RaidEnemy:       rarities += (100,100,100)
 
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
 
@@ -244,6 +235,8 @@ class Mission(Location):
         registry = _mission_registry.get(self.path)
         if registry:
             registry.discard(self)
+            if not registry:
+                del _mission_registry[self.path]
 
         if not self.alt:
             self.uobject.bRepeatable = self.repeatable
@@ -261,7 +254,6 @@ class Mission(Location):
 
 class MissionInventory(RegistrantDropper):
     Registries = dict()
-    # TODO: fix string sequence init
 
 
 class MissionStatusDelegate:
@@ -286,11 +278,11 @@ class MissionObject(MissionStatusDelegate, MapDropper):
         if obj:
             obj.SetUsability(True, 0)
             obj.SetMissionDirectivesUsability(1)
-            get_tracker().RegisterMissionDirector(obj)
+            get_missiontracker().RegisterMissionDirector(obj)
         return obj
     
     def entered_map(self) -> None:
-        if get_tracker().GetMissionStatus(self.location.uobject) != 0:
+        if get_missiontracker().GetMissionStatus(self.location.uobject) != 0:
             self.apply()
 
     def completed(self) -> None:
@@ -300,9 +292,12 @@ class MissionObject(MissionStatusDelegate, MapDropper):
 class MissionPickup(MissionObject):
     def apply(self) -> UObject:
         spawner = FindObject("WillowMissionPickupSpawner", self.path)
-        spawner.SetPickupStatus(True)
-        spawner.MissionPickup.SetPickupability(True)
-        get_tracker().RegisterMissionDirector(spawner.MissionPickup)
+        # TODO: tick until successful when client
+        if spawner:
+            spawner.SetPickupStatus(True)
+            if spawner.MissionPickup:
+                spawner.MissionPickup.SetPickupability(True)
+                get_missiontracker().RegisterMissionDirector(spawner.MissionPickup)
         return spawner
 
 
@@ -334,7 +329,7 @@ class MissionGiver(MissionObject):
             directives.append((self.location.uobject, self.begins, self.ends, 0))
             giver.MissionDirectives = directives
 
-        get_tracker().RegisterMissionDirector(giver)
+        get_missiontracker().RegisterMissionDirector(giver)
         return giver
 
 
@@ -344,7 +339,7 @@ class DocMercy(MissionGiver):
     
     def apply(self) -> UObject:
         giver = super().apply()
-        get_tracker().UnregisterMissionDirector(giver)
+        get_missiontracker().UnregisterMissionDirector(giver)
         return giver
 
 
@@ -355,7 +350,7 @@ class Loader1340(MapDropper):
         super().__init__("dam_p")
 
     def entered_map(self) -> None:
-        if get_tracker().GetMissionStatus(self.location.uobject) == 0:
+        if get_missiontracker().GetMissionStatus(self.location.uobject) == 0:
             return
 
         toggle = FindObject("SeqAct_Toggle", "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqAct_Toggle_1")
@@ -402,7 +397,7 @@ class McShooty(MissionStatusDelegate, MapDropper):
         shooty_bpd = FindObject("BehaviorProviderDefinition", "GD_Shootyface.Character.CharClass_Shootyface:BehaviorProviderDefinition_0")
         shooty_bpd.BehaviorSequences[1].EventData2[0].OutputLinks.ArrayIndexAndLength = 327681
         shooty_bpd.BehaviorSequences[2].EventData2[0].OutputLinks.ArrayIndexAndLength = 0
-
+# TODO: prevent mcshooty from despawning after completion?
 
 class BFFs(MapDropper):
     def __init__(self) -> None:
@@ -441,6 +436,8 @@ class PoeticLicense(MapDropper):
 
     def entered_map(self) -> None:
         daisy_den = FindObject("PopulationOpportunityDen", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.PopulationOpportunityDen_2")
+        if not daisy_den:
+            return
         daisy_den.GameStageRegion = FindObject("WillowRegionDefinition", "GD_GameStages.Zone2.Cliffs_A")
 
         daisy_ai = FindObject("AIBehaviorProviderDefinition", "GD_Daisy.Character.AIDef_Daisy:AIBehaviorProviderDefinition_1")
@@ -461,6 +458,15 @@ class WrittenByTheVictor(MapDropper):
         missionevent.OutputLinks[0].Links = ()
 
 
+class ARealBoy(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("Ash_P")
+
+    def entered_map(self) -> None:
+        mal_ai = FindObject("BehaviorProviderDefinition", "GD_PinocchioBot.Character.CharClass_PinocchioBot:BehaviorProviderDefinition_84")
+        mal_ai.BehaviorSequences[12].EventData2[0].OutputLinks.ArrayIndexAndLength = 0
+
+
 class GreatEscape(MissionStatusDelegate, MapDropper):
     location: Mission
 
@@ -476,7 +482,7 @@ class GreatEscape(MissionStatusDelegate, MapDropper):
         pawn = GetEngine().GetCurrentWorldInfo().PawnList
         while pawn:
             if pawn.AIClass and pawn.AIClass.Name == "CharClass_Ulysses":
-                get_tracker().RegisterMissionDirector(pawn)
+                get_missiontracker().RegisterMissionDirector(pawn)
                 break
             pawn = pawn.NextPawn
 
@@ -528,7 +534,7 @@ class RollInsight(MissionGiver):
         kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "TurnIn", 1)
 
         die.SetMissionDirectivesUsability(1)
-        get_tracker().RegisterMissionDirector(die)
+        get_missiontracker().RegisterMissionDirector(die)
 
         return directives
 
@@ -543,10 +549,10 @@ class LostSouls(MissionGiver):
                 kernel = FindObject("BehaviorKernel", "GearboxFramework.Default__BehaviorKernel")
                 kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Mission", 1)
                 pawn.SetUsable(True, None, 0)
-                get_tracker().RegisterMissionDirector(pawn)
+                get_missiontracker().RegisterMissionDirector(pawn)
 
     def entered_map(self) -> None:
-        if get_tracker().GetMissionStatus(self.location.uobject) == 4:
+        if get_missiontracker().GetMissionStatus(self.location.uobject) == 4:
             skel_den = FindObject("PopulationOpportunityDen", "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_19")
             skel_den.IsEnabled = True
             knight_den = FindObject("PopulationOpportunityDen", "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_13")
@@ -560,7 +566,7 @@ class MyDeadBrother(MapDropper):
         super().__init__("Dungeon_P")
 
     def entered_map(self) -> None:
-        if get_tracker().GetMissionStatus(self.location.uobject) != 4:
+        if get_missiontracker().GetMissionStatus(self.location.uobject) != 4:
             return
 
         simon_enabled = FindObject("BehaviorSequenceEnableByMission", "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5.BehaviorSequenceEnableByMission_9")
@@ -612,5 +618,8 @@ class GrandmaStoryRaid(MapDropper):
 
 
 """
-TODO: Re-fix Clayton not spawning after Enkindling
+TODO
+make ulysses splat give bonus reward instance
+Tutorial popup on first dud item from mission?
+Tutorial pupup on first mission with multiple rewards?
 """

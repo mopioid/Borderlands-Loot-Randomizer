@@ -12,11 +12,13 @@ def Enable() -> None:
     RunHook("WillowGame.Behavior_AttachItems.ApplyBehaviorToContext", "LootRandomizer", _Behavior_AttachItems)
     RunHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer", _PopulationFactoryVendingMachine)
     RunHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer", _GrantNewMarketingCodeBonuses)
+    RunHook("WillowGame.WillowPlayerController.CheckAllSideMissionsCompleteAchievement", "LootRandomizer", lambda c, f, p: False)
 
 def Disable() -> None:
     RemoveHook("WillowGame.Behavior_AttachItems.ApplyBehaviorToContext", "LootRandomizer")
     RemoveHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer")
     RemoveHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer")
+    RemoveHook("WillowGame.WillowPlayerController.CheckAllSideMissionsCompleteAchievement", "LootRandomizer")
 
 
 class Other(Location):
@@ -48,13 +50,12 @@ class VendingMachine(RegistrantDropper):
     Registries = dict()
 
     def inject(self, balance: UObject) -> None:
-        # TODO
+        pool = self.location.prepare_pools(1, False)[0]
 
-        pool = self.prepare_pools(1)[0]
-
-        pool.Quantity.BaseValueConstant = len(self.location.rarities) - 1
-        def revert(): pool.Quantity.BaseValueConstant = 1
-        defines.do_next_tick(revert)
+        if pool:
+            pool.Quantity.BaseValueConstant = len(self.location.rarities) - 1
+            def revert(): pool.Quantity.BaseValueConstant = 1
+            defines.do_next_tick(revert)
 
         balance.DefaultLoot[0].ItemAttachments[0].ItemPool = pool
         balance.DefaultLoot[1].ItemAttachments[0].ItemPool = pool
@@ -71,7 +72,7 @@ class Attachment(RegistrantDropper):
         super().__init__(path)
 
     def inject(self, obj: UObject) -> None:
-        pools = self.prepare_pools(len(self.attachments))
+        pools = self.location.prepare_pools(len(self.attachments))
 
         for index, loot_configuration in enumerate(obj.Loot):
             if index != self.configuration:
@@ -145,12 +146,21 @@ def _GrantNewMarketingCodeBonuses(caller: UObject, function: UFunction, params: 
 
 
 """
+LOGIC:
+    buttstallion w/ amulet requires amulet
+    pot o' gold requires pot o' gold
+    peak enemies past OP 0 requires moxxi's endowment
+    haderax launcher chest requires toothpick + retainer
+
+
 - torgue arena white gun chest
 
+- pot of gold "boosters"
 
 - haderax launcher chest
     # logic would require toothpick and retainer
 - loot goon chests
+- loot loader chests
 - slot machines
 - tina slot machines
 - roland's armory

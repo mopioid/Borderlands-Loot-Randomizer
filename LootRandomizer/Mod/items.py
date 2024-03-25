@@ -3,12 +3,16 @@ from __future__ import annotations
 from unrealsdk import Log, FindObject, KeepAlive, UObject #type: ignore
 
 from . import defines, seed
-from .defines import BalancedItem, Probability, Tag, construct_object
+from .defines import Tag, construct_object
 from .hints import Hint
 
 import enum
 
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Sequence, Union, Tuple
+
+
+Probability = Tuple[float, UObject, UObject, float]
+BalancedItem = Tuple[UObject, UObject, Probability, bool]
 
 
 class Character(enum.Enum):
@@ -33,18 +37,18 @@ def Enable() -> None:
         nopc_attr = construct_object("AttributeDefinition", character.attr_init)
 
         pc_attr.bIsSimpleAttribute = True
-        pc_attr.ContextResolverChain = [construct_object("PlayerControllerAttributeContextResolver", pc_attr)]
+        pc_attr.ContextResolverChain = (construct_object("PlayerControllerAttributeContextResolver", pc_attr),)
 
         class_resolver = construct_object("PlayerClassAttributeValueResolver", pc_attr)
         class_resolver.PlayerClassId = class_id
-        pc_attr.ValueResolverChain = [class_resolver]
+        pc_attr.ValueResolverChain = (class_resolver,)
 
         nopc_attr.bIsSimpleAttribute = True
         nopc_attr.ContextResolverChain = [construct_object("NoContextNeededAttributeContextResolver", nopc_attr)]
 
         classcount_resolver = construct_object("PlayerClassCountAttributeValueResolver", nopc_attr)
         classcount_resolver.PlayerClassId = class_id
-        nopc_attr.ValueResolverChain = [classcount_resolver]
+        nopc_attr.ValueResolverChain = (classcount_resolver,)
 
         character.attr_init.ValueFormula = (
             True,
@@ -65,10 +69,11 @@ def Disable() -> None:
 class ItemPool:
     name: str
     vague_hint: Hint
+    tags: Tag = Tag(0)
 
     items: Sequence[Item]
     fallback: Optional[Item]
-    valid_items: Sequence[Item] 
+    applied_items: Sequence[Item] 
 
     _pool: Optional[UObject] = None #ItemPoolDefinition
     _hint_presentation: Optional[UObject] = None #InventoryCardPresentationDefinition
@@ -85,38 +90,39 @@ class ItemPool:
         self.items = items
         self.fallback = fallback
 
+        for item in items:
+            self.tags |= item.content
+        if fallback:
+            self.tags |= fallback.content
+
     @property
     def pool(self) -> UObject: #ItemPoolDefinition
         if not self._pool:
             self._pool = construct_object("ItemPoolDefinition", "ItemPool_" + self.name)
             self._pool.bAutoReadyItems = False
-            self._pool.BalancedItems = [item.balanced_item for item in self.valid_items]
+            self._pool.BalancedItems = [item.balanced_item for item in self.applied_items]
 
         return self._pool
     
-    def enable(self) -> None:
-        seed_tags = seed.AppliedSeed.tags
-        self.valid_items = [item for item in self.items if item.tags in seed_tags]
+    def apply(self, tags: Tag) -> None:
+        self.applied_items = [item for item in self.items if item.content in tags]
 
-        if len(self.valid_items) < len(self.items):
-            if self.fallback and self.fallback.tags in seed_tags:
-                self.valid_items.append(self.fallback)
-
-    def disable(self) -> None:
-        self.valid_items = ()
+        if len(self.applied_items) < len(self.items):
+            if self.fallback and self.fallback.content in tags:
+                self.applied_items.append(self.fallback)
 
     def prepare(self) -> None:
         if not self._pool:
             self.pool
 
-        for item in self.valid_items:
+        for item in self.applied_items:
             item.prepare()
 
         defines.do_next_tick(self.revert)
 
     def revert(self) -> None:
         if self._pool:
-            for item in self.valid_items:
+            for item in self.applied_items:
                 item.revert()
 
 
@@ -126,34 +132,36 @@ DudItem = ItemPool("Nothing", Hint.Dud)
 class Item:
     path: str
     weight: Union[float, Character]
-    tags: Tag
+    content: Tag
 
-    inventory: Optional[UObject] = None
-
+    _inventory: Optional[UObject] = None
     _original_gamestages: Sequence[int]
 
     def __init__(
         self,
         path: str,
         weight: Union[float, Character] = 1.0,
-        tags: Tag = Tag(0)
+        content: Tag = Tag(0)
     ) -> None:
-        if not (tags & defines.ContentTags):
-            tags |= Tag.BaseGame
-        self.path = path; self.tags = tags; self.weight = weight
+        if not (content & defines.ContentTags):
+            content |= Tag.BaseGame
+        self.path = path; self.content = content; self.weight = weight
 
     def initialize(self) -> None:
-        self.inventory = FindObject("InventoryBalanceDefinition", self.path)
+        self._inventory = FindObject("InventoryBalanceDefinition", self.path)
         self._original_gamestages = tuple(
             manufacturer.Grades[0].GameStageRequirement.MinGameStage
             for manufacturer in self.inventory.Manufacturers
         )
 
     @property
-    def balanced_item(self) -> BalancedItem:
-        if not self.inventory:
+    def inventory(self) -> UObject: #InventoryBalanceDefinition
+        if not self._inventory:
             self.initialize()
+        return self._inventory
 
+    @property
+    def balanced_item(self) -> BalancedItem:
         if isinstance(self.weight, float):
             probability = (self.weight, None, None, 1.0)
         else:
@@ -171,22 +179,22 @@ class Item:
 
 
 class PurpleRelic(Item):
-    _original_weight: Probability
+    _original_grades: Sequence[Any]
 
     def initialize(self) -> None:
         super().initialize()
-        weights = self.inventory.PartListCollection.ConsolidatedAttributeInitData
-        self._original_weight = defines.convert_struct(weights[3])
+        parts = self.inventory.PartListCollection.ThetaPartData
+        self._original_grades = defines.convert_struct(parts.WeightedParts)
 
     def prepare(self) -> None:
         super().prepare()
-        weights = self.inventory.PartListCollection.ConsolidatedAttributeInitData
-        weights[3] = (0, None, None, 0)
+        parts = self.inventory.PartListCollection.ThetaPartData
+        parts.WeightedParts = tuple(self._original_grades[4:])
 
     def revert(self) -> None:
         super().revert()
-        weights = self.inventory.PartListCollection.ConsolidatedAttributeInitData
-        weights[3] = self._original_weight
+        parts = self.inventory.PartListCollection.ThetaPartData
+        parts.WeightedParts = self._original_grades
 
 
 class ClassMod(Item):
