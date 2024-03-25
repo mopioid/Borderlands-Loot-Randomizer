@@ -1242,7 +1242,7 @@ Locations = (
     Mission("Medical Mystery: X-Com-municate", "GD_Z3_MedicalMystery2.M_MedicalMystery2",
         MissionGiver("GD_Zed.Character.Pawn_Zed:MissionDirectivesDefinition_1", True, True, "Sanctuary_P", "SanctuaryAir_P"),
         DocMercy(),
-    tags=Tag.LongMission),
+    block_weapon=False, tags=Tag.LongMission),
     Mission("Neither Rain nor Sleet nor Skags", "gd_z3_neitherrainsleet.M_NeitherRainSleetSkags"),
     Mission("In Memoriam", "GD_Z1_InMemoriam.M_InMemoriam"),
     Mission("Cult Following: Eternal Flame", "GD_Z1_ChildrenOfPhoenix.M_EternalFlame"),
