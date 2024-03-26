@@ -204,8 +204,12 @@ class Seed:
         
         if options.HintDisplay.CurrentValue == 'None' and not drop:
             return
+        
+        log_item = bool(drop or options.HintDisplay.CurrentValue == 'Spoiler')
 
-        location_name = str(location)
+        none_log = f"{location}\n"
+        hint_log = f"{location} - {location.item.vague_hint.value}\n"
+        full_log = f"{location} - {location.item.name}\n"
         
         path = self.generate_tracker()
 
@@ -213,28 +217,21 @@ class Seed:
             lines = file.readlines()
 
         for index in range(len(lines)):
-            if not lines[index].startswith(location_name):
-                continue
+            line = lines[index]
 
-            line = lines[index].strip()
-            item_name = location.item.name
-
-            if line.endswith(item_name):
+            if line == none_log:
+                lines[index] = full_log if log_item else hint_log
+                with open(path, 'w') as file: file.writelines(lines)
                 return
 
-            if drop or options.HintDisplay.CurrentValue == 'Spoiler':
-                lines[index] = f"{location_name} - {item_name}\n"
-                break
-            
-            hint_name = location.item.vague_hint.value
-            if line[len(location_name):].endswith(hint_name):
+            if line == hint_log:
+                if log_item:
+                    lines[index] = full_log
+                    with open(path, 'w') as file: file.writelines(lines)
                 return
-            
-            lines[index] = f"{location_name} - {hint_name}\n"
-            break
 
-        with open(path, 'w') as file:
-            file.writelines(lines)
+            if line == full_log:
+                return
 
 
     def populate_tracker(self, formatter: Callable[[ItemPool], str]) -> None:
