@@ -33,7 +33,7 @@ from typing import Sequence
 
 class LootRandomizer(ModMenu.SDKMod):
     Name: str = "Loot Randomizer"
-    Version: str = "1.1"
+    Version: str = "1.1.1"
     Description: str = "Create seeds to shuffle items into new farm locations."
     Author: str = "mopioid"
     Types: ModMenu.ModTypes = ModMenu.ModTypes.Gameplay
