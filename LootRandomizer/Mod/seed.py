@@ -213,8 +213,12 @@ class Seed:
         
         path = self.generate_tracker()
 
-        with open(path, 'r', encoding='utf-8') as file:
-            lines = file.readlines()
+        try:
+            with open(path, 'r', encoding='utf-8') as file:
+                lines = file.readlines()
+        except:
+            with open(path, 'r') as file:
+                lines = file.readlines()
 
         for index in range(len(lines)):
             line = lines[index]

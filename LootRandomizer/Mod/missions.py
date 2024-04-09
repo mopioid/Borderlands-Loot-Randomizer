@@ -29,8 +29,6 @@ def PlaythroughChanged() -> None:
     if playthrough == new_playthrough:
         return
     
-    Log("PlaythroughChanged (actually)")
-
     playthrough = new_playthrough
 
     if playthrough == 2:
