@@ -72,18 +72,11 @@ def _format_unique      (string: str) -> str: return f"<font color='#dc4646'>{st
 def _format_seraph      (string: str) -> str: return f"<font color='#ff9ab8'>{string}</font>"
 def _format_pearlescent (string: str) -> str: return f"<font color='#00ffff'>{string}</font>"
 def _format_effervescent(string: str) -> str:
-    colors = ('#ffadad',  '#ffd6a5',  '#fdffb6',  '#caffbf',  '#9bf6ff',  '#a0c4ff',  '#bdb2ff', '#ffc6ff')
-
-    index = 0
-    formatted = ""
-    for char in string:
-        formatted += f"<font color='{colors[index]}'>{char}</font>"
-
-        index += 1
-        if index == len(colors):
-            index = 0
-
-    return formatted
+    colors = ('ffadad',  'ffd6a5',  'fdffb6',  'caffbf',  '9bf6ff',  'a0c4ff',  'bdb2ff', 'ffc6ff')
+    return "".join(
+        f"<font color='#{colors[index % len(colors)]}'>{character}</font>"
+        for index, character in enumerate(string)
+    )
 
 
 Hint.Dud.formatter = _format_dud
@@ -153,12 +146,12 @@ DudDescriptions = (
     "It contains a small ship.",
     "You fell for one of the classic blunders.",
     "Sending out an SOS.",
-    "Now about that beer I owed ya!",
+    "Now about that beer I owed ya.",
     "Task failed successfully.",
     "The real loot was the friends we met along the way.",
     "Think this will give me superpowers?",
     "Consult your doctor if you experience nasuea, swelling, or shortness of breath.",
-    "Send your complaints to<br>www.twitch.tv/mopioid.",
+    "Send your complaints to<br>www.twitch.tv/mopioid",
     "Well, this is embarrassing.",
     "Drowns sorrows.",
     "Don't look at me like that.",
@@ -170,6 +163,7 @@ DudDescriptions = (
     "I'm With Stupid ^",
     "I don't want to live on this planet anymore...",
     "GOOD. BUT WHERE IS GUN PILE?",
+    "Have you seen my gun?",
 )
 
 
@@ -178,22 +172,28 @@ useitem_template: UObject = None
 presentation_template: UObject = None
 custompresentation_template: UObject = None
 
-useitem_behavior: UObject = None
-
 hintitem_mesh: UObject = None
 duditem_mesh: UObject = None
 hintitem_pickupflag: UObject = None
 duditem_pickupflag: UObject = None
 
+useitem_behavior: UObject = None
+
+padding_pool: UObject = None
+
 
 def Enable() -> None:
     global inventory_template, useitem_template, presentation_template, custompresentation_template
-    global useitem_behavior, hintitem_mesh, duditem_mesh, hintitem_pickupflag, duditem_pickupflag
+    global hintitem_mesh, duditem_mesh, hintitem_pickupflag, duditem_pickupflag
+    global useitem_behavior, padding_pool
 
     RunHook("WillowGame.Behavior_LocalCustomEvent.ApplyBehaviorToContext", "LootRandomizer", _Behavior_LocalCustomEvent)
 
+    padding_pool = construct_object("ItemPoolDefinition", "Padding_ItemPool")
+
     original = FindObject("InventoryBalanceDefinition", "GD_ItemGrades.BuffDrink.ItemGrade_BuffDrink_Toughness")
     inventory_template = construct_object(original, "Hint_Inventory_Default")
+    padding = construct_object(original, padding_pool)
 
     inventory_template.Manufacturers = ((
         FindObject("ManufacturerDefinition", "GD_Currency.Manufacturers.Cash_Manufacturer"),
@@ -202,6 +202,7 @@ def Enable() -> None:
     original = FindObject("UsableItemDefinition", "GD_BuffDrinks.A_Item.BuffDrink_Toughness")
     useitem_template = construct_object(original, "Hint_Item_Default")
 
+    useitem_template.PickupLifeSpan = 0
     useitem_template.bPickupInBulk = False
     useitem_template.CalloutDefinition = None
     useitem_template.CustomPresentations = ()
@@ -230,6 +231,10 @@ def Enable() -> None:
     duditem_mesh = FindObject("StaticMesh", "Prop_Details.Meshes.BeerBottle")
     hintitem_pickupflag = FindObject("Texture2D", "fx_shared_items.Textures.ItemCards.sdu")
     duditem_pickupflag = FindObject("Texture2D", "fx_shared_items.Textures.ItemCards.Buff_Toughen-up")
+
+    padding.InventoryDefinition = construct_object(useitem_template, padding)
+    padding.InventoryDefinition.PickupLifeSpan = 0.000001
+    padding_pool.BalancedItems = ((None, padding, (1, None, None, 1), True),)
 
 
 def Disable() -> None:
@@ -262,39 +267,39 @@ def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FSt
         return False
     
     if (matched_location.item != items.DudItem) and (not options.HintTrainingSeen.CurrentValue):
+        show_dialog("Item Hints", (
+            "The object you just found is an item hint, indicating that the specified loot source "
+            "does indeed drop loot in your seed.\n\n"
+
+            "You can configure the amount of information provided by loot hints via "
+            "Options > Mods > Loot Randomizer > Hint Display.\n\n"
+
+            "To dismiss hints or duds for a given source, simply interact with them. You may reset "
+            "your dismissed hints via\n"
+            "Options > Mods > Loot Randomizer > Reset Dismissed Hints.\n\n"
+        ), 5)
         options.HintTrainingSeen.CurrentValue = True
         options.SaveSettings()
-        show_dialog(
-            "Item Hints",
-            (
-                "The object you just found is an item hint, indicating that the specified loot "
-                "source does indeed drop loot in your seed.\n\n"
 
-                "You can configure the amount of information provided by loot hints via "
-                "Options > Mods > Loot Randomizer > Hint Display.\n\n"
-
-                "To dismiss hints or duds for a given source, simply interact with them. You may "
-                "reset your dismissed hints via\n"
-                "Options > Mods > Loot Randomizer > Reset Dismissed Hints.\n\n"
-            ),
-            5
-        )
     elif (matched_location.item == items.DudItem) and (not options.DudTrainingSeen.CurrentValue):
+        show_dialog("Dud Items", (
+            "The object you just found is a dud item, indicating that the specified loot "
+            "source is included in your seed, but was not assigned an item.\n\n"
+
+            "To dismiss hints or duds for a given source, simply interact with them. You may "
+            "reset your dismissed hints via\n"
+            "Options > Mods > Loot Randomizer > Reset Dismissed Hints.\n\n"
+        ), 5)
         options.DudTrainingSeen.CurrentValue = True
         options.SaveSettings()
-        show_dialog(
-            "Dud Items",
-            (
-                "The object you just found is a dud item, indicating that the specified loot "
-                "source is included in your seed, but was not assigned an item.\n\n"
 
-                "To dismiss hints or duds for a given source, simply interact with them. You may "
-                "reset your dismissed hints via\n"
-                "Options > Mods > Loot Randomizer > Reset Dismissed Hints.\n\n"
-            ),
-            5
-        )
     else:
         location.toggle_hint(False)
 
     return False
+
+
+"""
+TODO
+picking up dud make drunk
+"""

@@ -7,16 +7,18 @@ from .items import PurpleRelic, BanditGrenade, Fibber, HyperionPistol
 
 from .locations import Behavior, PreventDestroy
 
-from .enemies import Enemy, Pawn, Midget, DoctorsOrdersMidget, DoctorsOrdersMidgetRegistry
-from .enemies import Leviathan, MonsterTruck, PetesBurner, SpaceCowboyMidget, Haderax, DigiEnemy
+from .enemies import Enemy, Pawn
+from .enemies import Midget, DoctorsOrdersMidget, DoctorsOrdersMidgetRegistry, Leviathan
+from .enemies import MonsterTruckDriver, PetesBurner, SpaceCowboyMidget, Haderax, DigiEnemy
 
 from .missions import Mission, MissionGiver, MissionInventory, MissionObject, MissionPickup
 from .missions import WillTheBandit, DocMercy, Loader1340, McShooty, PoeticLicense
-from .missions import WrittenByTheVictor, BFFs, ARealBoy, GreatEscape, MessageInABottle, RollInsight
-from .missions import LostSouls, MyDeadBrother, OddestCouple, EchoesOfThePast, GrandmaStoryRaid
+from .missions import WrittenByTheVictor, BFFs, ARealBoy, GreatEscape
+from .missions import MessageInABottle, RollInsight, TreeHugger, LostSouls, MyDeadBrother
+from .missions import OddestCouple, Sirentology, EchoesOfThePast, GrandmaStoryRaid
 
 from .other import Other, Attachment, VendingMachine
-from .other import ButtstallionWithAmulet, DahlAbandonGrave
+from .other import MichaelMamaril, MichaelMAirmaril, ButtstallionWithAmulet, DahlAbandonGrave
 
 
 Items = (
@@ -712,7 +714,7 @@ Locations = (
     Enemy("Midgemong", Pawn("PawnBalance_PrimalBeast_Warmong"), tags=Tag.SlowEnemy),
     Enemy("Boom", Pawn("PawnBalance_BoomBoom")),
     Enemy("Bewm", Pawn("PawnBalance_Boom")),
-    Enemy("Captain Flynt", Pawn("PawnBalance_Flynt"), tags=Tag.SlowEnemy),
+    Enemy("Captain Flynt", Pawn("PawnBalance_Flynt"), tags=Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("Savage Lee", Pawn("PawnBalance_SavageLee")),
     Enemy("Doc Mercy", Pawn("PawnBalance_MrMercy")),
     Enemy("Assassin Wot", Pawn("PawnBalance_Assassin1")),
@@ -739,8 +741,8 @@ Locations = (
     Enemy("Flesh-Stick", Pawn("PawnBalance_FleshStick"), mission="You Are Cordially Invited: RSVP"),
     Enemy("Prospector Zeke", Pawn("PawnBalance_Prospector"), tags=Tag.SlowEnemy),
     Enemy("Wilhelm", Pawn("PawnBalance_Willhelm")),
-    Enemy("Mobley", Pawn("PawnBalance_Mobley")),
-    Enemy("Gettle", Pawn("PawnBalance_Gettle")),
+    Enemy("Mobley", Pawn("PawnBalance_Mobley"), tags=Tag.SlowEnemy),
+    Enemy("Gettle", Pawn("PawnBalance_Gettle"), tags=Tag.SlowEnemy),
     Enemy("Badass Creeper", Pawn("PawnBalance_CreeperBadass"), tags=Tag.SlowEnemy, rarities=(50,)),
     Enemy("Barlo Gutter", Pawn("BD_BarloGutter"), mission="Won't Get Fooled Again"),
     Enemy("Henry", Pawn("PawnBalance_Henry")),
@@ -903,7 +905,7 @@ Locations = (
     Enemy("H3RL-E", Pawn("PawnBalance_Orchid_LoaderBoss"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
     Enemy("DJ Tanner", Pawn("PawnBalance_Orchid_PirateRadioGuy"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
     Enemy("Mr. Bubbles", Pawn("PawnBalance_Orchid_Bubbles"), tags=Tag.PiratesBooty|Tag.RareEnemy),
-    Enemy("Lil' Sis", Behavior("GD_Orchid_LittleSis.Character.AIDef_Orchid_LittleSis:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_85"), tags=Tag.PiratesBooty|Tag.RareEnemy),
+    Enemy("Lil' Sis", Behavior("GD_Orchid_LittleSis.Character.AIDef_Orchid_LittleSis:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_85"), tags=Tag.PiratesBooty|Tag.VeryRareEnemy),
     Enemy("Lieutenant White", Pawn("PawnBalance_Orchid_PirateHenchman"), mission="Treasure of the Sands"),
     Enemy("Lieutenant Hoffman", Pawn("PawnBalance_Orchid_PirateHenchman2"), mission="Treasure of the Sands"),
     Enemy("Captain Scarlett", Behavior("GD_Orchid_PirateQueen_Combat.Animation.Anim_Farewell:BehaviorProviderDefinition_0.Behavior_SpawnItems_10"), mission="Treasure of the Sands"),
@@ -939,8 +941,9 @@ Locations = (
     Enemy("Hamhock the Ham", Pawn("Iris_PawnBalance_BB_Hamlock"), mission="Mother-Lover (Turn in Scooter)"),
     Enemy("Anonymous Troll Face", Pawn("Iris_PawnBalance_SayFaceTroll"), mission="Say That To My Face"),
     Enemy("Sully the Stabber", Pawn("Iris_PawnBalance_SullyTheStabber"), mission="Number One Fan"),
+    Enemy("Enrique", Pawn("Iris_PawnBalance_TinasSkag"), mission="Walking the Dog"),
     Enemy("Motor Momma", Pawn("Iris_PawnBalance_MotorMama"), tags=Tag.CampaignOfCarnage|Tag.SlowEnemy),
-    Enemy("The Monster Truck", MonsterTruck(), mission="Monster Hunter"),
+    Enemy("The Monster Truck", MonsterTruckDriver("PawnBalance_MarauderGrunt"), mission="Monster Hunter"),
     Enemy("Chubby Rakk (Gas Guzzlers)", Pawn("Iris_PawnBalance_RakkChubby"), mission="Gas Guzzlers (Turn in Hammerlock)"),
     Enemy("BuffGamer G", Pawn("Iris_PawnBalance_BB_JohnnyAbs"), mission="Matter Of Taste"),
     Enemy("Game Critic Extraordinaire", Pawn("Iris_PawnBalance_BB_TonyGlutes"), mission="Matter Of Taste"),
@@ -1014,9 +1017,9 @@ Locations = (
     tags=Tag.DragonKeep|Tag.EvolvedEnemy),
     Enemy("Arguk the Butcher", Pawn("PawnBalance_Orc_Butcher"), mission="Critical Fail"),
     Enemy("-=nOObkiLLer=-", Pawn("PawnBalance_Knight_LostSouls_Invader"), mission="Lost Souls"),
-    Enemy("xxDatVaultHuntrxx", Pawn("PawnBalance_Knight_MMORPG1"), mission="MMORPGFPS", rarities=(7,)),
-    Enemy("420_E-Sports_Masta", Pawn("PawnBalance_Knight_MMORPG2"), mission="MMORPGFPS", rarities=(7,)),
-    Enemy("[720NoScope]Headshotz", Pawn("PawnBalance_Knight_MMORPG3"), mission="MMORPGFPS", rarities=(7,)),
+    Enemy("xxDatVaultHuntrxx", Pawn("PawnBalance_Knight_MMORPG1"), mission="MMORPGFPS", rarities=(10,)),
+    Enemy("420_E-Sports_Masta", Pawn("PawnBalance_Knight_MMORPG2"), mission="MMORPGFPS", rarities=(10,)),
+    Enemy("[720NoScope]Headshotz", Pawn("PawnBalance_Knight_MMORPG3"), mission="MMORPGFPS", rarities=(10,)),
     Enemy("King Aliah", Pawn("PawnBalance_SkeletonKing_Aliah"), tags=Tag.DragonKeep|Tag.SlowEnemy),
     Enemy("King Crono", Pawn("PawnBalance_SkeletonKing_Crono"), tags=Tag.DragonKeep|Tag.SlowEnemy),
     Enemy("King Seth", Pawn("PawnBalance_SkeletonKing_Seth"), tags=Tag.DragonKeep|Tag.SlowEnemy),
@@ -1059,7 +1062,7 @@ Locations = (
     tags=Tag.DragonKeep, rarities=(33,33,33)),
     Enemy("Edgar", Pawn("PawnBalance_Wizard_DeadBrotherEdgar"), mission="My Dead Brother (Kill Edgar)"),
     Enemy("Simon", Pawn("PawnBalance_Wizard_DeadBrotherSimon"), mission="My Dead Brother (Kill Edgar)"),
-    Enemy("Sorcerer's Daughter", Pawn("PawnBalance_AngelBoss"), tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(33,33,33)),
+    Enemy("Sorcerer's Daughter", Pawn("PawnBalance_AngelBoss"), tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(33,33)),
     Enemy("Handsome Sorcerer",
         Behavior("GD_ButtStallion_Proto.Character.AIDef_ButtStallion_Proto:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_46"),
         Behavior("GD_DragonBridgeBoss.InteractiveObjects.IO_DragonBridgeBoss_LootExplosion:BehaviorProviderDefinition_0.Behavior_SpawnItems_32"),
@@ -1158,7 +1161,7 @@ Locations = (
         inject=False),
     tags=Tag.MercenaryDay|Tag.SlowEnemy),
 
-    Enemy("Enchanted Skeleton", Pawn("PawnBalance_HallowSkeletonEnchanted"), mission="The Bloody Harvest"),
+    Enemy("Enchanted Skeleton", Pawn("PawnBalance_HallowSkeletonEnchanted"), tags=Tag.VeryRareEnemy),
     Enemy("Sully the Blacksmith", Pawn("PawnBalance_Spycho"), mission="The Bloody Harvest"),
 
     Enemy("Pumpkin Kingpin/Jacques O'Lantern",
@@ -1167,7 +1170,7 @@ Locations = (
     tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("Clark the Combusted Cryptkeeper", Pawn("PawnBalance_UndeadFirePsycho_Giant"), tags=Tag.BloodyHarvest|Tag.SlowEnemy|Tag.MissionEnemy|Tag.VeryLongMission),
 
-    Enemy("Son of Crawmerax the Invincible", Pawn("PawnBalance_Crawmerax_Son"), tags=Tag.SonOfCrawmerax|Tag.SlowEnemy, rarities=(33,33,33)),
+    Enemy("Son of Crawmerax the Invincible", Pawn("PawnBalance_Crawmerax_Son"), mission="Fun, Sun, and Guns", rarities=(33,33,33)),
     Enemy("The Invincible Son of Crawmerax the Invincible",
         Pawn("PawnBalance_Crawmerax_Son_Raid"),
         Behavior(
@@ -1223,7 +1226,7 @@ Locations = (
 
     Mission("This Town Ain't Big Enough", "GD_Z1_ThisTown.M_ThisTown"),
     Mission("Shielded Favors", "GD_Episode02.M_Ep2b_Henchman"),
-    Mission("Symbiosis", "GD_Z1_Symbiosis.M_Symbiosis"),
+    Mission("Symbiosis", "GD_Z1_Symbiosis.M_Symbiosis", tags=Tag.LongMission),
     Mission("Bad Hair Day (Turn in Hammerlock)", "GD_Z1_BadHairDay.M_BadHairDay"),
     Mission("Bad Hair Day (Turn in Claptrap)", "GD_Z1_BadHairDay.M_BadHairDay", alt=True),
     Mission("Handsome Jack Here!", "GD_Z1_HandsomeJackHere.M_HandsomeJackHere",
@@ -1247,7 +1250,7 @@ Locations = (
     Mission("In Memoriam", "GD_Z1_InMemoriam.M_InMemoriam"),
     Mission("Cult Following: Eternal Flame", "GD_Z1_ChildrenOfPhoenix.M_EternalFlame"),
     Mission("Cult Following: False Idols", "GD_Z1_ChildrenOfPhoenix.M_FalseIdols"),
-    Mission("Cult Following: Lighting the Match", "GD_Z1_ChildrenOfPhoenix.M_LightingTheMatch"),
+    Mission("Cult Following: Lighting the Match", "GD_Z1_ChildrenOfPhoenix.M_LightingTheMatch", tags=Tag.LongMission),
     Mission("Cult Following: The Enkindling", "GD_Z1_ChildrenOfPhoenix.M_TheEnkindling",
         PreventDestroy("GD_IncineratorVanya.Character.AIDef_IncineratorVanya:AIBehaviorProviderDefinition_1.Behavior_Destroy_0"),
     tags=Tag.LongMission),
@@ -1544,7 +1547,7 @@ Locations = (
         # Die stays in place of bartlesby after completion, and also until savequit with purge
     Mission("Ell in Shining Armor (Skimpy Armor)", "GD_Aster_EllieDress.M_EllieDress", tags=Tag.DragonKeep),
     Mission("Ell in Shining Armor (Bulky Armor)", "GD_Aster_EllieDress.M_EllieDress", alt=True, tags=Tag.DragonKeep),
-    Mission("Tree Hugger", "GD_Aster_TreeHugger.M_TreeHugger", tags=Tag.DragonKeep|Tag.LongMission),
+    Mission("Tree Hugger", "GD_Aster_TreeHugger.M_TreeHugger", TreeHugger(), tags=Tag.DragonKeep|Tag.LongMission),
     Mission("Lost Souls", "GD_Aster_DemonicSouls.M_DemonicSouls",
         LostSouls("GD_Knight_LostSoulsNPC_Proto2.Character.Pawn_Knight_LostSoulsNPC_Proto2:MissionDirectivesDefinition_1", True, True, "Dead_Forest_P"),
     tags=Tag.DragonKeep), # purge=True
@@ -1601,7 +1604,7 @@ Locations = (
         OddestCouple("OldDust_Mission_Side.TheWorld:PersistentLevel.WillowInteractiveObject_2", "OldDust_P"),
     tags=Tag.FightForSanctuary),
         # Earl's door becomes uninteractable after completion
-    Mission("Sirentology", "GD_Anemone_Side_Sirentology.M_Anemone_Sirentology", tags=Tag.FightForSanctuary|Tag.LongMission),
+    Mission("Sirentology", "GD_Anemone_Side_Sirentology.M_Anemone_Sirentology", Sirentology(), tags=Tag.FightForSanctuary|Tag.LongMission),
     Mission("My Brittle Pony", "GD_Anemone_Side_MyBrittlePony.M_Anemone_MyBrittlePony", tags=Tag.FightForSanctuary|Tag.LongMission),
         # Brick and enemy waves dont respawn without savequit
     Mission("BFFFs", "GD_Anemone_Side_EyeSnipers.M_Anemone_EyeOfTheSnipers", tags=Tag.FightForSanctuary),
@@ -1665,7 +1668,10 @@ Locations = (
 
 
 
-    Other("Michael Mamaril", Behavior("GD_JohnMamaril.Character.AIDef_JohnMamaril:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_92")),
+    Other("Michael Mamaril",
+        Behavior("GD_JohnMamaril.Character.AIDef_JohnMamaril:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_92"),
+        MichaelMamaril(), MichaelMAirmaril(),
+    ),
     Other("Tip Moxxi",
         Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_17"),
         Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_23"),
@@ -1682,11 +1688,11 @@ Locations = (
     tags=Tag.VeryLongMission),
 
     Other("Oasis Seraph Vendor",
-        VendingMachine("GD_Orchid_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
+        VendingMachine("GD_Orchid_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor", "GD_Orchid_SeraphCrystalVendor.VendingMachine.VendingMachine_SeraphCrystal:BehaviorProviderDefinition_0.Behavior_Conditional_1.AttributeExpressionEvaluator_20"),
     tags=Tag.PiratesBooty|Tag.Vendor),
 
     Other("Badass Crater Seraph Vendor",
-        VendingMachine("GD_Iris_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
+        VendingMachine("GD_Iris_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor", "GD_Iris_SeraphCrystalVendor.VendingMachine.VendingMachine_SeraphCrystal:BehaviorProviderDefinition_0.Behavior_Conditional_3.AttributeExpressionEvaluator_20"),
     tags=Tag.CampaignOfCarnage|Tag.Vendor),
 
     Other("Torgue Arena Provided Loot",
@@ -1698,17 +1704,17 @@ Locations = (
     tags=Tag.CampaignOfCarnage|Tag.Vendor),
 
     Other("Hunter's Grotto Seraph Vendor",
-        VendingMachine("GD_Sage_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
+        VendingMachine("GD_Sage_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor", "GD_Sage_SeraphCrystalVendor.VendingMachine.VendingMachine_SeraphCrystal:BehaviorProviderDefinition_0.Behavior_Conditional_0.AttributeExpressionEvaluator_20"),
     tags=Tag.HammerlocksHunt|Tag.Vendor),
 
     Other("Mimic Chest",
         Pawn("PawnBalance_Mimic"),
         Attachment("ObjectGrade_MimicChest", 0, 1, 2, 3, configuration=6),
         Attachment("ObjectGrade_MimicChest_NoMimic", 0, 1, 2, 3, configuration=6),
-    tags=Tag.DragonKeep, rarities=(25, 25, 25, 25)),
+    tags=Tag.DragonKeep, rarities=(33,)),
 
     Other("Flamerock Refuge Seraph Vendor",
-        VendingMachine("GD_Aster_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor"),
+        VendingMachine("GD_Aster_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor", "GD_Aster_SeraphCrystalVendor.VendingMachine.VendingMachine_SeraphCrystal:BehaviorProviderDefinition_0.Behavior_Conditional_12.AttributeExpressionEvaluator_20"),
     tags=Tag.DragonKeep|Tag.Vendor),
 
     Other("Butt Stallion Fart",
@@ -1730,10 +1736,3 @@ Locations = (
         DahlAbandonGrave(),
     tags=Tag.FightForSanctuary),
 )
-
-
-"""
-TODO
-add enrique
-co-op crashes in Village_P
-"""

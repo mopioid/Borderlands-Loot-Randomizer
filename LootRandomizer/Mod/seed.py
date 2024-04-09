@@ -14,8 +14,8 @@ from typing import Callable, List, Optional, Sequence, Set
 from types import ModuleType
 
 
-CurrentVersion = 3
-SupportedVersions = (1,2,3)
+CurrentVersion = 4
+SupportedVersions = (1,2,3,4)
 
 
 AppliedSeed: Optional[Seed] = None
@@ -169,7 +169,7 @@ class Seed:
         if os.path.exists(path):
             return path
 
-        with open(path, 'w') as file:
+        with open(path, 'w', encoding='utf-8') as file:
             item_warning = " (not all accessible)" if self.item_count > len(self.locations) else ""
 
             file.write(
@@ -208,12 +208,12 @@ class Seed:
         log_item = bool(drop or options.HintDisplay.CurrentValue == 'Spoiler')
 
         none_log = f"{location}\n"
-        hint_log = f"{location} - {location.item.vague_hint.value}\n"
+        hint_log = f"{location} - {location.item.hint}\n"
         full_log = f"{location} - {location.item.name}\n"
         
         path = self.generate_tracker()
 
-        with open(path, 'r') as file:
+        with open(path, 'r', encoding='utf-8') as file:
             lines = file.readlines()
 
         for index in range(len(lines)):
@@ -221,41 +221,49 @@ class Seed:
 
             if line == none_log:
                 lines[index] = full_log if log_item else hint_log
-                with open(path, 'w') as file: file.writelines(lines)
+                with open(path, 'w', encoding='utf-8') as file: file.writelines(lines)
                 return
 
             if line == hint_log:
                 if log_item:
                     lines[index] = full_log
-                    with open(path, 'w') as file: file.writelines(lines)
+                    with open(path, 'w', encoding='utf-8') as file: file.writelines(lines)
                 return
 
             if line == full_log:
                 return
 
 
-    def populate_tracker(self, formatter: Callable[[ItemPool], str]) -> None:
+    def populate_tracker(self, spoiler: bool) -> None:
         path = self.generate_tracker()
 
-        with open(path, 'r') as file:
-            log = file.readlines()
+        with open(path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
 
         for location, item in zip(self.locations, self.items):
-            location_name = str(location)
-            for index in range(len(log)):
-                if log[index].startswith(location_name):
-                    if not log[index].strip().endswith(item.name):
-                        log[index] = f"{location_name} - {formatter(item)}\n"
+            none_log = f"{location}\n"
+            hint_log = f"{location} - {item.hint}\n"
+            full_log = f"{location} - {item.name}\n"
 
-        with open(path, 'w') as file:
-            file.writelines(log)
+            for index in range(len(lines)):
+                line = lines[index]
+
+                if line == full_log:
+                    break
+
+                if line in (none_log, hint_log):
+                    lines[index] = full_log if spoiler else hint_log
+                    break
+
+        with open(path, 'w', encoding='utf-8') as file:
+            file.writelines(lines)
 
 
     def populate_hints(self) -> None:
-        self.populate_tracker(lambda item: item.vague_hint.value)
+        self.populate_tracker(False)
 
     def populate_spoilers(self) -> None:
-        self.populate_tracker(lambda item: item.name)
+        self.populate_tracker(True)
 
 
 def generate_wikis(version: int) -> None:
@@ -321,7 +329,7 @@ def generate_wikis(version: int) -> None:
 
             for item_entry in version_items:
                 item = item_entry.match_item()
-                if item.vague_hint is not hint:
+                if item.hint is not hint:
                     continue
 
                 content: List[str] = []

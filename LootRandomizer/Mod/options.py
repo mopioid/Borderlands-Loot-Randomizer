@@ -381,6 +381,10 @@ DudTrainingSeen = ModMenu.Options.Hidden(
     Caption="Seen Dud Training",
     StartingValue=False
 )
+RewardsTrainingSeen = ModMenu.Options.Hidden(
+    Caption="Seen Rewards Training",
+    StartingValue=False
+)
 
 
 Options = (
@@ -421,6 +425,7 @@ Options = (
 
     HintTrainingSeen,
     DudTrainingSeen,
+    RewardsTrainingSeen,
 )
 
 

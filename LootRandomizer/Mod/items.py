@@ -68,7 +68,7 @@ def Disable() -> None:
 
 class ItemPool:
     name: str
-    vague_hint: Hint
+    hint: Hint
     tags: Tag = Tag(0)
 
     items: Sequence[Item]
@@ -86,7 +86,7 @@ class ItemPool:
         fallback: Optional[Item] = None
     ) -> None:
         self.name = name
-        self.vague_hint = vague_hint
+        self.hint = vague_hint
         self.items = items
         self.fallback = fallback
 

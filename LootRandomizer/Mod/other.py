@@ -49,7 +49,17 @@ class Other(Location):
 class VendingMachine(RegistrantDropper):
     Registries = dict()
 
+    conditional: Optional[str]
+
+    def __init__(self, path: str, conditional: Optional[str] = None) -> None:
+        self.conditional = conditional
+        super().__init__(path)
+
     def inject(self, balance: UObject) -> None:
+        if self.conditional:
+            conditional = FindObject("AttributeExpressionEvaluator", self.conditional)
+            conditional.Expression.ConstantOperand2 = -1
+
         pool = self.location.prepare_pools(1, False)[0]
 
         if pool:
@@ -81,6 +91,24 @@ class Attachment(RegistrantDropper):
         obj_attachments = obj.Loot[self.configuration].ItemAttachments
         for index, pool in zip(self.attachments, pools):
             obj_attachments[index].ItemPool = pool
+
+
+class MichaelMamaril(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("Sanctuary_P")
+
+    def entered_map(self) -> None:
+        switch = FindObject("SeqAct_RandomSwitch", "Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0")
+        switch.LinkCount = 2
+
+
+class MichaelMAirmaril(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("SanctuaryAir_P")
+
+    def entered_map(self) -> None:
+        switch = FindObject("SeqAct_RandomSwitch", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0")
+        switch.LinkCount = 2
 
 
 class DahlAbandonGrave(MapDropper):
@@ -167,6 +195,8 @@ LOGIC:
 - Gobbler slag pistol
 - digi peak chests
 - Wam Bam loot injectors
+    GD_Nasturtium_Lootables.InteractiveObjects.ObjectGrade_NastChest_Epic
+    ^ Same as all Wam Bam red chests
 - chest being stolen by yeti
 - Caravan
     GD_Orchid_PlotDataMission04.Mission04.Balance_Orchid_CaravanChest

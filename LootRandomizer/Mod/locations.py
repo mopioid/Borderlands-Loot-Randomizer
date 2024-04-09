@@ -14,9 +14,6 @@ try: from typing import Self
 except: pass
 
 
-money_pool: UObject
-
-
 pool_whitelist = (
     "Pool_Ammo_All_DropAlways", "Pool_Ammo_All_Emergency", "Pool_Ammo_All_NeedOnly", "Pool_Ammo_Grenades_BoomBoom", "Pool_Health_All",
     "Pool_Eridium_Bar", "Pool_Eridium_Stick", "Pool_Money", "Pool_Money_1_BIG", "Pool_Money_1or2",
@@ -26,9 +23,6 @@ pool_whitelist = (
 
 
 def Enable() -> None:
-    global money_pool
-    money_pool = FindObject("ItemPoolDefinition", "GD_Itempools.AmmoAndResourcePools.Pool_Money_1_BIG")
-
     # RunHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer", _PostCommitMapChange)
     RunHook("Engine.GameInfo.SetGameType", "LootRandomizer", _InitGame)
     RunHook("WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext", "LootRandomizer", _Behavior_SpawnItems)
@@ -117,7 +111,7 @@ class Location:
             useitem.PickupFlagIcon = hints.duditem_pickupflag
 
             hint_caption = "&nbsp;"
-            hint_text = self.item.vague_hint.formatter(random.choice(hints.DudDescriptions))
+            hint_text = self.item.hint.formatter(random.choice(hints.DudDescriptions))
         else:
             useitem.NonCompositeStaticMesh = hints.hintitem_mesh
             useitem.PickupFlagIcon = hints.hintitem_pickupflag
@@ -127,10 +121,10 @@ class Location:
                 hint_text = "?"
             if options.HintDisplay.CurrentValue == "Vague":
                 hint_caption = "Item Hint"
-                hint_text = self.item.vague_hint.formatter(self.item.vague_hint)
+                hint_text = self.item.hint.formatter(self.item.hint)
             if options.HintDisplay.CurrentValue == "Spoiler":
                 hint_caption = "Item Spoiler"
-                hint_text = self.item.vague_hint.formatter(self.item.name)
+                hint_text = self.item.hint.formatter(self.item.name)
 
         defines.set_command(useitem.Presentation, "DescriptionLocReference", hint_caption)
         defines.set_command(useitem.CustomPresentations[0], "Description", hint_text)
@@ -140,8 +134,8 @@ class Location:
         if self.hint_inventory:
             self.hint_inventory.InventoryDefinition.PickupLifeSpan = 0 if set_enabled else 0.000001
 
-    def prepare_pools(self, count: Optional[int] = None, pad_money: bool = True) -> Sequence[UObject]:
-        padding = money_pool if pad_money else None
+    def prepare_pools(self, count: Optional[int] = None, pad: bool = True) -> Sequence[UObject]:
+        padding = hints.padding_pool if pad else None
 
         if count is None:
             count = len(self.rarities)
@@ -266,9 +260,6 @@ def MapChanged(new_map_name: str) -> None:
 
 
 # def _PostCommitMapChange(caller: UObject, function: UFunction, params: FStruct) -> bool:
-#     new_map_name = str(GetEngine().GetCurrentWorldInfo().GetMapName()).casefold()
-#     if new_map_name != map_name:
-#         MapChanged(new_map_name)
 #     return True
 
 def _SetPawnLocation(caller: UObject, function: UFunction, params: FStruct) -> bool:

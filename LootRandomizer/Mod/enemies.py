@@ -147,25 +147,12 @@ class Leviathan(MapDropper):
         RemoveHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
 
 
-class MonsterTruck(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("Iris_Hub2_P")
-
-    def entered_map(self) -> None:
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if not (caller.VehicleDef and caller.VehicleDef.Name == "Class_MonsterTruck_AIOnly"):
-                return True
-
-            spawner = construct_object("Behavior_SpawnLootAroundPoint")
-            spawner.ItemPools = self.location.prepare_pools()
-
-            spawner.ApplyBehaviorToContext(caller, (), None, None, None, ())
-            return True
-
-        RunHook("Engine.Pawn.Died", f"LootRandomizer.{id(self)}", hook)
-
-    def exited_map(self) -> None:
-        RemoveHook("Engine.Pawn.Died", f"LootRandomizer.{id(self)}")
+class MonsterTruckDriver(Pawn):
+    def should_inject(self, pawn: UObject) -> bool:
+        if UObject.PathName(pawn.MySpawnPoint) != "Iris_Hub2_Combat.TheWorld:PersistentLevel.WillowPopulationPoint_52":
+            return False
+        pawn.DoesVehicleAllowMeToDropLoot = True
+        return True
 
 
 class PetesBurner(Pawn):
@@ -253,9 +240,9 @@ class DigiEnemy(Enemy):
 
         for location in catalog.Locations:
             if isinstance(location, Enemy) and location.name == self.fallback:
-                self._fallback_enemy = location
+                self.fallback_enemy = location
 
-        if not self._fallback_enemy:
+        if not self.fallback_enemy:
             raise Exception(f"Failed to find fallback enemy for {self}")
 
     @property

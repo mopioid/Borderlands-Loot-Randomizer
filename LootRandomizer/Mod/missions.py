@@ -3,18 +3,52 @@ from __future__ import annotations
 from unrealsdk import Log, FindObject, FindAll, GetEngine, KeepAlive #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
 
-from . import defines, items
+from . import defines, options, items, locations
 from .defines import Tag, get_pawns, get_missiontracker
 from .defines import construct_object, construct_behaviorsequence_behavior
 from .locations import Location, Dropper, MapDropper, RegistrantDropper
 
-from typing import Callable, Dict, List, Optional, Sequence, Set
+from typing import Callable, Dict, Generator, List, Optional, Sequence, Set
 
 
 _mission_registry: Dict[str, Set[Mission]] = dict()
 
+def _all_missions() -> Generator[Mission, None, None]:
+    for registry in _mission_registry.values():
+        for mission in registry:
+            if not (mission.tags & Tag.Excluded):
+                yield mission
+
+
+playthrough: int = -1
+
+def PlaythroughChanged() -> None:
+    global playthrough
+
+    new_playthrough = defines.get_pc().GetCurrentPlaythrough()
+    if playthrough == new_playthrough:
+        return
+    
+    Log("PlaythroughChanged (actually)")
+
+    playthrough = new_playthrough
+
+    if playthrough == 2:
+        for mission in _all_missions():
+            mission.reward.ExperienceRewardPercentage.BaseValueScaleConstant = mission.reward_xp_scale
+    else:
+        for mission in _all_missions():
+            mission.reward.ExperienceRewardPercentage.BaseValueScaleConstant = 0
+    
+
+def _SetPawnLocation(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    PlaythroughChanged()
+    return True
+
 
 def Enable() -> None:
+    PlaythroughChanged()
+
     RunHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer", lambda c,f,p: False)
 
     RunHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer", _AcceptMission)
@@ -23,8 +57,13 @@ def Enable() -> None:
     RunHook("WillowGame.WillowMissionItem.MissionDenyPickup", "LootRandomizer", _MissionDenyPickup)
     RunHook("Engine.WillowInventory.PickupAssociated", "LootRandomizer", _PickupAssociated)
 
+    RunHook("WillowGame.WillowPlayerController.ClientSetPawnLocation", "LootRandomizer.missions", _SetPawnLocation)
+
 
 def Disable() -> None:
+    global playthrough
+    playthrough = -1
+
     RemoveHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer")
 
     RemoveHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer")
@@ -32,6 +71,8 @@ def Disable() -> None:
 
     RemoveHook("Engine.WillowInventory.PickupAssociated", "LootRandomizer")
     RemoveHook("WillowGame.WillowMissionItem.MissionDenyPickup", "LootRandomizer")
+
+    RemoveHook("WillowGame.WillowPlayerController.ClientSetPawnLocation", "LootRandomizer.missions")
 
 
 def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
@@ -102,6 +143,16 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
             bonuses -= 1
         if not bonuses:
             continue
+
+        if (pc is defines.get_pc()) and (not options.RewardsTrainingSeen.CurrentValue):
+            def training() -> None:
+                defines.show_dialog("Multiple Rewards", (
+                    "The mission you just completed takes longer than average to complete. As a "
+                    "reward, a bonus instance of its loot item has been added to your backpack."
+                ), 5)
+                options.RewardsTrainingSeen.CurrentValue = True
+                options.SaveSettings()
+            defines.do_next_tick(training)
 
         def loot_callback(item: UObject, pc=pc) -> None:
             definition_data = item.DefinitionData
@@ -207,10 +258,6 @@ class Mission(Location):
 
         self.uobject = FindObject("MissionDefinition", self.path)
 
-        if not self.alt:
-            self.repeatable = self.uobject.bRepeatable
-            self.uobject.bRepeatable = True
-
         self.reward_items = tuple(self.reward.RewardItems)
         for item in self.reward_items:
             KeepAlive(item)
@@ -221,13 +268,20 @@ class Mission(Location):
             KeepAlive(pool)
         self.reward.RewardItemPools = ()
 
-        self.reward_xp_scale = self.reward.ExperienceRewardPercentage.BaseValueScaleConstant
-        self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = 0
-
         if self.block_weapon:
             self.mission_weapon = self.uobject.MissionWeapon
             KeepAlive(self.mission_weapon)
             self.uobject.MissionWeapon = None
+
+        if self.tags & Tag.Excluded:
+            return
+
+        if not self.alt:
+            self.repeatable = self.uobject.bRepeatable
+            self.uobject.bRepeatable = True
+
+        self.reward_xp_scale = self.reward.ExperienceRewardPercentage.BaseValueScaleConstant
+
 
     def disable(self) -> None:
         super().disable()
@@ -238,15 +292,20 @@ class Mission(Location):
             if not registry:
                 del _mission_registry[self.path]
 
-        if not self.alt:
-            self.uobject.bRepeatable = self.repeatable
-
         self.reward.RewardItems = self.reward_items
         self.reward.RewardItemPools = self.reward_pools
-        self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = self.reward_xp_scale
 
         if self.block_weapon:
             self.uobject.MissionWeapon = self.mission_weapon
+
+        if self.tags & Tag.Excluded:
+            return
+
+        if not self.alt:
+            self.uobject.bRepeatable = self.repeatable
+
+        self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = self.reward_xp_scale
+
 
     def __str__(self) -> str:
         return f"Mission: {self.name}"
@@ -539,6 +598,23 @@ class RollInsight(MissionGiver):
         return directives
 
 
+class TreeHugger(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("Dark_Forest_P")
+
+    def entered_map(self) -> None:
+        for pawn in get_pawns():
+            if pawn.AIClass and pawn.AIClass.Name == "CharClass_Aster_Treant_TreeHuggerNPC":
+                handle = (pawn.ConsumerHandle.PID,)
+                bpd = pawn.AIClass.BehaviorProviderDefinition
+                kernel = FindObject("BehaviorKernel", "GearboxFramework.Default__BehaviorKernel")
+
+                enable = bpd.BehaviorSequences[1].CustomEnableCondition
+                enable.EnableConditions = (enable.EnableConditions[0],)
+                kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "DuringMission", 2)
+                break
+
+
 class LostSouls(MissionGiver):
     def apply(self) -> UObject:
         directives = super().apply()
@@ -597,6 +673,22 @@ class OddestCouple(MissionObject):
         kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "S020_TurnIn", 1)
 
 
+class Sirentology(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("BackBurner_P")
+
+    def entered_map(self) -> None:
+        for pawn in get_pawns():
+            if pawn.AIClass and pawn.AIClass.Name == "CharClass_mone_GD_Lilith":
+                handle = (pawn.ConsumerHandle.PID,)
+                ai_bpd = pawn.AIClass.AIDef.BehaviorProviderDefinition
+                kernel = FindObject("BehaviorKernel", "GearboxFramework.Default__BehaviorKernel")
+
+                ai_bpd.BehaviorSequences[23].CustomEnableCondition.bComplete = True
+                kernel.ChangeBehaviorSequenceActivationStatus(handle, ai_bpd, "S050_GiveMission", 1)
+                break
+
+
 class EchoesOfThePast(MissionObject):
     def apply(self) -> UObject:
         echo = super().apply()
@@ -619,7 +711,7 @@ class GrandmaStoryRaid(MapDropper):
 
 """
 TODO
+delete non-UVHM xp when enabling mod
 make ulysses splat give bonus reward instance
-Tutorial popup on first dud item from mission?
-Tutorial pupup on first mission with multiple rewards?
+co-op crashes in Village_P (from Roll Insight?)
 """
