@@ -59,6 +59,7 @@ class Enemy(Location):
             if not matched_mission:
                 raise ValueError(f"Failed to match mission {self.mission}")
             
+            self.content = matched_mission.content
             tags |= matched_mission.tags
 
         if not (tags & defines.EnemyTags):
