@@ -342,8 +342,9 @@ class MissionObject(MissionStatusDelegate, MapDropper):
         return obj
     
     def entered_map(self) -> None:
-        self.apply()
-        # if get_missiontracker().GetMissionStatus(self.location.uobject) != 0:
+        missiondef = self.location.mission_dropper.uobject
+        if get_missiontracker().GetMissionStatus(missiondef) != 0:
+            self.apply()
 
     def completed(self) -> None:
         self.apply()
