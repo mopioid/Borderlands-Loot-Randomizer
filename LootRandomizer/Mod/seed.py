@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from unrealsdk import Log #type: ignore
+from unrealsdk import Log, GetEngine #type: ignore
 
 from . import defines, options, items, hints, enemies, missions, catalog
-from .defines import Tag, seeds_dir
+from .defines import Tag, mod_dir, seeds_dir
 from .locations import Location
 from .items import ItemPool
 
@@ -14,8 +14,8 @@ from typing import Callable, List, Optional, Sequence, Set
 from types import ModuleType
 
 
-CurrentVersion = 4
-SupportedVersions = (1,2,3,4)
+CurrentVersion = 5
+SupportedVersions = (1,2,3,4,5)
 
 
 AppliedSeed: Optional[Seed] = None
@@ -28,7 +28,7 @@ class SeedEntry:
     name: str
     tags: Tag
 
-    def __init__(self, name: str, tags: Tag) -> None:
+    def __init__(self, name: str, tags: Tag = Tag(0)) -> None:
         self.name = name; self.tags = tags
 
     def match_item(self) -> ItemPool:
@@ -115,6 +115,9 @@ class Seed:
         AppliedSeed = self
         AppliedTags = self.tags
 
+        if not defines.is_client():
+            options.mod_instance.SendSeed(self.string)
+
         self.version_module = importlib.import_module(f".seedversions.v{self.version}", __package__)
         version_items: Sequence[SeedEntry] = self.version_module.Items
         version_locations: Sequence[SeedEntry] = self.version_module.Locations
@@ -169,6 +172,8 @@ class Seed:
         if os.path.exists(path):
             return path
 
+        version_tags: Tag = self.version_module.Tags
+
         with open(path, 'w', encoding='utf-8') as file:
             item_warning = " (not all accessible)" if self.item_count > len(self.locations) else ""
 
@@ -177,16 +182,19 @@ class Seed:
                 f"Total locations: {len(self.locations)}\n"
                 f"Total items: {self.item_count}{item_warning}\n\n"
             )
-            for tag in Tag:
+            for tag in defines.TagList:
+                if tag not in version_tags:
+                    continue
+
                 caption = getattr(tag, "caption", None)
                 if caption:
                     file.write(f"{tag.caption}: {'On' if (tag in self.tags) else 'Off'}\n")
 
-            for tag in Tag:
+            for tag in defines.TagList:
                 if not tag & defines.ContentTags & self.tags:
                     continue
 
-                locations = tuple(location for location in self.locations if tag in location.tags)
+                locations = tuple(location for location in self.locations if tag in location.content)
                 if not len(locations):
                     continue
 
@@ -199,6 +207,9 @@ class Seed:
 
 
     def update_tracker(self, location: Location, drop: bool) -> None:
+        if not defines.is_client():
+            options.mod_instance.SendTracker(str(location), drop)
+
         if not (location.item and options.AutoLog.CurrentValue):
             return
         
@@ -273,20 +284,28 @@ class Seed:
 def generate_wikis(version: int) -> None:
     from html import escape
 
-    dummy_seed = Seed.Generate(defines.AllTags)
+    dummy_tags = Tag(0)
+    for tag in Tag:
+        if tag < Tag.Excluded:
+            dummy_tags |= tag
+
+    dummy_seed = Seed.Generate(dummy_tags)
     dummy_seed.apply()
     version_items: Sequence[SeedEntry] = dummy_seed.version_module.Items
     version_locations: Sequence[SeedEntry] = dummy_seed.version_module.Locations
 
-    with open(os.path.join(seeds_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
+    with open(os.path.join(mod_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
         for content_tag in Tag:
             content_title = getattr(content_tag, "content_title", None)
             if not content_title:
                 continue
 
-            locations = tuple(
-                location.match_location() for location in version_locations if content_tag & location.tags
-            )
+            locations: List[Location] = []
+            for entry in version_locations:
+                location = entry.match_location()
+                if content_tag & location.content:
+                    locations.append(location)
+
             if not locations:
                 continue
 
@@ -323,7 +342,7 @@ def generate_wikis(version: int) -> None:
                 file.write(f"| {category} | {escape(location.name)} | {rolls_string} | {settings_string} |\n")
                 
 
-    with open(os.path.join(seeds_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
+    with open(os.path.join(mod_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
         for hint in hints.Hint:
             if hint is hints.Hint.Dud:
                 continue
@@ -352,8 +371,13 @@ def generate_seedversion() -> None:
             "from ..seed import SeedEntry\n"
             "from ..defines import Tag\n"
             "\n\n"
-            "Items = (\n"
+            "Tags = "
         )
+
+        file.write("|".join(f"Tag.{tag.name}" for tag in Tag if tag < Tag.Excluded))
+
+        file.write(f"\n\n\n")
+        file.write(f"Items = (\n")
 
         for item in catalog.Items:
             tag_string = "|".join(f"Tag.{tag.name}" for tag in Tag if (tag & item.tags))
@@ -367,3 +391,9 @@ def generate_seedversion() -> None:
             file.write(f"    SeedEntry(\"{location}\", {tag_string}),\n")
 
         file.write(f")\n")
+
+"""
+TODO:
+- Add easter egg seeds?
+    Allegiance? (exclude uncompletable checks such as Commercial Appeal, X-Com, Rock Paper, Wand, trailer trashing)
+"""

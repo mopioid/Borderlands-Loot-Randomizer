@@ -81,10 +81,22 @@ def _SeedApplied() -> None:
         HintDisplay.CurrentValue = HintDisplay.Choices[0]
 
 
+def SaveSeedString(seed_string: str) -> None:
+    with open(seeds_file, 'a+') as file:
+        file.seek(0, 0)
+        seeds = file.read()
+
+        if len(seeds) > 0 and seeds[-1] not in "\n\r":
+            file.write("\n")
+
+        if seed_string not in seeds:
+            file.write(seed_string + "\n")
+
+
 def _NewSeedGenerateClicked() -> None:
     tags = Tag(0)
 
-    for option in _NewSeedOptions.Children:
+    for option in NewSeedOptions.Children:
         if isinstance(option, SeedOption) and option.CurrentValue == "On":
             tags |= option.tag
 
@@ -104,8 +116,7 @@ def _NewSeedGenerateClicked() -> None:
         1
     )
 
-    with open(seeds_file, 'a+') as file:
-        file.write(new_seed.string + "\n")
+    SaveSeedString(new_seed.string)
 
     new_seed.apply()
     _SeedApplied()
@@ -218,6 +229,22 @@ def _WillowScrollingListOnClikEvent(caller: UObject, function: UFunction, params
     return True
 
 
+def _PostLogin(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    if params.NewPlayer == defines.get_pc():
+        return True
+
+    if seed.AppliedSeed and not defines.is_client():
+        mod_instance.SendSeed(seed.AppliedSeed.string, PC = params.NewPlayer)
+
+    return True
+
+
+def _PostBeginPlay(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    NewSeedOptions.IsHidden = False
+    SelectSeedOptions.IsHidden = False
+    return True
+
+
 _callback_options: Set[CallbackField] = set()
 
 
@@ -320,7 +347,7 @@ _SeedsList = SeedListSpinner(
 )
 
 
-_NewSeedOptions = ModMenu.Options.Nested(
+NewSeedOptions = ModMenu.Options.Nested(
     Caption="New Seed",
     Description=(
         "Create a new seed. Each seed defines a shuffling of loot sources that is consistent each "
@@ -335,7 +362,7 @@ _EditSeedFileButton = CallbackField(
     Callback=lambda: os.startfile(seeds_file)
 )
 
-_SelectSeedOptions = CallbackNested(
+SelectSeedOptions = CallbackNested(
     Caption="Select Seed",
     Description=(
         "Select a seed from your list of saved seeds. Each seed defines a shuffling of loot "
@@ -388,9 +415,9 @@ RewardsTrainingSeen = ModMenu.Options.Hidden(
 
 
 Options = (
-    _NewSeedOptions,
+    NewSeedOptions,
     _EditSeedFileButton,
-    _SelectSeedOptions,
+    SelectSeedOptions,
     CallbackField(
         Caption="Open Seed Tracker",
         Description=(
@@ -463,23 +490,25 @@ def Enable():
             Log(error)
     
     categories: Dict[str, List[Tag]] = dict() #type: ignore
-    for tag in Tag:
+    for tag in defines.TagList:
         if hasattr(tag, "category"):
             tag_list = categories.setdefault(tag.category, [])
             tag_list.append(tag)
 
-    _NewSeedOptions.Children = []
+    NewSeedOptions.Children = []
 
     for category, tags in categories.items():
-        _NewSeedOptions.Children.append(SeedHeader(category))
+        NewSeedOptions.Children.append(SeedHeader(category))
         for tag in tags:
-            _NewSeedOptions.Children.append(SeedOption(tag))
+            NewSeedOptions.Children.append(SeedOption(tag))
 
-    _NewSeedOptions.Children.append(
+    NewSeedOptions.Children.append(
         CallbackField("GENERATE SEED", "Confirm selections and and generate the new seed.", _NewSeedGenerateClicked)
     )
 
     RunHook("WillowGame.WillowScrollingList.OnClikEvent", "LootRandomizer", _WillowScrollingListOnClikEvent)
+    RunHook("WillowGame.WillowGameInfo.PostLogin", "LootRandomizer", _PostLogin)
+    RunHook("WillowGame.WillowGameInfo.PostBeginPlay", "LootRandomizer", _PostBeginPlay)
 
 
 def Disable():
@@ -487,3 +516,5 @@ def Disable():
         seed.AppliedSeed.unapply()
 
     RemoveHook("WillowGame.WillowScrollingList.OnClikEvent", "LootRandomizer")
+    RemoveHook("WillowGame.WillowGameInfo.PostLogin", "LootRandomizer")
+    RemoveHook("WillowGame.WillowGameInfo.PostBeginPlay", "LootRandomizer")

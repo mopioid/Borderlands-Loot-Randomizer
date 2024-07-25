@@ -3,7 +3,7 @@ from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ig
 
 import enum, os
 
-from typing import Any, Callable, Generator, Iterator, List, Optional, Union
+from typing import Any, Callable, Generator, Iterator, List, Optional, Sequence, Tuple, Union
 
 
 Package: UPackage = ConstructObject("Package", None, "LootRandomizer")
@@ -67,9 +67,12 @@ class Tag(enum.IntFlag):
     DuplicateItems     = enum.auto()
     EnableHints        = enum.auto()
 
+    VehicleMission     = enum.auto()
+
     Excluded           = 0x1 << 36
 
-AllTags     = Tag(0)
+TagList: List[Tag] = []
+
 ContentTags = Tag(0)
 MissionTags = Tag(0)
 EnemyTags   = Tag(0)
@@ -110,6 +113,7 @@ for tag, category, default, caption, description in (
     (Tag.ShortMission,       Category.Missions, True,  "Short Missions",       "Assign items to short side missions."),
     (Tag.LongMission,        Category.Missions, True,  "Long Missions",        "Assign items to longer side missions. Longer mission turn-ins provide bonus loot options."),
     (Tag.VeryLongMission,    Category.Missions, False, "Very Long Missions",   "Assign items to very long side missions (including Headhunter missions). Very long mission turn-ins provide even more bonus loot options."),
+    (Tag.VehicleMission,     Category.Missions, True,  "Vehicle Missions",     "Assign items to missions primarily involving driving vehicles."),
     (Tag.Slaughter,          Category.Missions, False, "Slaughter Missions",   "Assign items to slaughter missions."),
 
     (Tag.UniqueEnemy,        Category.Enemies,  True,  "Unique Enemies",       "Assign items to refarmable enemies."),
@@ -130,7 +134,8 @@ for tag, category, default, caption, description in (
 ):
     tag.category = category; tag.default = default; tag.caption = caption; tag.description = description
 
-    AllTags |= tag
+    TagList.append(tag)
+
     if category == Category.Content:  ContentTags |= tag
     if category == Category.Missions: MissionTags |= tag
     if category == Category.Enemies:  EnemyTags   |= tag
@@ -142,6 +147,9 @@ def get_pc() -> UObject:
 
 def get_missiontracker() -> UObject:
     return get_pc().WorldInfo.GRI.MissionTracker
+
+def is_client() -> UObject:
+    return GetEngine().GetCurrentWorldInfo().NetMode == 3
 
 
 def set_command(uobject: UObject, attribute: str, value: str):
@@ -224,6 +232,24 @@ def tick_while(routine: Callable[[], bool]) -> None:
     RunHook("Engine.Interaction.Tick", f"LootRandomizer.{id(routine)}", hook)
 
 
+def spawn_loot(
+    pools: Sequence[UObject],
+    context: UObject,
+    location: Tuple[int, int, int],
+    velocity: Tuple[int, int, int] = (0, 0, 0),
+    radius: int = 0
+) -> None:
+    spawner = construct_object("Behavior_SpawnLootAroundPoint")
+
+    spawner.ItemPools = pools
+    spawner.CircularScatterRadius = radius
+    spawner.CustomLocation = (location, None, "")
+    spawner.SpawnVelocity = velocity
+    spawner.SpawnVelocityRelativeTo = 1
+
+    spawner.ApplyBehaviorToContext(context, (), None, None, None, ())
+
+
 def spawn_item(pool: UObject, context: UObject, callback: Callable[[UObject], None]) -> None:
     spawner = ConstructObject("Behavior_SpawnLootAroundPoint")
     spawner.ItemPools = (pool,)
@@ -232,8 +258,9 @@ def spawn_item(pool: UObject, context: UObject, callback: Callable[[UObject], No
 
     def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
         if caller is spawner:
-            if len(params.SpawnedLoot):
-                callback(params.SpawnedLoot[0].Inv)
+            spawned_loot = tuple(params.SpawnedLoot)
+            if len(spawned_loot):
+                callback(spawned_loot[0].Inv)
             RemoveHook("WillowGame.Behavior_SpawnLootAroundPoint.PlaceSpawnedItems", f"LootRandomizer.{id(spawner)}")
         return True
     RunHook("WillowGame.Behavior_SpawnLootAroundPoint.PlaceSpawnedItems", f"LootRandomizer.{id(spawner)}", hook)

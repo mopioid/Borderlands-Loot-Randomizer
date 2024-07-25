@@ -5,7 +5,7 @@ from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ig
 
 from . import seed, defines, locations
 from .missions import Mission
-from .defines import Tag, construct_object
+from .defines import Tag, construct_object, spawn_loot
 from .locations import Dropper, Location, MapDropper, RegistrantDropper
 from .items import ItemPool
 
@@ -30,13 +30,14 @@ class Enemy(Location):
         name: str,
         *droppers: Dropper,
         tags: Tag = Tag(0),
+        content: Tag = Tag(0),
         mission: Optional[str] = None,
         rarities: Optional[Sequence[int]] = None
     ) -> None:
         self.mission = mission
         self.specified_tags = tags
         self.specified_rarities = rarities
-        super().__init__(name, *droppers, tags=tags, rarities=rarities)
+        super().__init__(name, *droppers, tags=tags, content=content, rarities=rarities)
 
     def enable(self) -> None:
         from . import catalog
@@ -79,7 +80,7 @@ class Enemy(Location):
 
             if not rarities:               rarities += (15,)
 
-        if not (tags & defines.ContentTags):
+        if not (tags in defines.ContentTags):
             tags |= Tag.BaseGame
 
         self.tags = tags; self.rarities = rarities
@@ -115,6 +116,41 @@ class Pawn(RegistrantDropper):
         return True
 
 
+class Radio1340(MapDropper):
+    def __init__(self) -> None:
+        super().__init__("Sanctuary_P", "SanctuaryAir_P")
+
+    def entered_map(self) -> None:
+        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+            if (not caller.InteractiveObjectDefinition) or caller.InteractiveObjectDefinition.Name != "IO_MoxieRadio":
+                return True
+
+            tracker = defines.get_missiontracker()
+            objective = FindObject("MissionObjectiveDefinition", "GD_Z3_OutOfBody.M_OutOfBody:DestroyRadio")
+            if not tracker.IsMissionObjectiveActive(objective):
+                return True
+
+            gamestage_region = FindObject("WillowRegionDefinition", "GD_GameStages.Zone1.Dam")
+            _, level, _ = gamestage_region.GetRegionGameStage()
+
+            caller.ManuallyBalanceToRegionDef = gamestage_region
+            caller.ExpLevel = caller.GameStage = level
+
+            spawn_loot(
+                self.location.prepare_pools(),
+                caller,
+                (3539, 5261, 3703),
+            )
+
+            RemoveHook("WillowGame.WillowInteractiveObject.TakeDamage", f"LootRandomizer.{id(self)}")
+            return True
+
+        RunHook("WillowGame.WillowInteractiveObject.TakeDamage", f"LootRandomizer.{id(self)}", hook)
+
+    def exited_map(self) -> None:
+        RemoveHook("WillowGame.WillowInteractiveObject.TakeDamage", f"LootRandomizer.{id(self)}")
+
+
 class Leviathan(MapDropper):
     def __init__(self) -> None:
         super().__init__("Orchid_WormBelly_P")
@@ -130,15 +166,13 @@ class Leviathan(MapDropper):
                     break
                 pawn = pawn.NextPawn
 
-            spawner = construct_object("Behavior_SpawnLootAroundPoint")
-
-            spawner.ItemPools = self.location.prepare_pools()
-            spawner.SpawnVelocity = (-400, -1800, -400)
-            spawner.SpawnVelocityRelativeTo = 1
-            spawner.CustomLocation = ((1200, -66000, 3000), None, "")
-            spawner.CircularScatterRadius = 200
-
-            spawner.ApplyBehaviorToContext(pawn, (), None, None, None, ())
+            spawn_loot(
+                self.location.prepare_pools(),
+                pawn,
+                (1200, -66000, 3000),
+                (-400, -1800, -400),
+                200
+            )
             return True
 
         RunHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}", hook)
@@ -206,11 +240,13 @@ class Haderax(MapDropper):
         super().__init__("SandwormLair_P")
 
     def entered_map(self) -> None:
-        digicrate_peakopener = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_PeakOpener")
+        digicrate = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi")
+        # digicrate_peakopener = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_PeakOpener")
         digicrate_shield = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Shield")
         digicrate_artifact = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Articfact")
 
-        digicrate_peakopener.DefaultInteractiveObject = None
+        digicrate.DefaultInteractiveObject = None
+        # digicrate_peakopener.DefaultInteractiveObject = None
         digicrate_shield.DefaultInteractiveObject = None
         digicrate_artifact.DefaultInteractiveObject = None
 
@@ -287,3 +323,10 @@ def _pawn_died(caller: UObject, function: UFunction, params: FStruct) -> bool:
             item.bDropOnDeath = False
 
     return True
+
+
+"""
+TODO:
+    Fix leviathan's loot fling with smol items
+    Radio #1340 can be damaged multiple times during objective
+"""

@@ -27,6 +27,7 @@ class Other(Location):
         name: str,
         *droppers: Dropper,
         tags: Tag = Tag(0),
+        content: Tag = Tag(0),
         rarities: Optional[Sequence[int]] = None
     ) -> None:
         if not tags & defines.ContentTags:
@@ -40,7 +41,7 @@ class Other(Location):
             elif tags & Tag.LongMission:     rarities += (100,)
             elif tags & Tag.VeryLongMission: rarities += (100,100,100)
 
-        super().__init__(name, *droppers, tags=tags, rarities=rarities)
+        super().__init__(name, *droppers, tags=tags, content=content, rarities=rarities)
 
     def __str__(self) -> str:
         return f"Other: {self.name}"
@@ -179,9 +180,6 @@ LOGIC:
     pot o' gold requires pot o' gold
     peak enemies past OP 0 requires moxxi's endowment
     haderax launcher chest requires toothpick + retainer
-
-
-- torgue arena white gun chest
 
 - pot of gold "boosters"
 

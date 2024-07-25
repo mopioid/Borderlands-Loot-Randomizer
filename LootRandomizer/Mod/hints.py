@@ -297,9 +297,3 @@ def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FSt
         location.toggle_hint(False)
 
     return False
-
-
-"""
-TODO
-picking up dud make drunk
-"""

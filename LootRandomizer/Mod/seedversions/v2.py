@@ -2,6 +2,9 @@ from ..seed import SeedEntry
 from ..defines import Tag
 
 
+Tags = Tag.BaseGame|Tag.PiratesBooty|Tag.CampaignOfCarnage|Tag.HammerlocksHunt|Tag.DragonKeep|Tag.FightForSanctuary|Tag.BloodyHarvest|Tag.WattleGobbler|Tag.MercenaryDay|Tag.WeddingDayMassacre|Tag.SonOfCrawmerax|Tag.UVHMPack|Tag.DigistructPeak|Tag.ShortMission|Tag.LongMission|Tag.VeryLongMission|Tag.Slaughter|Tag.UniqueEnemy|Tag.SlowEnemy|Tag.RareEnemy|Tag.VeryRareEnemy|Tag.MobFarm|Tag.RaidEnemy|Tag.MissionEnemy|Tag.EvolvedEnemy|Tag.DigistructEnemy|Tag.Vendor|Tag.Miscellaneous|Tag.DuplicateItems|Tag.EnableHints
+
+
 Items = (
     SeedEntry("Blue Infiltrator / Beast / Banshee / Engineer / Slab / Roboteer", Tag.BaseGame),
     SeedEntry("Blue Killer / Berserker / Binder / Grenadier / Meat / Zapper", Tag.BaseGame),

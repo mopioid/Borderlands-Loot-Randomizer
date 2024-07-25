@@ -3,21 +3,12 @@ from __future__ import annotations
 from unrealsdk import Log, FindObject, FindAll, GetEngine, KeepAlive #type: ignore
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct #type: ignore
 
-from . import defines, options, items, locations
-from .defines import Tag, get_pawns, get_missiontracker
+from . import defines, options, items
+from .defines import Tag, is_client, get_pawns, get_missiontracker, spawn_loot
 from .defines import construct_object, construct_behaviorsequence_behavior
 from .locations import Location, Dropper, MapDropper, RegistrantDropper
 
 from typing import Callable, Dict, Generator, List, Optional, Sequence, Set
-
-
-_mission_registry: Dict[str, Set[Mission]] = dict()
-
-def _all_missions() -> Generator[Mission, None, None]:
-    for registry in _mission_registry.values():
-        for mission in registry:
-            if not (mission.tags & Tag.Excluded):
-                yield mission
 
 
 playthrough: int = -1
@@ -32,10 +23,10 @@ def PlaythroughChanged() -> None:
     playthrough = new_playthrough
 
     if playthrough == 2:
-        for mission in _all_missions():
+        for mission in MissionDropper.AllRepeatable():
             mission.reward.ExperienceRewardPercentage.BaseValueScaleConstant = mission.reward_xp_scale
     else:
-        for mission in _all_missions():
+        for mission in MissionDropper.AllRepeatable():
             mission.reward.ExperienceRewardPercentage.BaseValueScaleConstant = 0
     
 
@@ -75,13 +66,13 @@ def Disable() -> None:
 
 def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
     missiondef = params.Mission
-    registry = _mission_registry.get(UObject.PathName(missiondef))
+    registry = MissionDropper.Registries.get(UObject.PathName(missiondef))
     if not registry:
         return True
 
     delegates: List[Callable[[], None]] = []
-    for mission in registry:
-        for dropper in mission.droppers:
+    for mission_dropper in registry:
+        for dropper in mission_dropper.location.droppers:
             if isinstance(dropper, MissionStatusDelegate):
                 delegates.append(dropper.accepted)
 
@@ -96,7 +87,7 @@ def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> boo
 
 def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
     missiondef = params.Mission
-    registry = _mission_registry.get(UObject.PathName(missiondef))
+    registry = MissionDropper.Registries.get(UObject.PathName(missiondef))
     if not registry:
         return True
 
@@ -112,31 +103,31 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
         mission.reward.RewardItemPools = ()
 
     delegates = [revert]
-    mission: Optional[Mission] = None
+    mission: Optional[MissionDropper] = None
 
-    for registered_mission in registry:
-        for dropper in registered_mission.droppers:
+    for mission_dropper in registry:
+        for dropper in mission_dropper.location.droppers:
             if isinstance(dropper, MissionStatusDelegate):
                 delegates.append(dropper.completed)
 
-        if registered_mission.alt == alt_reward:
-            mission = registered_mission
+        if mission_dropper.alt == alt_reward:
+            mission = mission_dropper
 
     defines.do_next_tick(*delegates)
 
-    if not (mission and mission.item):
+    if not (mission and mission.location.item):
         return True
 
-    pool = mission.prepare_pools(1)[0]
+    pool = mission.location.prepare_pools(1)[0]
     mission.reward.RewardItemPools = (pool,)
 
-    if mission.item == items.DudItem:
+    if mission.location.item == items.DudItem:
         return True
 
     for pri in GetEngine().GetCurrentWorldInfo().GRI.PRIArray:
         pc = pri.Owner
 
-        bonuses = len(mission.rarities)
+        bonuses = len(mission.location.rarities)
         if pc is defines.get_pc():
             bonuses -= 1
         if not bonuses:
@@ -164,25 +155,32 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
                 pc.GetPawnInventoryManager().ClientAddItemToBackpack(definition_data, 1, 1)
 
         for _ in range(bonuses):
-            defines.spawn_item(mission.item.pool, pc, loot_callback)
+            defines.spawn_item(mission.location.item.pool, pc, loot_callback)
 
     return True
 
 
+def _itemdef_make_repeatable(itemdef: UObject) -> bool:
+    if not (itemdef and itemdef.MissionDirective):
+        return False
+
+    registry = MissionDropper.Registries.get(UObject.PathName(itemdef.MissionDirective))
+    if not registry:
+        return False
+    
+    for mission_dropper in registry:
+        if mission_dropper.make_repeatable:
+            return True
+
+    return False
+
+
 def _MissionDenyPickup(caller: UObject, function: UFunction, params: FStruct) -> bool:
     itemdef = caller.GetInventoryDefinition()
-    if not itemdef:
+    if not _itemdef_make_repeatable(itemdef):
         return True
 
-    inventories = MissionInventory.Registries.get(UObject.PathName(itemdef))
-    if not inventories:
-        return True
-
-    mission = next(iter(inventories)).location
-    if not isinstance(mission, Mission):
-        raise Exception(f"Found mission inventory dropper for non-mission {mission}")
-
-    if get_missiontracker().GetMissionStatus(mission.uobject) not in (0, 4):
+    if get_missiontracker().GetMissionStatus(itemdef.MissionDirective) not in (0, 4):
         return True
 
     # Don't judge me; this is literally how the game does it.
@@ -195,54 +193,47 @@ def _MissionDenyPickup(caller: UObject, function: UFunction, params: FStruct) ->
 
 def _PickupAssociated(caller: UObject, function: UFunction, params: FStruct) -> bool:
     itemdef = caller.GetInventoryDefinition()
-    if not (itemdef and UObject.PathName(itemdef) in MissionInventory.Registries):
+    if not _itemdef_make_repeatable(itemdef):
         return True
-    
+
     def enable_pickup(pickup = params.Pickup):
         pickup.SetPickupability(True)
-        GetEngine().GetCurrentWorldInfo().GRI.MissionTracker.RegisterMissionDirector(pickup)
+        if not is_client():
+            get_missiontracker().RegisterMissionDirector(pickup)
     defines.do_next_tick(enable_pickup)
     return True
 
 
-class Mission(Location):
-    path: str
+class MissionDropper(RegistrantDropper):
+    Registries = dict()
+
+    make_repeatable: bool = True
     alt: bool
     block_weapon: bool
 
     uobject: UObject
-
-    repeatable: bool
     mission_weapon: UObject
 
+    repeatable: bool
     reward_items: Sequence[UObject]
     reward_pools: Sequence[UObject]
-    reward_xp_scale: Optional[int] = None
+    reward_xp_scale: Optional[int]
 
-    def __init__(
-        self,
-        name: str,
-        path: str,
-        *droppers: Dropper,
+    def __init__(self,
+        *paths: str,
+        make_repeatable: bool = True,
         alt: bool = False,
         block_weapon: bool = True,
-        tags: Tag = Tag(0),
-        rarities: Optional[Sequence[int]] = None
     ) -> None:
-        self.path = path; self.alt = alt; self.block_weapon = block_weapon
+        self.make_repeatable = make_repeatable; self.alt = alt; self.block_weapon = block_weapon
+        super().__init__(*paths)
 
-        if not tags & defines.MissionTags:
-            tags |= Tag.ShortMission
-        if not tags & defines.ContentTags:
-            tags |= Tag.BaseGame
-
-        if not rarities:
-            rarities = [100]
-            if tags & Tag.LongMission:     rarities += (100,)
-            if tags & Tag.VeryLongMission: rarities += (100,100,100)
-            if tags & Tag.RaidEnemy:       rarities += (100,100,100)
-
-        super().__init__(name, *droppers, tags=tags, rarities=rarities)
+    @classmethod
+    def AllRepeatable(cls) -> Generator[MissionDropper, None, None]:
+        for registry in cls.Registries.values():
+            for mission in registry:
+                if mission.make_repeatable:
+                    yield mission
 
     @property
     def reward(self) -> FStruct:
@@ -251,10 +242,7 @@ class Mission(Location):
     def enable(self) -> None:
         super().enable()
 
-        registry = _mission_registry.setdefault(self.path, set())
-        registry.add(self)
-
-        self.uobject = FindObject("MissionDefinition", self.path)
+        self.uobject = FindObject("MissionDefinition", self.paths[0])
 
         self.reward_items = tuple(self.reward.RewardItems)
         for item in self.reward_items:
@@ -271,9 +259,6 @@ class Mission(Location):
             KeepAlive(self.mission_weapon)
             self.uobject.MissionWeapon = None
 
-        if self.tags & Tag.Excluded:
-            return
-
         if not self.alt:
             self.repeatable = self.uobject.bRepeatable
             self.uobject.bRepeatable = True
@@ -284,20 +269,11 @@ class Mission(Location):
     def disable(self) -> None:
         super().disable()
 
-        registry = _mission_registry.get(self.path)
-        if registry:
-            registry.discard(self)
-            if not registry:
-                del _mission_registry[self.path]
-
         self.reward.RewardItems = self.reward_items
         self.reward.RewardItemPools = self.reward_pools
 
         if self.block_weapon:
             self.uobject.MissionWeapon = self.mission_weapon
-
-        if self.tags & Tag.Excluded:
-            return
 
         if not self.alt:
             self.uobject.bRepeatable = self.repeatable
@@ -305,12 +281,38 @@ class Mission(Location):
         self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = self.reward_xp_scale
 
 
+
+class Mission(Location):
+    mission_dropper: MissionDropper
+    mission_droppers: Sequence[MissionDropper]
+
+    def __init__(
+        self,
+        name: str,
+        *droppers: Dropper,
+        tags: Tag = Tag(0),
+        content: Tag = Tag(0),
+        rarities: Optional[Sequence[int]] = None
+    ) -> None:
+        if not tags & defines.MissionTags:
+            tags |= Tag.ShortMission
+        if not tags & defines.ContentTags:
+            tags |= Tag.BaseGame
+
+        if not rarities:
+            rarities = [100]
+            if tags & Tag.LongMission:     rarities += (100,)
+            if tags & Tag.VeryLongMission: rarities += (100,100,100)
+            if tags & Tag.RaidEnemy:       rarities += (100,100,100)
+
+        self.mission_dropper, *_ = self.mission_droppers = tuple(
+            dropper for dropper in droppers if isinstance(dropper, MissionDropper)
+        )
+
+        super().__init__(name, *droppers, tags=tags, content=content, rarities=rarities)
+
     def __str__(self) -> str:
         return f"Mission: {self.name}"
-
-
-class MissionInventory(RegistrantDropper):
-    Registries = dict()
 
 
 class MissionStatusDelegate:
@@ -335,12 +337,13 @@ class MissionObject(MissionStatusDelegate, MapDropper):
         if obj:
             obj.SetUsability(True, 0)
             obj.SetMissionDirectivesUsability(1)
-            get_missiontracker().RegisterMissionDirector(obj)
+            if not is_client():
+                get_missiontracker().RegisterMissionDirector(obj)
         return obj
     
     def entered_map(self) -> None:
-        if get_missiontracker().GetMissionStatus(self.location.uobject) != 0:
-            self.apply()
+        self.apply()
+        # if get_missiontracker().GetMissionStatus(self.location.uobject) != 0:
 
     def completed(self) -> None:
         self.apply()
@@ -354,7 +357,8 @@ class MissionPickup(MissionObject):
             spawner.SetPickupStatus(True)
             if spawner.MissionPickup:
                 spawner.MissionPickup.SetPickupability(True)
-                get_missiontracker().RegisterMissionDirector(spawner.MissionPickup)
+                if not is_client():
+                    get_missiontracker().RegisterMissionDirector(spawner.MissionPickup)
         return spawner
 
 
@@ -373,9 +377,11 @@ class MissionGiver(MissionObject):
         if not giver:
             return
 
+        missiondef = self.location.mission_dropper.uobject
+
         matched_directive = False
         for directive in giver.MissionDirectives:
-            if directive.MissionDefinition == self.location.uobject:
+            if directive.MissionDefinition == missiondef:
                 directive.bBeginsMission = self.begins
                 directive.bEndsMission = self.ends
                 matched_directive = True
@@ -383,10 +389,11 @@ class MissionGiver(MissionObject):
 
         if not matched_directive:
             directives = defines.convert_struct(giver.MissionDirectives)
-            directives.append((self.location.uobject, self.begins, self.ends, 0))
+            directives.append((missiondef, self.begins, self.ends, 0))
             giver.MissionDirectives = directives
 
-        get_missiontracker().RegisterMissionDirector(giver)
+        if not is_client():
+            get_missiontracker().RegisterMissionDirector(giver)
         return giver
 
 
@@ -396,7 +403,8 @@ class DocMercy(MissionGiver):
     
     def apply(self) -> UObject:
         giver = super().apply()
-        get_missiontracker().UnregisterMissionDirector(giver)
+        if not is_client():
+            get_missiontracker().UnregisterMissionDirector(giver)
         return giver
 
 
@@ -407,7 +415,8 @@ class Loader1340(MapDropper):
         super().__init__("dam_p")
 
     def entered_map(self) -> None:
-        if get_missiontracker().GetMissionStatus(self.location.uobject) == 0:
+        missiondef = self.location.mission_dropper.uobject
+        if get_missiontracker().GetMissionStatus(missiondef) != 4:
             return
 
         toggle = FindObject("SeqAct_Toggle", "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqAct_Toggle_1")
@@ -499,6 +508,7 @@ class PoeticLicense(MapDropper):
 
         daisy_ai = FindObject("AIBehaviorProviderDefinition", "GD_Daisy.Character.AIDef_Daisy:AIBehaviorProviderDefinition_1")
         daisy_ai.BehaviorSequences[2].BehaviorData2[11].Behavior = construct_object("Behavior_Kill", daisy_ai)
+        daisy_ai.BehaviorSequences[2].BehaviorData2[15].Behavior.EventTag = None
         daisy_ai.BehaviorSequences[5].BehaviorData2[2].OutputLinks.ArrayIndexAndLength = 1
 
         seq_objective = FindObject("SeqAct_ApplyBehavior", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.PoeticLicense.SeqAct_ApplyBehavior_1")
@@ -511,8 +521,8 @@ class WrittenByTheVictor(MapDropper):
         super().__init__("HyperionCity_P")
 
     def entered_map(self) -> None:
-        missionevent = FindObject("WillowSeqEvent_MissionRemoteEvent", "HyperionCity_Dynamic.TheWorld:PersistentLevel.Main_Sequence.WrittenByVictor.WillowSeqEvent_MissionRemoteEvent_1")
-        missionevent.OutputLinks[0].Links = ()
+        buttonlocked = FindObject("Behavior_ChangeRemoteBehaviorSequenceState", "HyperionCity_Dynamic.TheWorld:PersistentLevel.Main_Sequence.WrittenByVictor.SeqAct_ApplyBehavior_2.Behavior_ChangeRemoteBehaviorSequenceState_190")
+        buttonlocked.Action = 2
 
 
 class ARealBoy(MapDropper):
@@ -531,15 +541,18 @@ class GreatEscape(MissionStatusDelegate, MapDropper):
         super().__init__("CraterLake_P")
 
     def completed(self) -> None:
-        self.location.uobject.bRepeatable = False
+        missiondef = self.location.mission_dropper.uobject
+        missiondef.bRepeatable = False
 
     def entered_map(self) -> None:
-        self.location.uobject.bRepeatable = True
+        missiondef = self.location.mission_dropper.uobject
+        missiondef.bRepeatable = True
 
         pawn = GetEngine().GetCurrentWorldInfo().PawnList
         while pawn:
             if pawn.AIClass and pawn.AIClass.Name == "CharClass_Ulysses":
-                get_missiontracker().RegisterMissionDirector(pawn)
+                if not is_client():
+                    get_missiontracker().RegisterMissionDirector(pawn)
                 break
             pawn = pawn.NextPawn
 
@@ -548,6 +561,29 @@ class GreatEscape(MissionStatusDelegate, MapDropper):
 
         ulysses_savestate = FindObject("SeqEvent_RemoteEvent", "CraterLake_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Ulysess.SeqEvent_RemoteEvent_1")
         ulysses_savestate.OutputLinks[0].Links = ()
+
+
+        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+            if caller.AIClass.Name != "CharClass_Ulysses":
+                return True
+
+            for obj in defines.get_pc().GetWillowGlobals().ClientInteractiveObjects:
+                if obj and obj.InteractiveObjectDefinition and obj.InteractiveObjectDefinition.Name == "InteractiveObj_VendingMachine_HealthItems":
+                    break
+
+            spawn_loot(
+                self.location.prepare_pools(),
+                obj,
+                location=(26075, 25255, 10026),
+                velocity=(-855, 565, -3),
+            )
+
+            return True
+
+        RunHook("WillowGame.WillowAIPawn.Died", f"LootRandomizer.{id(self)}", hook)
+        
+    def exited_map(self) -> None:
+        RemoveHook("WillowGame.WillowAIPawn.Died", f"LootRandomizer.{id(self)}")
 
 
 class MessageInABottle(MapDropper, MissionStatusDelegate):
@@ -562,7 +598,8 @@ class MessageInABottle(MapDropper, MissionStatusDelegate):
     def accepted(self) -> None:
         for chest in FindAll("WillowInteractiveObject"):
             if UObject.PathName(chest.InteractiveObjectDefinition) == "GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot":
-                directive = (self.location.uobject, False, True)
+                missiondef = self.location.mission_dropper.uobject
+                directive = (missiondef, False, True)
                 chest.AddMissionDirective(directive, True)
 
 
@@ -591,7 +628,8 @@ class RollInsight(MissionGiver):
         kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "TurnIn", 1)
 
         die.SetMissionDirectivesUsability(1)
-        get_missiontracker().RegisterMissionDirector(die)
+        if not is_client():
+            get_missiontracker().RegisterMissionDirector(die)
 
         return directives
 
@@ -623,10 +661,12 @@ class LostSouls(MissionGiver):
                 kernel = FindObject("BehaviorKernel", "GearboxFramework.Default__BehaviorKernel")
                 kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Mission", 1)
                 pawn.SetUsable(True, None, 0)
-                get_missiontracker().RegisterMissionDirector(pawn)
+                if not is_client():
+                    get_missiontracker().RegisterMissionDirector(pawn)
 
     def entered_map(self) -> None:
-        if get_missiontracker().GetMissionStatus(self.location.uobject) == 4:
+        missiondef = self.location.mission_dropper.uobject
+        if get_missiontracker().GetMissionStatus(missiondef) == 4:
             skel_den = FindObject("PopulationOpportunityDen", "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_19")
             skel_den.IsEnabled = True
             knight_den = FindObject("PopulationOpportunityDen", "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_13")
@@ -640,7 +680,8 @@ class MyDeadBrother(MapDropper):
         super().__init__("Dungeon_P")
 
     def entered_map(self) -> None:
-        if get_missiontracker().GetMissionStatus(self.location.uobject) != 4:
+        missiondef = self.location.mission_dropper.uobject
+        if get_missiontracker().GetMissionStatus(missiondef) != 4:
             return
 
         simon_enabled = FindObject("BehaviorSequenceEnableByMission", "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5.BehaviorSequenceEnableByMission_9")
@@ -705,11 +746,3 @@ class GrandmaStoryRaid(MapDropper):
         granma_ai = FindObject("AIBehaviorProviderDefinition", "GD_Allium_TorgueGranma.Character.AIDef_Torgue:AIBehaviorProviderDefinition_0")
         granma_ai.BehaviorSequences[1].EventData2[0].OutputLinks.ArrayIndexAndLength = 655361
         granma_ai.BehaviorSequences[1].EventData2[3].OutputLinks.ArrayIndexAndLength = 655361
-
-
-"""
-TODO
-delete non-UVHM xp when enabling mod
-make ulysses splat give bonus reward instance
-co-op crashes in Village_P (from Roll Insight?)
-"""

@@ -105,7 +105,7 @@ class ItemPool:
         return self._pool
     
     def apply(self, tags: Tag) -> None:
-        self.applied_items = [item for item in self.items if item.content in tags]
+        self.applied_items = [item for item in self.items if item.content & tags]
 
         if len(self.applied_items) < len(self.items):
             if self.fallback and self.fallback.content in tags:
