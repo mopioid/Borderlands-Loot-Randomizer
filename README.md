@@ -26,7 +26,7 @@ To get started playing Loot Randomizer, first enable the mod from the Mods menu 
 
 Next, navigate to Options > Mods, and you will see a section for Loot Randomizer. Begin by clicking "New Seed," configuring your preferred options, and clicking "Generate" to create and apply it. You can now start exploring in game!
 
-To learn more about the seed you just created, navigate to Options > Mods > Loot Randomizer > Select Seed, and select the "View Seed Locations" button. This will open a text file listing every possible drop source that you can explore.
+To learn more about the seed you just created, navigate to Options > Mods > Loot Randomizer, and select the "View Seed Tracker" button. This will open a text file listing every possible drop source that you can explore, and will also be updated with information on their drops as you learn it during gameplay.
 
 To learn more about the items, locations, and seed generation in Loot Randomizer, see:
 
