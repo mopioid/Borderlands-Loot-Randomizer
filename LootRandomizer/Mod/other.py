@@ -1,9 +1,8 @@
-from unrealsdk import Log, FindObject #type: ignore
-from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
+from unrealsdk import FindObject
+from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
-from . import defines
-from .defines import Tag, do_next_tick
-from .locations import Dropper, Location, MapDropper, RegistrantDropper
+from .defines import *
+from .locations import Location, RegistrantDropper
 
 from typing import Optional, Sequence
 
@@ -22,26 +21,19 @@ def Disable() -> None:
 
 
 class Other(Location):
-    def __init__(
-        self,
-        name: str,
-        *droppers: Dropper,
-        tags: Tag = Tag(0),
-        content: Tag = Tag(0),
-        rarities: Optional[Sequence[int]] = None
-    ) -> None:
-        if not tags & defines.ContentTags:
-            tags |= Tag.BaseGame
-        if not tags & defines.OtherTags:
-            tags |= Tag.Miscellaneous
+    def enable(self) -> None:
+        super().enable()
 
-        if not rarities:
-            rarities = [100]
-            if   tags & Tag.Vendor:          rarities *= 8
-            elif tags & Tag.LongMission:     rarities += (100,)
-            elif tags & Tag.VeryLongMission: rarities += (100,100,100)
+        if not (self.tags & ContentTags):
+            self.tags |= Tag.BaseGame
+        if not (self.tags & OtherTags):
+            self.tags |= Tag.Miscellaneous
 
-        super().__init__(name, *droppers, tags=tags, content=content, rarities=rarities)
+        if not self.specified_rarities:
+            self.rarities = [100]
+            if self.tags & getattr(Tag, "Vendor", Tag.Excluded): self.rarities *= 8
+            elif self.tags & Tag.LongMission: self.rarities += (100,)
+            elif self.tags & Tag.VeryLongMission: self.rarities += (100,100,100)
 
     def __str__(self) -> str:
         return f"Other: {self.name}"
@@ -59,14 +51,14 @@ class VendingMachine(RegistrantDropper):
     def inject(self, balance: UObject) -> None:
         if self.conditional:
             conditional = FindObject("AttributeExpressionEvaluator", self.conditional)
-            conditional.Expression.ConstantOperand2 = -1
+            if conditional:
+                conditional.Expression.ConstantOperand2 = -1
 
-        pool = self.location.prepare_pools(1, False)[0]
+        pool = self.location.prepare_pools(1)[0]
 
-        if pool:
-            pool.Quantity.BaseValueConstant = len(self.location.rarities) - 1
-            def revert(): pool.Quantity.BaseValueConstant = 1
-            defines.do_next_tick(revert)
+        pool.Quantity.BaseValueConstant = len(self.location.rarities) - 1
+        def revert(): pool.Quantity.BaseValueConstant = 1
+        do_next_tick(revert)
 
         balance.DefaultLoot[0].ItemAttachments[0].ItemPool = pool
         balance.DefaultLoot[1].ItemAttachments[0].ItemPool = pool
@@ -94,44 +86,6 @@ class Attachment(RegistrantDropper):
             obj_attachments[index].ItemPool = pool
 
 
-class MichaelMamaril(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("Sanctuary_P")
-
-    def entered_map(self) -> None:
-        switch = FindObject("SeqAct_RandomSwitch", "Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0")
-        switch.LinkCount = 2
-
-
-class MichaelMAirmaril(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("SanctuaryAir_P")
-
-    def entered_map(self) -> None:
-        switch = FindObject("SeqAct_RandomSwitch", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0")
-        switch.LinkCount = 2
-
-
-class DahlAbandonGrave(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("OldDust_P")
-
-    def entered_map(self) -> None:
-        grave_bpd = FindObject("BehaviorProviderDefinition", "GD_Anemone_Balance_Treasure.InteractiveObjects.InteractiveObj_Brothers_Pile:BehaviorProviderDefinition_13")
-        grave_bpd.BehaviorSequences[2].BehaviorData2[3].Behavior = grave_bpd.BehaviorSequences[2].BehaviorData2[5].Behavior
-
-
-class ButtstallionWithAmulet(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("BackBurner_P")
-
-    def entered_map(self) -> None:
-        butt_ai = FindObject("AIBehaviorProviderDefinition", "GD_Anem_ButtStallion.Character.AIDef_Anem_ButtStallion:AIBehaviorProviderDefinition_1")
-        butt_ai.BehaviorSequences[5].BehaviorData2[20].Behavior = butt_ai.BehaviorSequences[5].BehaviorData2[26].Behavior
-        butt_ai.BehaviorSequences[5].BehaviorData2[20].LinkedVariables.ArrayIndexAndLength = 0
-        butt_ai.BehaviorSequences[5].BehaviorData2[20].OutputLinks.ArrayIndexAndLength = butt_ai.BehaviorSequences[5].BehaviorData2[26].OutputLinks.ArrayIndexAndLength
-
-
 def _Behavior_AttachItems(caller: UObject, function: UFunction, params: FStruct) -> bool:
     obj = params.ContextObject
     if not obj and obj.BalanceDefinitionState:
@@ -141,7 +95,7 @@ def _Behavior_AttachItems(caller: UObject, function: UFunction, params: FStruct)
     if not balance:
         return True
 
-    attachments = Attachment.Registries.get(balance.Name)
+    attachments = Attachment.Registrants(balance.Name)
     if attachments:
         next(iter(attachments)).inject(obj)
 
@@ -158,19 +112,21 @@ def _PopulationFactoryVendingMachine(caller: UObject, function: UFunction, param
 
 def _GrantNewMarketingCodeBonuses(caller: UObject, function: UFunction, params: FStruct) -> bool:
     premier = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_PremierClub")
+    if premier:
+        premier_items = tuple(premier.UnlockItems[0].UnlockItems)
+        premier.UnlockItems[0].UnlockItems = ()
+        def revert_premier(premier_items: Sequence[UObject] = premier_items):
+            premier.UnlockItems[0].UnlockItems = premier_items
+        do_next_tick(revert_premier)
+
     collectors = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_Collectors")
+    if collectors:
+        collectors_items = tuple(collectors.UnlockItems[0].UnlockItems)
+        collectors.UnlockItems[0].UnlockItems = ()
+        def revert_collectors(collectors_items: Sequence[UObject] = collectors_items):
+            collectors.UnlockItems[0].UnlockItems = collectors_items
+        do_next_tick(revert_collectors)
 
-    premier_items = tuple(premier.UnlockItems[0].UnlockItems)
-    collectors_items = tuple(collectors.UnlockItems[0].UnlockItems)
-
-    premier.UnlockItems[0].UnlockItems = ()
-    collectors.UnlockItems[0].UnlockItems = ()
-
-    def revert_unlocks(premier_items = premier_items, collectors_items = collectors_items) -> None:
-        premier.UnlockItems[0].UnlockItems = premier_items
-        collectors.UnlockItems[0].UnlockItems = collectors_items
-
-    do_next_tick(revert_unlocks)
     return True
 
 

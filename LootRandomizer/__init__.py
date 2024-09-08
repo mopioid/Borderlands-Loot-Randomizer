@@ -1,9 +1,6 @@
-from unrealsdk import Log, GetEngine, UObject  #type: ignore
+from unrealsdk import UObject
 
-from Mods import ModMenu #type: ignore
-
-from typing import Optional
-
+from Mods import ModMenu
 
 if __name__ == "__main__":
     for mod in ModMenu.Mods:
@@ -16,30 +13,44 @@ if __name__ == "__main__":
         _this_module = mod.__class__.__module__
         break
 
-    from Mods.LootRandomizer.Mod import options, items, hints #type: ignore
-    from Mods.LootRandomizer.Mod import locations, enemies, missions, other, catalog, seed #type: ignore
+    # TODO: remove
+    from Mods.LootRandomizer.Mod import seed
+    # seed.generate_seedversion()
+    # seed.generate_wikis(1)
 
     import sys, importlib
+
     for submodule_name in (
-        "defines", "seed", "options", "hints", "items", "locations", "missions", "enemies", "other",
-        "catalog", "seedversions.v1", "seedversions.v2", "seedversions.v3", "seedversions.v4",
-        "seedversions.v5",
+        # "defines", "seed", "options", "hints", "items", "locations", "missions", "enemies", "other",
+        "defines", "options", "hints", "items", "locations", "enemies", "missions", "other", "seed"
+
+        "bl2", "bl2.items", "bl2.locations",
+        "bl2.v1", "bl2.v2", "bl2.v3", "bl2.v4", "bl2.v5", "bl2.v6", "bl2.v7", "bl2.v8", "bl2.v9",
+
+        "tps", "tps.items", "tps.locations",
+        "tps.v1", "tps.v2", "tps.v3", "tps.v4", "tps.v5", "tps.v6", "tps.v7", "tps.v8", "tps.v9",
     ):
         module = sys.modules.get("Mods.LootRandomizer.Mod." + submodule_name)
         if module:
             importlib.reload(module)
-else:
-    from .Mod import options, items, hints
-    from .Mod import locations, enemies, missions, other, catalog, seed
 
-from typing import Sequence
+
+from typing import Optional, Sequence
+
+from Mods.LootRandomizer.Mod.defines import *
+from Mods.LootRandomizer.Mod import options, hints, items, locations, enemies, missions, other, seed
+if   BL2: from Mods.LootRandomizer.Mod.bl2.locations import Locations
+elif TPS: from Mods.LootRandomizer.Mod.tps.locations import Locations
+else:
+    raise Exception(f"Loot Randomizer is not available for {ModMenu.Game.GetCurrent().name}")
 
 
 class LootRandomizer(ModMenu.SDKMod):
     Name: str = "Loot Randomizer"
-    Version: str = "1.2"
+    Version: str = "1.6"
     Description: str = "Create seeds to shuffle items into new farm locations."
     Author: str = "mopioid"
+    SupportedGames: ModMenu.Game = ModMenu.Game.BL2 | ModMenu.Game.TPS
     Types: ModMenu.ModTypes = ModMenu.ModTypes.Gameplay
     SaveEnabledState: ModMenu.EnabledSaveType = ModMenu.EnabledSaveType.LoadOnMainMenu
 
@@ -47,7 +58,7 @@ class LootRandomizer(ModMenu.SDKMod):
 
 
     def Enable(self):
-        for location in catalog.Locations:
+        for location in Locations:
             location.enable()
         hints.Enable()
         items.Enable()
@@ -66,7 +77,7 @@ class LootRandomizer(ModMenu.SDKMod):
         locations.Disable()
         items.Disable()
         hints.Disable()
-        for location in catalog.Locations:
+        for location in Locations:
             location.disable()
         super().Disable()
 
@@ -89,7 +100,7 @@ class LootRandomizer(ModMenu.SDKMod):
 options.mod_instance = LootRandomizer()
 
 if __name__ == "__main__":
-    try: options.mod_instance.__class__.__module__ = _this_module
+    try: options.mod_instance.__class__.__module__ = _this_module #type: ignore
     except: pass
     ModMenu.RegisterMod(options.mod_instance)
     options.mod_instance.Enable()

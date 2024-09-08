@@ -1,134 +1,10 @@
-from unrealsdk import FindObject, KeepAlive #type: ignore
-from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
+from unrealsdk import FindObject, KeepAlive
+from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
-from . import seed, options, items
-from .defines import construct_object, set_command, show_dialog
+from . import seed, options
+from .defines import *
 
-import enum
-
-from typing import Callable, Optional
-
-
-class Hint(str, enum.Enum):
-    formatter: Callable[[str], str]
-
-    Dud = "Nothing"
-
-    PurplePistol = "Purple Pistol"
-    UniquePistol = "Unique Pistol"
-    LegendaryPistol = "Legendary Pistol"
-
-    PurpleAR = "Purple Assault Rifle"
-    UniqueAR = "Unique Assault Rifle"
-    LegendaryAR = "Legendary Assault Rifle"
-
-    PurpleShotgun = "Purple Shotgun"
-    UniqueShotgun = "Unique Shotgun"
-    LegendaryShotgun = "Legendary Shotgun"
-
-    PurpleSMG = "Purple SMG"
-    UniqueSMG = "Unique SMG"
-    LegendarySMG = "Legendary SMG"
-
-    PurpleSniper = "Purple Sniper Rifle"
-    UniqueSniper = "Unique Sniper Rifle"
-    LegendarySniper = "Legendary Sniper Rifle"
-
-    PurpleLauncher = "Purple Rocket Launcher"
-    UniqueLauncher = "Unique Rocket Launcher"
-    LegendaryLauncher = "Legendary Rocket Launcher"
-
-    EtechWeapon = "E-tech Weapon"
-    PearlescentWeapon = "Pearlescent Weapon"
-    SeraphWeapon = "Seraph Weapon"
-    EffervescentWeapon = "Effervescent Weapon"
-
-    PurpleShield = "Purple Shield"
-    UniqueShield = "Unique Shield"
-    LegendaryShield = "Legendary Shield"
-
-    BlueClassMod = "Blue Class Mod"
-    PurpleClassMod = "Purple Class Mod"
-    LegendaryClassMod = "Legendary Class Mod"
-
-    PurpleGrenade = "Purple Grenade"
-    UniqueGrenade = "Unique Grenade"
-    LegendaryGrenade = "Legendary Grenade"
-
-    PurpleRelic = "Purple Relic"
-    UniqueRelic = "Unique Relic"
-    EtechRelic = "E-tech Relic"
-
-    SeraphItem = "Seraph Item"
-    EffervescentItem = "Effervescent Item"
-
-
-def _format_dud         (string: str) -> str: return f"<font color='#bc9898'>{string}</font>"
-def _format_blue        (string: str) -> str: return f"<font color='#3c8eff'>{string}</font>"
-def _format_purple      (string: str) -> str: return f"<font color='#a83fe5'>{string}</font>"
-def _format_etech       (string: str) -> str: return f"<font color='#ca00a8'>{string}</font>"
-def _format_legendary   (string: str) -> str: return f"<font color='#ffb400'>{string}</font>"
-def _format_unique      (string: str) -> str: return f"<font color='#dc4646'>{string}</font>"
-def _format_seraph      (string: str) -> str: return f"<font color='#ff9ab8'>{string}</font>"
-def _format_pearlescent (string: str) -> str: return f"<font color='#00ffff'>{string}</font>"
-def _format_effervescent(string: str) -> str:
-    colors = ('ffadad',  'ffd6a5',  'fdffb6',  'caffbf',  '9bf6ff',  'a0c4ff',  'bdb2ff', 'ffc6ff')
-    return "".join(
-        f"<font color='#{colors[index % len(colors)]}'>{character}</font>"
-        for index, character in enumerate(string)
-    )
-
-
-Hint.Dud.formatter = _format_dud
-
-Hint.BlueClassMod.formatter = _format_blue
-Hint.PurpleClassMod.formatter = _format_purple
-Hint.LegendaryClassMod.formatter = _format_legendary
-
-Hint.PurpleShield.formatter = _format_purple
-Hint.UniqueShield.formatter = _format_unique
-Hint.LegendaryShield.formatter = _format_legendary
-
-Hint.PurpleRelic.formatter = _format_purple
-Hint.UniqueRelic.formatter = _format_unique
-Hint.EtechRelic.formatter = _format_etech
-
-Hint.PurpleGrenade.formatter = _format_purple
-Hint.UniqueGrenade.formatter = _format_unique
-Hint.LegendaryGrenade.formatter = _format_legendary
-
-Hint.PurplePistol.formatter = _format_purple
-Hint.UniquePistol.formatter = _format_unique
-Hint.LegendaryPistol.formatter = _format_legendary
-
-Hint.PurpleAR.formatter = _format_purple
-Hint.UniqueAR.formatter = _format_unique
-Hint.LegendaryAR.formatter = _format_legendary
-
-Hint.PurpleShotgun.formatter = _format_purple
-Hint.UniqueShotgun.formatter = _format_unique
-Hint.LegendaryShotgun.formatter = _format_legendary
-
-Hint.PurpleSMG.formatter = _format_purple
-Hint.UniqueSMG.formatter = _format_unique
-Hint.LegendarySMG.formatter = _format_legendary
-
-Hint.PurpleSniper.formatter = _format_purple
-Hint.UniqueSniper.formatter = _format_unique
-Hint.LegendarySniper.formatter = _format_legendary
-
-Hint.PurpleLauncher.formatter = _format_purple
-Hint.UniqueLauncher.formatter = _format_unique
-Hint.LegendaryLauncher.formatter = _format_legendary
-
-Hint.EtechWeapon.formatter = _format_etech
-Hint.PearlescentWeapon.formatter = _format_pearlescent
-
-Hint.SeraphItem.formatter = _format_seraph
-Hint.SeraphWeapon.formatter = _format_seraph
-
-Hint.EffervescentItem.formatter = _format_effervescent
-Hint.EffervescentWeapon.formatter = _format_effervescent
+from typing import Optional
 
 
 DudDescriptions = (
@@ -164,22 +40,23 @@ DudDescriptions = (
     "I don't want to live on this planet anymore...",
     "GOOD. BUT WHERE IS GUN PILE?",
     "Have you seen my gun?",
+    "Reduce, Reuse, Recycle!",
 )
 
 
-inventory_template: UObject = None
-useitem_template: UObject = None
-presentation_template: UObject = None
-custompresentation_template: UObject = None
+inventory_template: Optional[UObject] = None
+useitem_template: Optional[UObject] = None
+presentation_template: Optional[UObject] = None
+custompresentation_template: Optional[UObject] = None
 
-hintitem_mesh: UObject = None
-duditem_mesh: UObject = None
-hintitem_pickupflag: UObject = None
-duditem_pickupflag: UObject = None
+hintitem_mesh: Optional[UObject] = None
+duditem_mesh: Optional[UObject] = None
+hintitem_pickupflag: Optional[UObject] = None
+duditem_pickupflag: Optional[UObject] = None
 
-useitem_behavior: UObject = None
+useitem_behavior: Optional[UObject] = None
 
-padding_pool: UObject = None
+padding_pool: UObject
 
 
 def Enable() -> None:
@@ -195,9 +72,8 @@ def Enable() -> None:
     inventory_template = construct_object(original, "Hint_Inventory_Default")
     padding = construct_object(original, padding_pool)
 
-    inventory_template.Manufacturers = ((
-        FindObject("ManufacturerDefinition", "GD_Currency.Manufacturers.Cash_Manufacturer"),
-    ),)
+    manufacturer = FindObject("ManufacturerDefinition", "GD_Currency.Manufacturers.Cash_Manufacturer"),
+    inventory_template.Manufacturers = ((manufacturer),)
 
     original = FindObject("UsableItemDefinition", "GD_BuffDrinks.A_Item.BuffDrink_Toughness")
     useitem_template = construct_object(original, "Hint_Item_Default")
@@ -252,6 +128,8 @@ def ResetDismissed() -> None:
             location.toggle_hint(True)
 
 def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FStruct) -> bool:
+    from . import items
+
     if caller is not useitem_behavior:
         return True
 
@@ -294,6 +172,6 @@ def _Behavior_LocalCustomEvent(caller: UObject, function: UFunction, params: FSt
         options.SaveSettings()
 
     else:
-        location.toggle_hint(False)
+        matched_location.toggle_hint(False)
 
     return False

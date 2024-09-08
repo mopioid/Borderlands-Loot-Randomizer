@@ -1,20 +1,24 @@
 from __future__ import annotations
 
-from unrealsdk import Log, FindObject, GetEngine #type: ignore
-from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
+from unrealsdk import Log, FindObject, GetEngine
+from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
-from Mods import ModMenu #type: ignore
+from Mods import ModMenu
 
-from .defines import Tag, seeds_file, seeds_dir, show_dialog, show_confirmation
+from . import hints, seed
+from .defines import *
 from .seed import Seed
-from . import defines, hints, seed
 
 import os
 
-from typing import Callable, Dict, List, Optional, Sequence, Set
+from typing import Callable, Dict, List, Optional, Sequence, Set, Union
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .. import LootRandomizer
 
 
-mod_instance: ModMenu.SDKMod
+mod_instance: LootRandomizer
+
 
 def SaveSettings() -> None:
     ModMenu.SaveModSettings(mod_instance)
@@ -56,7 +60,7 @@ def _LoadSeeds() -> Sequence[str]:
 
 
 def _ReloadSeeds() -> None:
-    _SeedsList._LootRandomizer_auto_commit = False
+    _SeedsList.LootRandomizer_auto_commit = False
     selected_seed = _SeedsList.CurrentValue
 
     _SeedsList.Choices = _LoadSeeds()
@@ -123,7 +127,7 @@ def _NewSeedGenerateClicked() -> None:
 
 
 def _SelectSeedApplyClicked() -> None:
-    seed = Seed.FromString(_SeedsList._LootRandomizer_staged)
+    seed = Seed.FromString(_SeedsList.LootRandomizer_staged)
 
     try: seed.apply()
     except Exception as error:
@@ -154,7 +158,7 @@ def _PopulateHintsClicked() -> None:
         )
         return
 
-    def confirmed(seed = seed.AppliedSeed) -> None:
+    def confirmed(seed: Seed = seed.AppliedSeed) -> None:
         seed.populate_hints()
         show_dialog(
             "Filled In Tracker Hints",
@@ -183,7 +187,7 @@ def _PopulateSpoilersClicked() -> None:
         )
         return
 
-    def confirmed(seed = seed.AppliedSeed) -> None:
+    def confirmed(seed: Seed = seed.AppliedSeed) -> None:
         seed.populate_spoilers()
         show_dialog(
             "Filled In Tracker Spoilers",
@@ -230,10 +234,10 @@ def _WillowScrollingListOnClikEvent(caller: UObject, function: UFunction, params
 
 
 def _PostLogin(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    if params.NewPlayer == defines.get_pc():
+    if params.NewPlayer == get_pc():
         return True
 
-    if seed.AppliedSeed and not defines.is_client():
+    if seed.AppliedSeed and not is_client():
         mod_instance.SendSeed(seed.AppliedSeed.string, PC = params.NewPlayer)
 
     return True
@@ -245,7 +249,7 @@ def _PostBeginPlay(caller: UObject, function: UFunction, params: FStruct) -> boo
     return True
 
 
-_callback_options: Set[CallbackField] = set()
+_callback_options: Set[Union[CallbackField, CallbackNested]] = set()
 
 
 class CallbackField(ModMenu.Options.Field):
@@ -306,8 +310,8 @@ class CallbackSpinner(ModMenu.Options.Spinner):
 
 class SeedListSpinner(ModMenu.Options.Spinner):
     _LootRandomizer_value: str
-    _LootRandomizer_staged: str
-    _LootRandomizer_auto_commit: bool = True
+    LootRandomizer_staged: str
+    LootRandomizer_auto_commit: bool = True
 
     def __init__(
         self,
@@ -320,7 +324,7 @@ class SeedListSpinner(ModMenu.Options.Spinner):
         super().__init__(Caption, Description, Choices[0], Choices, IsHidden=IsHidden)
         self.StartingValue = ""
         self._LootRandomizer_value = ""
-        self._LootRandomizer_staged = ""
+        self.LootRandomizer_staged = ""
 
     @property
     def CurrentValue(self) -> str:
@@ -328,15 +332,15 @@ class SeedListSpinner(ModMenu.Options.Spinner):
     
     @CurrentValue.setter
     def CurrentValue(self, value: str) -> None:
-        self._LootRandomizer_staged = value
-        if self._LootRandomizer_auto_commit:
+        self.LootRandomizer_staged = value
+        if self.LootRandomizer_auto_commit:
             self._LootRandomizer_value = value
 
     def commit_CurrentValue(self, value: Optional[str] = None) -> None:
         if value is None:
-            self._LootRandomizer_value = self._LootRandomizer_staged
+            self._LootRandomizer_value = self.LootRandomizer_staged
         else:
-            self._LootRandomizer_staged = value
+            self.LootRandomizer_staged = value
             self._LootRandomizer_value = value
 
 
@@ -463,7 +467,7 @@ class SeedHeader(ModMenu.Options.Field):
 class SeedOption(ModMenu.Options.Spinner):
     tag: Tag
     def __init__(self, tag: Tag) -> None:
-        if (tag & defines.ContentTags) and not (tag & OwnedContent):
+        if (tag & ContentTags) and not (tag & OwnedContent):
             StartingValue = "Off"
             Choices: Sequence[str] = ("Off",)
         else:
@@ -477,9 +481,13 @@ class SeedOption(ModMenu.Options.Spinner):
 def Enable():
     global OwnedContent
     for tag in Tag:
-        dlc_path = getattr(tag, "dlc_path", None)
-        if dlc_path and FindObject("DownloadableItemSetDefinition", tag.dlc_path).CanUse():
-            OwnedContent |= tag
+        dlc_path: Optional[str] = getattr(tag, "dlc_path", None)
+        if dlc_path:
+            dlc = FindObject("DownloadableItemSetDefinition", dlc_path)
+            if not dlc:
+                raise Exception(f"Missing DLC object for {tag.name}")
+            if dlc_path and bool(dlc.CanUse()):
+                OwnedContent |= tag
 
     if _SeedsList.CurrentValue != "":
         selected_seed = Seed.FromString(_SeedsList.CurrentValue)
@@ -490,7 +498,7 @@ def Enable():
             Log(error)
     
     categories: Dict[str, List[Tag]] = dict() #type: ignore
-    for tag in defines.TagList:
+    for tag in TagList:
         if hasattr(tag, "category"):
             tag_list = categories.setdefault(tag.category, [])
             tag_list.append(tag)

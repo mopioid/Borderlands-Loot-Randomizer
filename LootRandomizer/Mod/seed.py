@@ -1,21 +1,29 @@
 from __future__ import annotations
 
-from unrealsdk import Log, GetEngine #type: ignore
+from unrealsdk import Log
 
-from . import defines, options, items, hints, enemies, missions, catalog
-from .defines import Tag, mod_dir, seeds_dir
+from Mods import ModMenu
+
+from .defines import *
+
+from . import options, items, hints, enemies, missions
 from .locations import Location
 from .items import ItemPool
 
 from base64 import b32encode, b32decode
 import random, os, importlib
 
-from typing import Callable, List, Optional, Sequence, Set
+from typing import List, Optional, Sequence, TYPE_CHECKING
 from types import ModuleType
 
-
-CurrentVersion = 5
-SupportedVersions = (1,2,3,4,5)
+if BL2:
+    from .bl2.items import Items
+    from .bl2.locations import Locations
+elif TPS:
+    from .tps.items import Items
+    from .tps.locations import Locations
+else:
+    raise
 
 
 AppliedSeed: Optional[Seed] = None
@@ -32,13 +40,13 @@ class SeedEntry:
         self.name = name; self.tags = tags
 
     def match_item(self) -> ItemPool:
-        for item in catalog.Items:
+        for item in Items:
             if item.name == self.name:
                 return item
         raise ValueError(f"Could not locate item for seed entry '{self.name}'")
 
     def match_location(self) -> Location:
-        for location in catalog.Locations:
+        for location in Locations:
             if str(location) == self.name:
                 return location
         raise ValueError(f"Could not locate location for seed entry '{self.name}'")
@@ -115,10 +123,13 @@ class Seed:
         AppliedSeed = self
         AppliedTags = self.tags
 
-        if not defines.is_client():
+        if not is_client():
             options.mod_instance.SendSeed(self.string)
 
-        self.version_module = importlib.import_module(f".seedversions.v{self.version}", __package__)
+        if BL2: module_name = "bl2"
+        else: module_name = "tps"
+
+        self.version_module = importlib.import_module(f".{module_name}.v{self.version}", __package__)
         version_items: Sequence[SeedEntry] = self.version_module.Items
         version_locations: Sequence[SeedEntry] = self.version_module.Locations
 
@@ -163,8 +174,9 @@ class Seed:
         AppliedSeed = None
         AppliedTags = Tag(0)
 
-        for location in self.locations:
-            location.item = None
+        if self.locations:
+            for location in self.locations:
+                location.item = None
 
 
     def generate_tracker(self) -> str:
@@ -182,7 +194,7 @@ class Seed:
                 f"Total locations: {len(self.locations)}\n"
                 f"Total items: {self.item_count}{item_warning}\n\n"
             )
-            for tag in defines.TagList:
+            for tag in TagList:
                 if tag not in version_tags:
                     continue
 
@@ -190,8 +202,8 @@ class Seed:
                 if caption:
                     file.write(f"{tag.caption}: {'On' if (tag in self.tags) else 'Off'}\n")
 
-            for tag in defines.TagList:
-                if not tag & defines.ContentTags & self.tags:
+            for tag in TagList:
+                if not tag & ContentTags & self.tags:
                     continue
 
                 locations = tuple(location for location in self.locations if tag in location.content)
@@ -207,7 +219,7 @@ class Seed:
 
 
     def update_tracker(self, location: Location, drop: bool) -> None:
-        if not defines.is_client():
+        if not is_client():
             options.mod_instance.SendTracker(str(location), drop)
 
         if not (location.item and options.AutoLog.CurrentValue):
@@ -218,9 +230,9 @@ class Seed:
         
         log_item = bool(drop or options.HintDisplay.CurrentValue == 'Spoiler')
 
-        none_log = f"{location}\n"
-        hint_log = f"{location} - {location.item.hint}\n"
-        full_log = f"{location} - {location.item.name}\n"
+        none_log = f"{location.tracker_name}\n"
+        hint_log = f"{location.tracker_name} - {location.item.hint}\n"
+        full_log = f"{location.tracker_name} - {location.item.name}\n"
         
         path = self.generate_tracker()
 
@@ -313,8 +325,10 @@ def generate_wikis(version: int) -> None:
             file.write("\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n")
 
             for location in locations:
+                location.enable()
+
                 rolls: List[str] = []
-                for rarity in reversed(sorted(location._rarities)):
+                for rarity in reversed(sorted(location.rarities)):
                     rolls.append(f"<kbd>{rarity}%</kbd>")
 
                 if len(rolls) <= 4:
@@ -327,7 +341,7 @@ def generate_wikis(version: int) -> None:
                     caption = getattr(tag, "caption", None)
                     if caption == None:
                         continue
-                    if (tag not in defines.ContentTags) and (tag in location.tags):
+                    if (tag not in ContentTags) and (tag in location.tags):
                         settings.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
                 if len(settings) <= 2:
@@ -343,8 +357,8 @@ def generate_wikis(version: int) -> None:
                 
 
     with open(os.path.join(mod_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
-        for hint in hints.Hint:
-            if hint is hints.Hint.Dud:
+        for hint in Hint:
+            if hint is Hint.Dud:
                 continue
 
             file.write(f"\n### {escape(hint)}s\n")
@@ -358,7 +372,7 @@ def generate_wikis(version: int) -> None:
                 content: List[str] = []
 
                 for tag in Tag:
-                    if tag & defines.ContentTags:
+                    if tag & ContentTags:
                         if tag & item.tags:
                             content.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
@@ -366,10 +380,15 @@ def generate_wikis(version: int) -> None:
 
 
 def generate_seedversion() -> None:
-    with open(os.path.join(defines.mod_dir, "Mod", "seedversions", f"v{CurrentVersion}.py"), 'w', encoding='utf-8') as file:
+    if BL2: module_name = "bl2"
+    else: module_name = "tps"
+    
+    path = os.path.join(mod_dir, "Mod", module_name, f"v{CurrentVersion}.py")
+
+    with open(path, 'w', encoding='utf-8') as file:
         file.write(
+            "from . import Tag\n"
             "from ..seed import SeedEntry\n"
-            "from ..defines import Tag\n"
             "\n\n"
             "Tags = "
         )
@@ -379,14 +398,14 @@ def generate_seedversion() -> None:
         file.write(f"\n\n\n")
         file.write(f"Items = (\n")
 
-        for item in catalog.Items:
+        for item in Items:
             tag_string = "|".join(f"Tag.{tag.name}" for tag in Tag if (tag & item.tags))
             file.write(f"    SeedEntry(\"{item.name}\", {tag_string}),\n")
 
         file.write(f")\n\n\n")
         file.write(f"Locations = (\n")
 
-        for location in catalog.Locations:
+        for location in Locations:
             tag_string = "|".join(f"Tag.{tag.name}" for tag in Tag if tag in location.tags)
             file.write(f"    SeedEntry(\"{location}\", {tag_string}),\n")
 
