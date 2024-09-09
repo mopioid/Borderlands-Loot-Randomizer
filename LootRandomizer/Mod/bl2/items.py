@@ -2,7 +2,6 @@ from unrealsdk import Log, FindAll, FindObject, GetEngine
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from ..defines import *
-
 from ..items import ItemPool, Item, ClassMod, BanditGrenade, MultiBarrelWeapon
 
 from typing import Any, Sequence
@@ -19,7 +18,9 @@ class BlueAlignmentClassMod(Item):
     def prepare(self) -> None:
         super().prepare()
         spec_data = self.inventory.RuntimePartListCollection.AlphaPartData
-        spec_data.WeightedParts = tuple(self._original_parts[i] for i in (2, 3, 5, 6, 8, 9))
+        spec_data.WeightedParts = tuple(
+            self._original_parts[i] for i in (2, 3, 5, 6, 8, 9)
+        )
 
     def revert(self) -> None:
         super().revert()
@@ -50,7 +51,9 @@ class Gen2ClassMod(Item):
     index: int
     _original_coms: Sequence[Any]
 
-    def __init__(self, path: str, index: int, weight: Character, tags: Tag = Tag(0)) -> None:
+    def __init__(
+        self, path: str, index: int, weight: Character, tags: Tag = Tag(0)
+    ) -> None:
         super().__init__(path, weight, tags)
         self.index = index
 
@@ -60,7 +63,9 @@ class Gen2ClassMod(Item):
 
     def prepare(self) -> None:
         super().prepare()
-        self.inventory.ClassModDefinitions = self.inventory.ClassModDefinitions[self.index],
+        self.inventory.ClassModDefinitions = (
+            self.inventory.ClassModDefinitions[self.index],
+        )
 
     def revert(self) -> None:
         super().revert()
@@ -104,6 +109,8 @@ class PurpleRelic(Item):
         parts = self.inventory.PartListCollection.ThetaPartData
         parts.WeightedParts = self._original_grades
 
+
+# fmt: off
 
 Items = (
     ItemPool("Blue Infiltrator / Beast / Banshee / Engineer / Slab / Roboteer", Hint.BlueClassMod,

@@ -35,16 +35,22 @@ class WorldUniques(MapDropper):
         }.items():
             pool = FindObject("ItemPoolDefinition", pool_path)
             if not pool:
-                raise Exception(f"Could not find blacklisted world item pool {pool_path}")
+                raise Exception(
+                    f"Could not find blacklisted world item pool {pool_path}"
+                )
 
             blacklist: List[UObject] = []
             for blacklist_path in blacklist_paths:
-                blacklist_item = FindObject("WeaponBalanceDefinition", blacklist_path)
+                blacklist_item = FindObject(
+                    "WeaponBalanceDefinition", blacklist_path
+                )
                 if not blacklist_item:
-                    raise Exception(f"Could not find blacklisted world item {blacklist_path}")
+                    raise Exception(
+                        f"Could not find blacklisted world item {blacklist_path}"
+                    )
                 KeepAlive(blacklist_item)
                 blacklist.append(blacklist_item)
-            
+
             self.blacklists[pool] = tuple(blacklist)
 
     def entered_map(self) -> None:
@@ -60,7 +66,10 @@ class LastRequests(MissionDropper, MapDropper):
     paths = ("Deadsurface_P",)
 
     def entered_map(self) -> None:
-        tom = FindObject("WillowInteractiveObject", "Deadsurface_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_5")
+        tom = FindObject(
+            "WillowInteractiveObject",
+            "Deadsurface_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_5",
+        )
         if not tom:
             raise Exception("Could not locate Tom for Last Requests")
 
@@ -68,8 +77,12 @@ class LastRequests(MissionDropper, MapDropper):
         handle = (tom.ConsumerHandle.PID,)
         bpd = tom.InteractiveObjectDefinition.BehaviorProviderDefinition
 
-        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Disable", 2)
-        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Default", 1)
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "Disable", 2
+        )
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "Default", 1
+        )
 
 
 class FriskedCorpse(MissionDropper, MapDropper):
@@ -80,13 +93,15 @@ class FriskedCorpse(MissionDropper, MapDropper):
         self.corpse = corpse
 
     def entered_map(self) -> None:
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
             if UObject.PathName(caller) != self.corpse:
                 return True
 
             mission = self.location.mission
             if not mission:
-                raise Exception(f"No mission for corpse for {self.location.name}")
+                raise Exception(
+                    f"No mission for corpse for {self.location.name}"
+                )
 
             if mission.current_status is not Mission.Status.Active:
                 return True
@@ -94,29 +109,43 @@ class FriskedCorpse(MissionDropper, MapDropper):
             spawn_loot(
                 self.location.prepare_pools(),
                 mission.mission_definition.uobject,
-                convert_struct(caller.Location)
+                convert_struct(caller.Location),
             )
             return True
 
-        RunHook("WillowGame.WillowInteractiveObject.UsedBy", f"LootRandomizer.{id(self)}", hook)
+        RunHook(
+            "WillowGame.WillowInteractiveObject.UsedBy",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
 
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.WillowInteractiveObject.UsedBy", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.WillowInteractiveObject.UsedBy",
+            f"LootRandomizer.{id(self)}",
+        )
 
 
 class Dick(MapDropper):
     paths = ("Deadsurface_P",)
 
     def entered_map(self) -> None:
-        bpd = FindObject("BehaviorProviderDefinition", "GD_Co_LastRequests.M_LastRequests:BehaviorProviderDefinition_0")
+        bpd = FindObject(
+            "BehaviorProviderDefinition",
+            "GD_Co_LastRequests.M_LastRequests:BehaviorProviderDefinition_0",
+        )
         if not bpd:
             raise Exception("Could not located BPD for calling Nel a dick")
-        
-        bpd.BehaviorSequences[0].ConsolidatedOutputLinkData[0].ActivateDelay = 11.25
-        bpd.BehaviorSequences[0].ConsolidatedOutputLinkData[1].ActivateDelay = 11.25
 
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if UObject.PathName(caller) != "GD_Co_LastRequests.M_LastRequests:Behavior_AddMissionDirectives_2":
+        output_links = bpd.BehaviorSequences[0].ConsolidatedOutputLinkData
+        output_links[0].ActivateDelay = 11.25
+        output_links[1].ActivateDelay = 11.25
+
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if (
+                UObject.PathName(caller)
+                != "GD_Co_LastRequests.M_LastRequests:Behavior_AddMissionDirectives_2"
+            ):
                 return True
 
             for pawn in get_pawns():
@@ -125,49 +154,84 @@ class Dick(MapDropper):
             else:
                 raise Exception("Could not find Nel for calling Nel a dick")
 
-            location = (pawn.Location.X - 20, pawn.Location.Y + 20, pawn.Location.Z - 50)
-            spawn_loot(self.location.prepare_pools(), pawn, location, (-370, 354, -10))
+            location = (
+                pawn.Location.X - 20,
+                pawn.Location.Y + 20,
+                pawn.Location.Z - 50,
+            )
+            spawn_loot(
+                self.location.prepare_pools(), pawn, location, (-370, 354, -10)
+            )
 
-            RemoveHook("WillowGame.Behavior_AddMissionDirectives.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
+            RemoveHook(
+                "WillowGame.Behavior_AddMissionDirectives.ApplyBehaviorToContext",
+                f"LootRandomizer.{id(self)}",
+            )
             return True
 
-        RunHook("WillowGame.Behavior_AddMissionDirectives.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}", hook)
+        RunHook(
+            "WillowGame.Behavior_AddMissionDirectives.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
 
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.Behavior_AddMissionDirectives.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.Behavior_AddMissionDirectives.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+        )
 
 
 class TorgueO(MapDropper):
     paths = ("Moonsurface_P",)
 
     def entered_map(self) -> None:
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if not (caller.AIClass and caller.AIClass.Name == "CharClass_UniqueCharger"):
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if not (
+                caller.AIClass
+                and caller.AIClass.Name == "CharClass_UniqueCharger"
+            ):
                 return True
             if params.InstigatedBy.Class.Name != "WillowPlayerController":
                 return True
 
-            behavior = FindObject("Behavior_RemoteCustomEvent", "GD_Cork_Weap_Pistol.FiringModes.Bullet_Pistol_Maliwan_MoxxisProbe:Behavior_RemoteCustomEvent_3")
+            behavior = FindObject(
+                "Behavior_RemoteCustomEvent",
+                "GD_Cork_Weap_Pistol.FiringModes.Bullet_Pistol_Maliwan_MoxxisProbe:Behavior_RemoteCustomEvent_3",
+            )
             if not behavior:
                 raise Exception("Could not find Probe behavior")
 
-            behavior.ApplyBehaviorToContext(caller, (), None, params.InstigatedBy, None, ())
+            behavior.ApplyBehaviorToContext(
+                caller, (), None, params.InstigatedBy, None, ()
+            )
             return True
 
-        RunHook("WillowGame.WillowAIPawn.TakeDamage", f"LootRandomizer.{id(self)}", hook)
+        RunHook(
+            "WillowGame.WillowAIPawn.TakeDamage",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
 
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.WillowAIPawn.TakeDamage", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.WillowAIPawn.TakeDamage", f"LootRandomizer.{id(self)}"
+        )
 
 
 class SwordInStone(MapDropper):
     paths = ("StantonsLiver_P",)
 
     def entered_map(self) -> None:
-        bpd = FindObject("BehaviorProviderDefinition", "GD_Co_EasterEggs.Excalibastard.InteractiveObject_Excalibastard:BehaviorProviderDefinition_0")
+        bpd = FindObject(
+            "BehaviorProviderDefinition",
+            "GD_Co_EasterEggs.Excalibastard.InteractiveObject_Excalibastard:BehaviorProviderDefinition_0",
+        )
         if not bpd:
             raise Exception("Could not find BPD for Sword In The Stone")
-        bpd.BehaviorSequences[0].EventData2[0].OutputLinks.ArrayIndexAndLength = 327681
+
+        event_data = bpd.BehaviorSequences[0].EventData2[0]
+        event_data.OutputLinks.ArrayIndexAndLength = 327681
 
 
 class ToArms(MapDropper):
@@ -178,12 +242,30 @@ class ToArms(MapDropper):
 
     def enable(self) -> None:
         super().enable()
-        objective = FindObject("MissionObjectiveDefinition", "GD_Co_ToArms.M_Co_ToArms:DonateWeapons10")
-        adv1 = FindObject("Behavior_AdvanceObjectiveSet", "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_243")
-        adv2 = FindObject("Behavior_AdvanceObjectiveSet", "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_250")
-        adv3 = FindObject("Behavior_AdvanceObjectiveSet", "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_255")
-        adv4 = FindObject("Behavior_AdvanceObjectiveSet", "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_254")
-        adv5 = FindObject("Behavior_AdvanceObjectiveSet", "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_252")
+        objective = FindObject(
+            "MissionObjectiveDefinition",
+            "GD_Co_ToArms.M_Co_ToArms:DonateWeapons10",
+        )
+        adv1 = FindObject(
+            "Behavior_AdvanceObjectiveSet",
+            "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_243",
+        )
+        adv2 = FindObject(
+            "Behavior_AdvanceObjectiveSet",
+            "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_250",
+        )
+        adv3 = FindObject(
+            "Behavior_AdvanceObjectiveSet",
+            "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_255",
+        )
+        adv4 = FindObject(
+            "Behavior_AdvanceObjectiveSet",
+            "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_254",
+        )
+        adv5 = FindObject(
+            "Behavior_AdvanceObjectiveSet",
+            "GD_Co_ToArms.M_Co_ToArms:Behavior_AdvanceObjectiveSet_252",
+        )
 
         if not (objective and adv1 and adv2 and adv3 and adv4 and adv5):
             raise Exception("Could not locate mission objective for To Arms")
@@ -194,32 +276,56 @@ class ToArms(MapDropper):
         self.count_advancements = {1: adv1, 2: adv2, 3: adv3, 4: adv4, 5: adv5}
 
     def entered_map(self) -> None:
-        def open_hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        def open_hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
             caller.MailBoxStorage.ChestSlots = 1
             return True
-        RunHook("WillowGame.MailBoxGFxMovie.extInitMainPanel", f"LootRandomizer.{id(self)}", open_hook)
-        
-        def deposit_hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if UObject.PathName(caller) != "GD_Co_ToArms.M_Co_ToArms:Behavior_MissionRemoteEvent_392":
+
+        RunHook(
+            "WillowGame.MailBoxGFxMovie.extInitMainPanel",
+            f"LootRandomizer.{id(self)}",
+            open_hook,
+        )
+
+        def deposit_hook(
+            caller: UObject, _f: UFunction, params: FStruct
+        ) -> bool:
+            if (
+                UObject.PathName(caller)
+                != "GD_Co_ToArms.M_Co_ToArms:Behavior_MissionRemoteEvent_392"
+            ):
                 return True
-            
+
             count = get_missiontracker().GetObjectiveCount(self.objective)
             advancement = self.count_advancements.get(count)
             if not advancement:
                 raise Exception("Unexpected donation count for To Arms")
 
             advancement.ApplyBehaviorToContext(
-                params.ContextObject, (), params.SelfObject,
-                params.MyInstigatorObject, params.OtherEventParticipantObject, ()
+                params.ContextObject,
+                (),
+                params.SelfObject,
+                params.MyInstigatorObject,
+                params.OtherEventParticipantObject,
+                (),
             )
 
             return True
-        RunHook("WillowGame.Behavior_MissionRemoteEvent.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}", deposit_hook)
+
+        RunHook(
+            "WillowGame.Behavior_MissionRemoteEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+            deposit_hook,
+        )
 
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.MailBoxGFxMovie.extInitMainPanel", f"LootRandomizer.{id(self)}")
-        RemoveHook("WillowGame.Behavior_MissionRemoteEvent.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
-
+        RemoveHook(
+            "WillowGame.MailBoxGFxMovie.extInitMainPanel",
+            f"LootRandomizer.{id(self)}",
+        )
+        RemoveHook(
+            "WillowGame.Behavior_MissionRemoteEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+        )
 
     def disable(self) -> None:
         self.objective.ObjectiveCount = 50
@@ -229,11 +335,19 @@ class PopRacing(MapDropper):
     paths = ("Moon_P",)
 
     def entered_map(self) -> None:
-        loaded1 = FindObject("SeqEvent_LevelLoaded", "Moon_SideMissions.TheWorld:PersistentLevel.Main_Sequence.PopRacing.SeqEvent_LevelLoaded_1")
-        loaded6 = FindObject("SeqEvent_LevelLoaded", "Moon_SideMissions.TheWorld:PersistentLevel.Main_Sequence.PopRacing.SeqEvent_LevelLoaded_6")
+        loaded1 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "Moon_SideMissions.TheWorld:PersistentLevel.Main_Sequence.PopRacing.SeqEvent_LevelLoaded_1",
+        )
+        loaded6 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "Moon_SideMissions.TheWorld:PersistentLevel.Main_Sequence.PopRacing.SeqEvent_LevelLoaded_6",
+        )
         if not (loaded1 and loaded6):
-            raise Exception("Could not located loading sequences for Pop Racing")
-        
+            raise Exception(
+                "Could not located loading sequences for Pop Racing"
+            )
+
         loaded1.OutputLinks[0].Links = ()
         loaded6.OutputLinks[0].Links = ()
 
@@ -242,10 +356,16 @@ class Zapped1(MissionDropper, MapDropper):
     paths = ("Moon_P",)
 
     def entered_map(self) -> None:
-        if self.location.current_status not in (Mission.Status.NotStarted, Mission.Status.Complete):
+        if self.location.current_status not in (
+            Mission.Status.NotStarted,
+            Mission.Status.Complete,
+        ):
             return
 
-        box = FindObject("WillowInteractiveObject", "Moon_SideMissions.TheWorld:PersistentLevel.WillowInteractiveObject_114")
+        box = FindObject(
+            "WillowInteractiveObject",
+            "Moon_SideMissions.TheWorld:PersistentLevel.WillowInteractiveObject_114",
+        )
         if not box:
             raise Exception("Could not locate box for Zapped 1.0")
 
@@ -253,8 +373,12 @@ class Zapped1(MissionDropper, MapDropper):
         handle = (box.ConsumerHandle.PID,)
         bpd = box.InteractiveObjectDefinition.BehaviorProviderDefinition
 
-        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "AcceptedMission", 2)
-        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "MissionAvailable", 1)
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "AcceptedMission", 2
+        )
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "MissionAvailable", 1
+        )
 
 
 class Boomshakalaka(MissionStatusDelegate, MapDropper):
@@ -262,56 +386,70 @@ class Boomshakalaka(MissionStatusDelegate, MapDropper):
 
     def entered_map(self) -> None:
         if self.location.current_status is Mission.Status.Active:
-            self.set_hoop_collision(1) #COLLIDE_NoCollision
+            self.set_hoop_collision(1)  # COLLIDE_NoCollision
 
     def set_hoop_collision(self, collision: int) -> None:
-        hoop = FindObject("WillowInteractiveObject", "Outlands_SideMissions2.TheWorld:PersistentLevel.WillowInteractiveObject_0")
+        hoop = FindObject(
+            "WillowInteractiveObject",
+            "Outlands_SideMissions2.TheWorld:PersistentLevel.WillowInteractiveObject_0",
+        )
         if not hoop:
             raise Exception("Could not locate hoop for Boomshakalaka")
-        
-        hoop.Behavior_ChangeCollision(collision) #COLLIDE_NoCollision
+
+        hoop.Behavior_ChangeCollision(collision)  # COLLIDE_NoCollision
         for comp in hoop.AllComponents:
             if comp.Class.Name == "StaticMeshComponent":
                 comp.Behavior_ChangeCollision(collision)
 
     def accepted(self) -> None:
-        self.set_hoop_collision(1) #COLLIDE_NoCollision
+        self.set_hoop_collision(1)  # COLLIDE_NoCollision
 
     def completed(self) -> None:
-        self.set_hoop_collision(2) #COLLIDE_BlockAll
+        self.set_hoop_collision(2)  # COLLIDE_BlockAll
 
 
 class DunksWatson(MapDropper):
     paths = ("Outlands_P2",)
 
     def entered_map(self) -> None:
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if UObject.PathName(caller) != "Outlands_SideMissions2.TheWorld:PersistentLevel.Main_Sequence.Boomshakalaka.SeqAct_ApplyBehavior_4.Behavior_RemoteCustomEvent_0":
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if (
+                UObject.PathName(caller)
+                != "Outlands_SideMissions2.TheWorld:PersistentLevel.Main_Sequence.Boomshakalaka.SeqAct_ApplyBehavior_4.Behavior_RemoteCustomEvent_0"
+            ):
                 return True
 
             mission = self.location.mission
             if not mission:
                 raise Exception("No mission for Dunks Watson")
-            
+
             for pawn in get_pawns():
                 if pawn.AIClass.Name == "CharClass_Superballa":
                     break
             else:
                 raise Exception("Could not locate Dunks Watson")
-            
+
             Log(f"dunks sick ups: {pawn.Location.Z}")
 
             spawn_loot(
                 self.location.prepare_pools(),
                 mission.mission_definition.uobject,
                 (-14540.578125, 106299.593750, 8647.15625),
-                (0, 0, -4800)
+                (0, 0, -4800),
             )
             return True
-        RunHook("WillowGame.Behavior_RemoteCustomEvent.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}", hook)
+
+        RunHook(
+            "WillowGame.Behavior_RemoteCustomEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
 
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.Behavior_RemoteCustomEvent.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.Behavior_RemoteCustomEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+        )
 
 
 class SpaceSlam(MissionStatusDelegate, MapDropper):
@@ -327,7 +465,7 @@ class SpaceSlam(MissionStatusDelegate, MapDropper):
 
     def entered_map(self) -> None:
         self.apply()
-    
+
     def completed(self) -> None:
         self.apply()
 
@@ -336,11 +474,19 @@ class DAHLTraining(MapDropper):
     paths = ("MoonSlaughter_P",)
 
     def entered_map(self) -> None:
-        loaded = FindObject("SeqEvent_LevelLoaded", "MoonSlaughter_Combat.TheWorld:PersistentLevel.Main_Sequence.SeqEvent_LevelLoaded_2")
-        tr4nu = FindObject("WillowInteractiveObject", "MoonSlaughter_Combat.TheWorld:PersistentLevel.WillowInteractiveObject_1")
+        loaded = FindObject(
+            "SeqEvent_LevelLoaded",
+            "MoonSlaughter_Combat.TheWorld:PersistentLevel.Main_Sequence.SeqEvent_LevelLoaded_2",
+        )
+        tr4nu = FindObject(
+            "WillowInteractiveObject",
+            "MoonSlaughter_Combat.TheWorld:PersistentLevel.WillowInteractiveObject_1",
+        )
 
         if not (loaded and tr4nu):
-            raise Exception("Could not locate objects for DAHL Combat Training")
+            raise Exception(
+                "Could not locate objects for DAHL Combat Training"
+            )
 
         loaded.OutputLinks[0].Links = ()
 
@@ -348,9 +494,15 @@ class DAHLTraining(MapDropper):
         handle = (tr4nu.ConsumerHandle.PID,)
         bpd = tr4nu.InteractiveObjectDefinition.BehaviorProviderDefinition
 
-        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Disabled", 2)
-        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Enabled", 1)
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "Disabled", 2
+        )
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "Enabled", 1
+        )
 
+
+# fmt: off
 
 Locations = (
     Other("World Uniques", WorldUniques(), tags=Tag.Excluded),
@@ -484,22 +636,11 @@ Locations = (
     Mission("Digistructed Madness: Round 5", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter05")),
     Mission("Digistructed Madness: The Badass Round", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter_Badass")),
 
-    Mission("DAHL Combat Training: Round 1",
-        MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter01", unlink_next=True),
-        DAHLTraining(),
-    tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
-    Mission("DAHL Combat Training: Round 2",
-        MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter02", unlink_next=True),
-    tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
-    Mission("DAHL Combat Training: Round 3",
-        MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter03", unlink_next=True),
-    tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
-    Mission("DAHL Combat Training: Round 4",
-        MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter04", unlink_next=True),
-    tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
-    Mission("DAHL Combat Training: Round 5",
-        MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter05", unlink_next=True),
-    tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
+    Mission("DAHL Combat Training: Round 1", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter01", unlink_next=True), DAHLTraining(), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
+    Mission("DAHL Combat Training: Round 2", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter02", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
+    Mission("DAHL Combat Training: Round 3", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter03", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
+    Mission("DAHL Combat Training: Round 4", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter04", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
+    Mission("DAHL Combat Training: Round 5", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter05", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
 )
 
 """

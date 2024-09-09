@@ -8,16 +8,36 @@ from typing import Optional, Sequence
 
 
 def Enable() -> None:
-    RunHook("WillowGame.Behavior_AttachItems.ApplyBehaviorToContext", "LootRandomizer", _Behavior_AttachItems)
-    RunHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer", _PopulationFactoryVendingMachine)
-    RunHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer", _GrantNewMarketingCodeBonuses)
-    RunHook("WillowGame.WillowPlayerController.CheckAllSideMissionsCompleteAchievement", "LootRandomizer", lambda c, f, p: False)
+    RunHook(
+        "WillowGame.Behavior_AttachItems.ApplyBehaviorToContext",
+        "LootRandomizer",
+        _Behavior_AttachItems,
+    )
+    RunHook(
+        "WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor",
+        "LootRandomizer",
+        _PopulationFactoryVendingMachine,
+    )
+    RunHook(
+        "WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses",
+        "LootRandomizer",
+        _GrantNewMarketingCodeBonuses,
+    )
+
 
 def Disable() -> None:
-    RemoveHook("WillowGame.Behavior_AttachItems.ApplyBehaviorToContext", "LootRandomizer")
-    RemoveHook("WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor", "LootRandomizer")
-    RemoveHook("WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses", "LootRandomizer")
-    RemoveHook("WillowGame.WillowPlayerController.CheckAllSideMissionsCompleteAchievement", "LootRandomizer")
+    RemoveHook(
+        "WillowGame.Behavior_AttachItems.ApplyBehaviorToContext",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses",
+        "LootRandomizer",
+    )
 
 
 class Other(Location):
@@ -31,9 +51,12 @@ class Other(Location):
 
         if not self.specified_rarities:
             self.rarities = [100]
-            if self.tags & getattr(Tag, "Vendor", Tag.Excluded): self.rarities *= 8
-            elif self.tags & Tag.LongMission: self.rarities += (100,)
-            elif self.tags & Tag.VeryLongMission: self.rarities += (100,100,100)
+            if self.tags & getattr(Tag, "Vendor", Tag.Excluded):
+                self.rarities *= 8
+            elif self.tags & Tag.LongMission:
+                self.rarities += (100,)
+            elif self.tags & Tag.VeryLongMission:
+                self.rarities += (100, 100, 100)
 
     def __str__(self) -> str:
         return f"Other: {self.name}"
@@ -50,14 +73,19 @@ class VendingMachine(RegistrantDropper):
 
     def inject(self, balance: UObject) -> None:
         if self.conditional:
-            conditional = FindObject("AttributeExpressionEvaluator", self.conditional)
+            conditional = FindObject(
+                "AttributeExpressionEvaluator", self.conditional
+            )
             if conditional:
                 conditional.Expression.ConstantOperand2 = -1
 
         pool = self.location.prepare_pools(1)[0]
 
         pool.Quantity.BaseValueConstant = len(self.location.rarities) - 1
-        def revert(): pool.Quantity.BaseValueConstant = 1
+
+        def revert():
+            pool.Quantity.BaseValueConstant = 1
+
         do_next_tick(revert)
 
         balance.DefaultLoot[0].ItemAttachments[0].ItemPool = pool
@@ -70,8 +98,11 @@ class Attachment(RegistrantDropper):
     configuration: int
     attachments: Sequence[int]
 
-    def __init__(self, path: str, *attachments: int, configuration: int = 0) -> None:
-        self.configuration = configuration; self.attachments = attachments if attachments else (0,)
+    def __init__(
+        self, path: str, *attachments: int, configuration: int = 0
+    ) -> None:
+        self.configuration = configuration
+        self.attachments = attachments if attachments else (0,)
         super().__init__(path)
 
     def inject(self, obj: UObject) -> None:
@@ -86,7 +117,9 @@ class Attachment(RegistrantDropper):
             obj_attachments[index].ItemPool = pool
 
 
-def _Behavior_AttachItems(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _Behavior_AttachItems(
+    caller: UObject, _f: UFunction, params: FStruct
+) -> bool:
     obj = params.ContextObject
     if not obj and obj.BalanceDefinitionState:
         return True
@@ -101,30 +134,49 @@ def _Behavior_AttachItems(caller: UObject, function: UFunction, params: FStruct)
 
     return True
 
-def _PopulationFactoryVendingMachine(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    balance = params.Opportunity.PopulationDef.ActorArchetypeList[0].SpawnFactory.ObjectBalanceDefinition
+
+def _PopulationFactoryVendingMachine(
+    caller: UObject, _f: UFunction, params: FStruct
+) -> bool:
+    balance = params.Opportunity.PopulationDef.ActorArchetypeList[
+        0
+    ].SpawnFactory.ObjectBalanceDefinition
     if balance:
-        vendors = VendingMachine.Registries.get(UObject.PathName(balance))
+        vendors = VendingMachine.Registrants(balance)
         if vendors:
             next(iter(vendors)).inject(balance)
     return True
 
 
-def _GrantNewMarketingCodeBonuses(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    premier = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_PremierClub")
+def _GrantNewMarketingCodeBonuses(
+    caller: UObject, _f: UFunction, params: FStruct
+) -> bool:
+    premier = FindObject(
+        "MarketingUnlockInventoryDefinition",
+        "GD_Globals.Unlocks.MarketingUnlock_PremierClub",
+    )
     if premier:
         premier_items = tuple(premier.UnlockItems[0].UnlockItems)
         premier.UnlockItems[0].UnlockItems = ()
+
         def revert_premier(premier_items: Sequence[UObject] = premier_items):
             premier.UnlockItems[0].UnlockItems = premier_items
+
         do_next_tick(revert_premier)
 
-    collectors = FindObject("MarketingUnlockInventoryDefinition", "GD_Globals.Unlocks.MarketingUnlock_Collectors")
+    collectors = FindObject(
+        "MarketingUnlockInventoryDefinition",
+        "GD_Globals.Unlocks.MarketingUnlock_Collectors",
+    )
     if collectors:
         collectors_items = tuple(collectors.UnlockItems[0].UnlockItems)
         collectors.UnlockItems[0].UnlockItems = ()
-        def revert_collectors(collectors_items: Sequence[UObject] = collectors_items):
+
+        def revert_collectors(
+            collectors_items: Sequence[UObject] = collectors_items,
+        ):
             collectors.UnlockItems[0].UnlockItems = collectors_items
+
         do_next_tick(revert_collectors)
 
     return True

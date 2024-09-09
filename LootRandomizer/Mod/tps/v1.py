@@ -1,9 +1,31 @@
 from . import Tag
 from ..seed import SeedEntry
 
+Tags = (
+    Tag.BaseGame
+    | Tag.Holodome
+    | Tag.ClaptasticVoyage
+    | Tag.ShockDrop
+    | Tag.TalesLoyalty
+    | Tag.ShortMission
+    | Tag.LongMission
+    | Tag.VeryLongMission
+    | Tag.Slaughter
+    | Tag.VehicleMission
+    | Tag.UniqueEnemy
+    | Tag.SlowEnemy
+    | Tag.RareEnemy
+    | Tag.VeryRareEnemy
+    | Tag.MobFarm
+    | Tag.RaidEnemy
+    | Tag.MissionEnemy
+    | Tag.EvolvedEnemy
+    | Tag.Miscellaneous
+    | Tag.DuplicateItems
+    | Tag.EnableHints
+)
 
-Tags = Tag.BaseGame|Tag.Holodome|Tag.ClaptasticVoyage|Tag.ShockDrop|Tag.TalesLoyalty|Tag.ShortMission|Tag.LongMission|Tag.VeryLongMission|Tag.Slaughter|Tag.VehicleMission|Tag.UniqueEnemy|Tag.SlowEnemy|Tag.RareEnemy|Tag.VeryRareEnemy|Tag.MobFarm|Tag.RaidEnemy|Tag.MissionEnemy|Tag.EvolvedEnemy|Tag.Miscellaneous|Tag.DuplicateItems|Tag.EnableHints
-
+# fmt: off
 
 Items = (
     SeedEntry("Blue Bloodthirster / Blaster / Cowgirl / Brotrap / CEO / Big Game Hunter", Tag.BaseGame),

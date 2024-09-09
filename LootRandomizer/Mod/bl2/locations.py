@@ -1,18 +1,32 @@
-from unrealsdk import Log, FindAll, FindObject, GetEngine
-from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
+from typing import Optional, Sequence, Set
 
-from ..defines import *
-
-from ..items import ItemPool
+from unrealsdk import (
+    FindAll,
+    FindObject,
+    FStruct,
+    GetEngine,
+    RemoveHook,
+    RunHook,
+    UFunction,
+    UObject,
+)
 
 from .. import locations
-from ..locations import Dropper, MapDropper, Behavior, PreventDestroy
+from ..defines import *
 from ..enemies import Enemy, Pawn
-from ..missions import Mission, MissionDefinition, MissionDefinitionAlt
-from ..missions import MissionGiver, MissionObject, MissionPickup, MissionStatusDelegate
-from ..other import Other, Attachment, VendingMachine
-
-from typing import Optional, Sequence, Set
+from ..items import ItemPool
+from ..locations import Behavior, Dropper, MapDropper, PreventDestroy
+from ..missions import (
+    Mission,
+    MissionDropper,
+    MissionDefinition,
+    MissionDefinitionAlt,
+    MissionGiver,
+    MissionObject,
+    MissionPickup,
+    MissionStatusDelegate,
+)
+from ..other import Attachment, Other, VendingMachine
 
 
 class Radio1340(MapDropper):
@@ -20,17 +34,24 @@ class Radio1340(MapDropper):
         super().__init__("Sanctuary_P", "SanctuaryAir_P")
 
     def entered_map(self) -> None:
-        #TODO: instead hook WillowGame.WillowPlayerController.UpdateMissionObjective
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if (not caller.InteractiveObjectDefinition) or caller.InteractiveObjectDefinition.Name != "IO_MoxieRadio":
+        # TODO: instead hook WillowGame.WillowPlayerController.UpdateMissionObjective
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if (
+                not caller.InteractiveObjectDefinition
+            ) or caller.InteractiveObjectDefinition.Name != "IO_MoxieRadio":
                 return True
 
             tracker = get_missiontracker()
-            objective = FindObject("MissionObjectiveDefinition", "GD_Z3_OutOfBody.M_OutOfBody:DestroyRadio")
+            objective = FindObject(
+                "MissionObjectiveDefinition",
+                "GD_Z3_OutOfBody.M_OutOfBody:DestroyRadio",
+            )
             if not tracker.IsMissionObjectiveActive(objective):
                 return True
 
-            gamestage_region = FindObject("WillowRegionDefinition", "GD_GameStages.Zone1.Dam")
+            gamestage_region = FindObject(
+                "WillowRegionDefinition", "GD_GameStages.Zone1.Dam"
+            )
             if not gamestage_region:
                 raise Exception("Could not find GD_GameStages.Zone1.Dam")
             _, level, _ = gamestage_region.GetRegionGameStage()
@@ -44,27 +65,42 @@ class Radio1340(MapDropper):
                 (3539, 5261, 3703),
             )
 
-            RemoveHook("WillowGame.WillowInteractiveObject.TakeDamage", f"LootRandomizer.{id(self)}")
+            RemoveHook(
+                "WillowGame.WillowInteractiveObject.TakeDamage",
+                f"LootRandomizer.{id(self)}",
+            )
             return True
 
-        RunHook("WillowGame.WillowInteractiveObject.TakeDamage", f"LootRandomizer.{id(self)}", hook)
+        RunHook(
+            "WillowGame.WillowInteractiveObject.TakeDamage",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
 
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.WillowInteractiveObject.TakeDamage", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.WillowInteractiveObject.TakeDamage",
+            f"LootRandomizer.{id(self)}",
+        )
 
 
 class Leviathan(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("Orchid_WormBelly_P")
+    paths = ("Orchid_WormBelly_P",)
 
     def entered_map(self) -> None:
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-            if UObject.PathName(caller.MissionObjective) != "GD_Orchid_Plot_Mission09.M_Orchid_PlotMission09:KillBossWorm":
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if (
+                UObject.PathName(caller.MissionObjective)
+                != "GD_Orchid_Plot_Mission09.M_Orchid_PlotMission09:KillBossWorm"
+            ):
                 return True
 
             pawn = GetEngine().GetCurrentWorldInfo().PawnList
             while pawn:
-                if pawn.AIClass and pawn.AIClass.Name == "CharacterClass_Orchid_BossWorm":
+                if (
+                    pawn.AIClass
+                    and pawn.AIClass.Name == "CharacterClass_Orchid_BossWorm"
+                ):
                     break
                 pawn = pawn.NextPawn
 
@@ -73,19 +109,29 @@ class Leviathan(MapDropper):
                 pawn,
                 (1200, -66000, 3000),
                 (-400, -1800, -400),
-                200
+                200,
             )
             return True
 
-        RunHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}", hook)
-        
+        RunHook(
+            "WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
+
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.Behavior_UpdateMissionObjective.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+        )
 
 
 class MonsterTruckDriver(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
-        if UObject.PathName(pawn.MySpawnPoint) != "Iris_Hub2_Combat.TheWorld:PersistentLevel.WillowPopulationPoint_52":
+        if (
+            UObject.PathName(pawn.MySpawnPoint)
+            != "Iris_Hub2_Combat.TheWorld:PersistentLevel.WillowPopulationPoint_52"
+        ):
             return False
         pawn.DoesVehicleAllowMeToDropLoot = True
         return True
@@ -102,17 +148,21 @@ class PetesBurner(Pawn):
 
 _doctorsorders_midgets: Set[str] = set()
 
-def _spawn_midget(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    if UObject.PathName(caller) == "GD_Balance_Treasure.InteractiveObjectsTrap.MidgetHyperion.InteractiveObj_CardboardBox_MidgetHyperion:BehaviorProviderDefinition_1.Behavior_SpawnFromPopulationSystem_5":
+
+def _spawn_midget(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+    if (
+        UObject.PathName(caller)
+        == "GD_Balance_Treasure.InteractiveObjectsTrap.MidgetHyperion.InteractiveObj_CardboardBox_MidgetHyperion:BehaviorProviderDefinition_1.Behavior_SpawnFromPopulationSystem_5"
+    ):
         _doctorsorders_midgets.add(UObject.PathName(params.SpawnedActor))
     return True
 
 
 class Midget(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
-        return (
-            (UObject.PathName(pawn) not in _doctorsorders_midgets) and
-            (UObject.PathName(pawn.MySpawnPoint) != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26")
+        return (UObject.PathName(pawn) not in _doctorsorders_midgets) and (
+            UObject.PathName(pawn.MySpawnPoint)
+            != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
         )
 
 
@@ -123,35 +173,53 @@ class DoctorsOrdersMidget(Pawn):
 
 class SpaceCowboyMidget(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
-        return UObject.PathName(pawn.MySpawnPoint) == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
+        return (
+            UObject.PathName(pawn.MySpawnPoint)
+            == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
+        )
+
 
 class DoctorsOrdersMidgetRegistry(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("PandoraPark_P")
+    paths = ("PandoraPark_P",)
 
     def entered_map(self) -> None:
         _doctorsorders_midgets.clear()
-        RunHook("WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput", f"LootRandomizer.{id(self)}", _spawn_midget)
+        RunHook(
+            "WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput",
+            f"LootRandomizer.{id(self)}",
+            _spawn_midget,
+        )
 
     def exited_map(self) -> None:
         _doctorsorders_midgets.clear()
-        RemoveHook("WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.Behavior_SpawnFromPopulationSystem.PublishBehaviorOutput",
+            f"LootRandomizer.{id(self)}",
+        )
 
 
 class Haderax(MapDropper):
-    def __init__(self, *map_names: str) -> None:
-        super().__init__("SandwormLair_P")
+    paths = ("SandwormLair_P",)
 
     def entered_map(self) -> None:
-        digicrate = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi")
+        digicrate = FindObject(
+            "InteractiveObjectBalanceDefinition",
+            "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi",
+        )
         if digicrate:
             digicrate.DefaultInteractiveObject = None
 
-        digicrate_shield = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Shield")
+        digicrate_shield = FindObject(
+            "InteractiveObjectBalanceDefinition",
+            "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Shield",
+        )
         if digicrate_shield:
             digicrate_shield.DefaultInteractiveObject = None
 
-        digicrate_artifact = FindObject("InteractiveObjectBalanceDefinition", "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Articfact")
+        digicrate_artifact = FindObject(
+            "InteractiveObjectBalanceDefinition",
+            "GD_Anemone_Lobelia_DahDigi.LootableGradesUnique.ObjectGrade_DalhEpicCrate_Digi_Articfact",
+        )
         if digicrate_artifact:
             digicrate_artifact.DefaultInteractiveObject = None
 
@@ -168,7 +236,7 @@ class DigiEnemy(Enemy):
         *droppers: Dropper,
         fallback: str,
         tags: Tag = Tag(0),
-        rarities: Optional[Sequence[int]] = None
+        rarities: Optional[Sequence[int]] = None,
     ) -> None:
         self.fallback = fallback
         super().__init__(name, *droppers, tags=tags, rarities=rarities)
@@ -192,18 +260,29 @@ class DigiEnemy(Enemy):
         self._item = item
 
     @property
-    def hint_pool(self) -> UObject: #ItemPoolDefinition
-        return super().hint_pool if self._item else self.fallback_enemy.hint_pool
-    
+    def hint_pool(self) -> UObject:  # ItemPoolDefinition
+        return (
+            super().hint_pool if self._item else self.fallback_enemy.hint_pool
+        )
+
     @property
     def tracker_name(self) -> str:
-        return super().tracker_name if self._item else self.fallback_enemy.tracker_name
+        return (
+            super().tracker_name
+            if self._item
+            else self.fallback_enemy.tracker_name
+        )
 
 
 class DocMercy(MissionGiver):
     def __init__(self) -> None:
-        super().__init__("Frost_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_413.MissionDirectivesDefinition_0", False, False, "Frost_P")
-    
+        super().__init__(
+            "Frost_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_413.MissionDirectivesDefinition_0",
+            False,
+            False,
+            "Frost_P",
+        )
+
     def apply(self) -> Optional[UObject]:
         giver = super().apply()
         if not is_client():
@@ -211,37 +290,53 @@ class DocMercy(MissionGiver):
         return giver
 
 
-class Loader1340(MapDropper):
-    location: Mission
-
-    def __init__(self) -> None:
-        super().__init__("dam_p")
+class Loader1340(MissionDropper, MapDropper):
+    paths = ("dam_p",)
 
     def entered_map(self) -> None:
         missiondef = self.location.mission_definition.uobject
         if get_missiontracker().GetMissionStatus(missiondef) != 4:
             return
 
-        toggle = FindObject("SeqAct_Toggle", "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqAct_Toggle_1")
+        toggle = FindObject(
+            "SeqAct_Toggle",
+            "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqAct_Toggle_1",
+        )
 
-        loaded0 = FindObject("SeqEvent_LevelLoaded", "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqEvent_LevelLoaded_0")
-        loaded1 = FindObject("SeqEvent_LevelLoaded", "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqEvent_LevelLoaded_1")
+        loaded0 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqEvent_LevelLoaded_0",
+        )
+        loaded1 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "Dam_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Loader1340.SeqEvent_LevelLoaded_1",
+        )
         if not (loaded0 and loaded1):
-            raise Exception("Could not locate dam loading sequence for Loader 1340")
+            raise Exception(
+                "Could not locate dam loading sequence for Loader 1340"
+            )
 
         loaded0.OutputLinks[0].Links[0].LinkedOp = toggle
         loaded1.OutputLinks[0].Links[0].LinkedOp = toggle
 
 
 class WillTheBandit(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("tundraexpress_p")
+    paths = ("tundraexpress_p",)
 
     def entered_map(self) -> None:
-        toggle = FindObject("SeqAct_Toggle", "TundraExpress_Combat.TheWorld:PersistentLevel.Main_Sequence.NoHardFeelings.SeqAct_Toggle_0")
+        toggle = FindObject(
+            "SeqAct_Toggle",
+            "TundraExpress_Combat.TheWorld:PersistentLevel.Main_Sequence.NoHardFeelings.SeqAct_Toggle_0",
+        )
 
-        loaded0 = FindObject("SeqEvent_LevelLoaded", "TundraExpress_Combat.TheWorld:PersistentLevel.Main_Sequence.NoHardFeelings.SeqEvent_LevelLoaded_0")
-        loaded1 = FindObject("SeqEvent_LevelLoaded", "TundraExpress_Combat.TheWorld:PersistentLevel.Main_Sequence.NoHardFeelings.SeqEvent_LevelLoaded_1")
+        loaded0 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "TundraExpress_Combat.TheWorld:PersistentLevel.Main_Sequence.NoHardFeelings.SeqEvent_LevelLoaded_0",
+        )
+        loaded1 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "TundraExpress_Combat.TheWorld:PersistentLevel.Main_Sequence.NoHardFeelings.SeqEvent_LevelLoaded_1",
+        )
         if not (loaded0 and loaded1):
             raise Exception("Could not locate Tundra sequence for Loader 1340")
 
@@ -253,50 +348,85 @@ class WillTheBandit(MapDropper):
 
 
 class McShooty(MissionStatusDelegate, MapDropper):
-    location: Mission
-
-    def __init__(self) -> None:
-        super().__init__("Grass_Cliffs_P")
+    paths = ("Grass_Cliffs_P",)
 
     def accepted(self) -> None:
         for pawn in get_pawns():
-            if pawn.bIsDead and pawn.AIClass and pawn.AIClass.Name == "CharClass_Shootyface":
+            if (
+                pawn.bIsDead
+                and pawn.AIClass
+                and pawn.AIClass.Name == "CharClass_Shootyface"
+            ):
                 pawn.bHidden = True
                 pawn.CollisionType = 1
 
     def entered_map(self) -> None:
-        destroyreal = FindObject("WillowSeqEvent_MissionRemoteEvent", "Grass_Cliffs_Dynamic.TheWorld:PersistentLevel.Main_Sequence.ShootMeInTheFace.WillowSeqEvent_MissionRemoteEvent_2")
-        shooty_bpd = FindObject("BehaviorProviderDefinition", "GD_Shootyface.Character.CharClass_Shootyface:BehaviorProviderDefinition_0")
+        destroyreal = FindObject(
+            "WillowSeqEvent_MissionRemoteEvent",
+            "Grass_Cliffs_Dynamic.TheWorld:PersistentLevel.Main_Sequence.ShootMeInTheFace.WillowSeqEvent_MissionRemoteEvent_2",
+        )
+        shooty_bpd = FindObject(
+            "BehaviorProviderDefinition",
+            "GD_Shootyface.Character.CharClass_Shootyface:BehaviorProviderDefinition_0",
+        )
         if not (destroyreal and shooty_bpd):
             raise Exception("Could not locate objects for McShooty")
 
         destroyreal.OutputLinks[0].Links = ()
-        shooty_bpd.BehaviorSequences[1].EventData2[0].OutputLinks.ArrayIndexAndLength = 327681
-        shooty_bpd.BehaviorSequences[2].EventData2[0].OutputLinks.ArrayIndexAndLength = 0
+
+        ready_event_data = shooty_bpd.BehaviorSequences[1].EventData2[0]
+        ready_event_data.OutputLinks.ArrayIndexAndLength = 327681
+
+        dead_event_data = shooty_bpd.BehaviorSequences[2].EventData2[0]
+        dead_event_data.OutputLinks.ArrayIndexAndLength = 0
 
 
 class BFFs(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("SanctuaryAir_P")
+    paths = ("SanctuaryAir_P",)
 
     def entered_map(self) -> None:
-        toggle0 = FindObject("SeqAct_Toggle", "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqAct_Toggle_0")
-        toggle1 = FindObject("SeqAct_Toggle", "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqAct_Toggle_1")
-        loaded1 = FindObject("SeqEvent_LevelLoaded", "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqEvent_LevelLoaded_1")
-        loaded2 = FindObject("SeqEvent_LevelLoaded", "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqEvent_LevelLoaded_2")
-        loaded3 = FindObject("SeqEvent_LevelLoaded", "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqEvent_LevelLoaded_3")
-        aiscripted = FindObject("WillowSeqAct_AIScripted", "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.WillowSeqAct_AIScripted_0")
-        gamestage_region = FindObject("WillowRegionDefinition", "GD_GameStages.Zone3.Sanctuary_C")
+        toggle0 = FindObject(
+            "SeqAct_Toggle",
+            "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqAct_Toggle_0",
+        )
+        toggle1 = FindObject(
+            "SeqAct_Toggle",
+            "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqAct_Toggle_1",
+        )
+        loaded1 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqEvent_LevelLoaded_1",
+        )
+        loaded2 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqEvent_LevelLoaded_2",
+        )
+        loaded3 = FindObject(
+            "SeqEvent_LevelLoaded",
+            "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.SeqEvent_LevelLoaded_3",
+        )
+        aiscripted = FindObject(
+            "WillowSeqAct_AIScripted",
+            "SanctuaryAir_Side.TheWorld:PersistentLevel.Main_Sequence.BFFs.WillowSeqAct_AIScripted_0",
+        )
+        gamestage_region = FindObject(
+            "WillowRegionDefinition", "GD_GameStages.Zone3.Sanctuary_C"
+        )
 
-        if not (toggle0 and toggle1 and loaded1 and loaded2 and loaded3 and aiscripted and gamestage_region):
+        if not (
+            toggle0
+            and toggle1
+            and loaded1
+            and loaded2
+            and loaded3
+            and aiscripted
+            and gamestage_region
+        ):
             raise Exception("Could not locate objects for BFFs")
-
 
         loaded1.OutputLinks[0].Links[0].LinkedOp = toggle1
         loaded1.OutputLinks[0].Links[1].LinkedOp = toggle0
-
         loaded2.OutputLinks[0].Links[0].LinkedOp = toggle1
-
         loaded3.OutputLinks[0].Links[0].LinkedOp = toggle0
 
         aiscripted.InputLinks[0].bDisabled = True
@@ -310,59 +440,88 @@ class BFFs(MapDropper):
             population = FindObject("WillowPopulationOpportunityPoint", path)
             if not population:
                 raise Exception("Could not locate populations for BFFs")
-                population.GameStageRegion = gamestage_region
+            population.GameStageRegion = gamestage_region
 
 
 class PoeticLicense(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("SanctuaryAir_P")
+    paths = ("SanctuaryAir_P",)
 
     def entered_map(self) -> None:
-        daisy_den = FindObject("PopulationOpportunityDen", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.PopulationOpportunityDen_2")
-        daisy_ai = FindObject("AIBehaviorProviderDefinition", "GD_Daisy.Character.AIDef_Daisy:AIBehaviorProviderDefinition_1")
-        seq_objective = FindObject("SeqAct_ApplyBehavior", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.PoeticLicense.SeqAct_ApplyBehavior_1")
-        timetodie = FindObject("SeqEvent_RemoteEvent", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.PoeticLicense.SeqEvent_RemoteEvent_2")
-        gamestageregion = FindObject("WillowRegionDefinition", "GD_GameStages.Zone2.Cliffs_A")
-        if not (daisy_den and daisy_ai and seq_objective and timetodie and gamestageregion):
+        daisy_den = FindObject(
+            "PopulationOpportunityDen",
+            "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.PopulationOpportunityDen_2",
+        )
+        daisy_ai = FindObject(
+            "AIBehaviorProviderDefinition",
+            "GD_Daisy.Character.AIDef_Daisy:AIBehaviorProviderDefinition_1",
+        )
+        seq_objective = FindObject(
+            "SeqAct_ApplyBehavior",
+            "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.PoeticLicense.SeqAct_ApplyBehavior_1",
+        )
+        timetodie = FindObject(
+            "SeqEvent_RemoteEvent",
+            "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.PoeticLicense.SeqEvent_RemoteEvent_2",
+        )
+        gamestageregion = FindObject(
+            "WillowRegionDefinition", "GD_GameStages.Zone2.Cliffs_A"
+        )
+        if not (
+            daisy_den
+            and daisy_ai
+            and seq_objective
+            and timetodie
+            and gamestageregion
+        ):
             raise Exception("Could not locate objects for Daisy")
 
         daisy_den.GameStageRegion = gamestageregion
 
-        daisy_ai.BehaviorSequences[2].BehaviorData2[11].Behavior = construct_object("Behavior_Kill", daisy_ai)
-        daisy_ai.BehaviorSequences[2].BehaviorData2[15].Behavior.EventTag = None
-        daisy_ai.BehaviorSequences[5].BehaviorData2[2].OutputLinks.ArrayIndexAndLength = 1
+        daisy_ai.BehaviorSequences[2].BehaviorData2[11].Behavior = (
+            construct_object("Behavior_Kill", daisy_ai)
+        )
+
+        dialog_behavior_data = daisy_ai.BehaviorSequences[2].BehaviorData2[15]
+        dialog_behavior_data.Behavior.EventTag = None
+
+        die_behavior_data = daisy_ai.BehaviorSequences[5].BehaviorData2[2]
+        die_behavior_data.OutputLinks.ArrayIndexAndLength = 1
 
         timetodie.OutputLinks[0].Links = ((seq_objective, 0),)
 
 
 class WrittenByTheVictor(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("HyperionCity_P")
+    paths = ("HyperionCity_P",)
 
     def entered_map(self) -> None:
-        buttonlocked = FindObject("Behavior_ChangeRemoteBehaviorSequenceState", "HyperionCity_Dynamic.TheWorld:PersistentLevel.Main_Sequence.WrittenByVictor.SeqAct_ApplyBehavior_2.Behavior_ChangeRemoteBehaviorSequenceState_190")
+        buttonlocked = FindObject(
+            "Behavior_ChangeRemoteBehaviorSequenceState",
+            "HyperionCity_Dynamic.TheWorld:PersistentLevel.Main_Sequence.WrittenByVictor.SeqAct_ApplyBehavior_2.Behavior_ChangeRemoteBehaviorSequenceState_190",
+        )
         if not buttonlocked:
-            raise Exception("Could not locate button for Written By The Victor")
+            raise Exception(
+                "Could not locate button for Written By The Victor"
+            )
         buttonlocked.Action = 2
 
 
 class ARealBoy(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("Ash_P")
+    paths = ("Ash_P",)
 
     def entered_map(self) -> None:
-        mal_ai = FindObject("BehaviorProviderDefinition", "GD_PinocchioBot.Character.CharClass_PinocchioBot:BehaviorProviderDefinition_84")
+        mal_ai = FindObject(
+            "BehaviorProviderDefinition",
+            "GD_PinocchioBot.Character.CharClass_PinocchioBot:BehaviorProviderDefinition_84",
+        )
         if not mal_ai:
             raise Exception("Could not locate Mal for A Real Boy")
-        mal_ai.BehaviorSequences[12].EventData2[0].OutputLinks.ArrayIndexAndLength = 0
+
+        finished_event_data = mal_ai.BehaviorSequences[12].EventData2[0]
+        finished_event_data.OutputLinks.ArrayIndexAndLength = 0
 
 
 class GreatEscape(MissionStatusDelegate, MapDropper):
-    # TODO: convert to using mission context, as with TPS corpse
-    location: Mission
-
-    def __init__(self) -> None:
-        super().__init__("CraterLake_P")
+    paths = ("CraterLake_P",)
 
     def completed(self) -> None:
         missiondef = self.location.mission_definition.uobject
@@ -376,10 +535,16 @@ class GreatEscape(MissionStatusDelegate, MapDropper):
         for pawn in get_pawns():
             if pawn.AIClass and pawn.AIClass.Name == "CharClass_Ulysses":
                 ulysses = pawn
-                break            
+                break
 
-        ulysses_loaded = FindObject("SeqEvent_LevelLoaded", "CraterLake_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Ulysess.SeqEvent_LevelLoaded_0")
-        ulysses_savestate = FindObject("SeqEvent_RemoteEvent", "CraterLake_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Ulysess.SeqEvent_RemoteEvent_1")
+        ulysses_loaded = FindObject(
+            "SeqEvent_LevelLoaded",
+            "CraterLake_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Ulysess.SeqEvent_LevelLoaded_0",
+        )
+        ulysses_savestate = FindObject(
+            "SeqEvent_RemoteEvent",
+            "CraterLake_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Ulysess.SeqEvent_RemoteEvent_1",
+        )
 
         if not (ulysses and ulysses_loaded and ulysses_savestate):
             raise Exception("Could not locate Ulysses for Great Escape")
@@ -390,35 +555,30 @@ class GreatEscape(MissionStatusDelegate, MapDropper):
         ulysses_loaded.OutputLinks[0].Links = ()
         ulysses_savestate.OutputLinks[0].Links = ()
 
-
-        def hook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
             if caller.AIClass.Name != "CharClass_Ulysses":
                 return True
 
-            for obj in get_pc().GetWillowGlobals().ClientInteractiveObjects:
-                if obj and obj.InteractiveObjectDefinition and obj.InteractiveObjectDefinition.Name == "InteractiveObj_VendingMachine_HealthItems":
-                    break
-            else:
-                raise 
-
             spawn_loot(
                 self.location.prepare_pools(),
-                obj,
+                self.location.mission_definition.uobject,
                 location=(26075, 25255, 10026),
-                velocity=(-855, 565, -3),
+                velocity=(-855, 565, 0),
             )
 
             return True
 
-        RunHook("WillowGame.WillowAIPawn.Died", f"LootRandomizer.{id(self)}", hook)
-        
+        RunHook(
+            "WillowGame.WillowAIPawn.Died", f"LootRandomizer.{id(self)}", hook
+        )
+
     def exited_map(self) -> None:
-        RemoveHook("WillowGame.WillowAIPawn.Died", f"LootRandomizer.{id(self)}")
+        RemoveHook(
+            "WillowGame.WillowAIPawn.Died", f"LootRandomizer.{id(self)}"
+        )
 
 
-class MessageInABottle(MapDropper, MissionStatusDelegate):
-    location: Mission
-
+class MessageInABottle(MissionStatusDelegate, MapDropper):
     path: Optional[str]
 
     def __init__(self, path: Optional[str], map_name: str) -> None:
@@ -427,23 +587,37 @@ class MessageInABottle(MapDropper, MissionStatusDelegate):
 
     def accepted(self) -> None:
         for chest in FindAll("WillowInteractiveObject"):
-            if UObject.PathName(chest.InteractiveObjectDefinition) == "GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot":
+            if (
+                UObject.PathName(chest.InteractiveObjectDefinition)
+                == "GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot"
+            ):
                 missiondef = self.location.mission_definition.uobject
                 directive = (missiondef, False, True)
                 chest.AddMissionDirective(directive, True)
 
-
     def entered_map(self) -> None:
-        bottle_bpd = FindObject("BehaviorProviderDefinition", "GD_Orchid_SM_Message_Data.MessageBottle.MO_Orchid_MessageBottle:BehaviorProviderDefinition_3")
-        bottle_active = FindObject("Behavior_ChangeRemoteBehaviorSequenceState", "GD_Orchid_Plot.M_Orchid_PlotMission01:Behavior_ChangeRemoteBehaviorSequenceState_6")
+        bottle_bpd = FindObject(
+            "BehaviorProviderDefinition",
+            "GD_Orchid_SM_Message_Data.MessageBottle.MO_Orchid_MessageBottle:BehaviorProviderDefinition_3",
+        )
+        bottle_active = FindObject(
+            "Behavior_ChangeRemoteBehaviorSequenceState",
+            "GD_Orchid_Plot.M_Orchid_PlotMission01:Behavior_ChangeRemoteBehaviorSequenceState_6",
+        )
         if not (bottle_bpd and bottle_active):
             raise Exception("Could not locate bottle for Message In A Bottle")
 
-        bottle_bpd.BehaviorSequences[1].BehaviorData2[0].Behavior = bottle_active
-        bottle_bpd.BehaviorSequences[1].BehaviorData2[0].OutputLinks.ArrayIndexAndLength = 0
+        bottle_bpd.BehaviorSequences[1].BehaviorData2[
+            0
+        ].Behavior = bottle_active
+        bottle_bpd.BehaviorSequences[1].BehaviorData2[
+            0
+        ].OutputLinks.ArrayIndexAndLength = 0
 
         if self.path:
-            chest_state = FindObject("BehaviorSequenceEnableByMission", self.path)
+            chest_state = FindObject(
+                "BehaviorSequenceEnableByMission", self.path
+            )
             if chest_state:
                 chest_state.MissionStatesToLinkTo.bComplete = False
 
@@ -452,14 +626,19 @@ class RollInsight(MissionGiver):
     def apply(self) -> Optional[UObject]:
         directives = super().apply()
 
-        die = FindObject("WillowInteractiveObject", "Village_Mission.TheWorld:PersistentLevel.WillowInteractiveObject_297")
+        die = FindObject(
+            "WillowInteractiveObject",
+            "Village_Mission.TheWorld:PersistentLevel.WillowInteractiveObject_297",
+        )
         if not die:
             raise Exception("Could not locate die for Roll Insight")
         handle = (die.ConsumerHandle.PID,)
         bpd = die.InteractiveObjectDefinition.BehaviorProviderDefinition
 
         kernel = get_behaviorkernel()
-        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Complete", 2)
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "Complete", 2
+        )
         kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "TurnIn", 1)
 
         die.SetMissionDirectivesUsability(1)
@@ -470,19 +649,23 @@ class RollInsight(MissionGiver):
 
 
 class TreeHugger(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("Dark_Forest_P")
+    paths = ("Dark_Forest_P",)
 
     def entered_map(self) -> None:
         for pawn in get_pawns():
-            if pawn.AIClass and pawn.AIClass.Name == "CharClass_Aster_Treant_TreeHuggerNPC":
+            if (
+                pawn.AIClass
+                and pawn.AIClass.Name == "CharClass_Aster_Treant_TreeHuggerNPC"
+            ):
                 handle = (pawn.ConsumerHandle.PID,)
                 bpd = pawn.AIClass.BehaviorProviderDefinition
                 kernel = get_behaviorkernel()
 
                 enable = bpd.BehaviorSequences[1].CustomEnableCondition
                 enable.EnableConditions = (enable.EnableConditions[0],)
-                kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "DuringMission", 2)
+                kernel.ChangeBehaviorSequenceActivationStatus(
+                    handle, bpd, "DuringMission", 2
+                )
                 break
 
 
@@ -494,7 +677,9 @@ class LostSouls(MissionGiver):
                 handle = (pawn.ConsumerHandle.PID,)
                 bpd = pawn.AIClass.AIDef.BehaviorProviderDefinition
                 kernel = get_behaviorkernel()
-                kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Mission", 1)
+                kernel.ChangeBehaviorSequenceActivationStatus(
+                    handle, bpd, "Mission", 1
+                )
                 pawn.SetUsable(True, None, 0)
                 if not is_client():
                     get_missiontracker().RegisterMissionDirector(pawn)
@@ -502,8 +687,14 @@ class LostSouls(MissionGiver):
     def entered_map(self) -> None:
         missiondef = self.location.mission_definition.uobject
         if get_missiontracker().GetMissionStatus(missiondef) == 4:
-            skel_den = FindObject("PopulationOpportunityDen", "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_19")
-            knight_den = FindObject("PopulationOpportunityDen", "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_13")
+            skel_den = FindObject(
+                "PopulationOpportunityDen",
+                "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_19",
+            )
+            knight_den = FindObject(
+                "PopulationOpportunityDen",
+                "Dead_Forest_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_13",
+            )
             if not (skel_den and knight_den):
                 raise Exception("Could not locate dens for Lost Souls")
 
@@ -511,21 +702,30 @@ class LostSouls(MissionGiver):
             knight_den.IsEnabled = False
 
 
-class MyDeadBrother(MapDropper):
-    location: Mission
-
-    def __init__(self) -> None:
-        super().__init__("Dungeon_P")
+class MyDeadBrother(MissionDropper, MapDropper):
+    paths = ("Dungeon_P",)
 
     def entered_map(self) -> None:
         missiondef = self.location.mission_definition.uobject
         if get_missiontracker().GetMissionStatus(missiondef) != 4:
             return
 
-        simon_enabled = FindObject("BehaviorSequenceEnableByMission", "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5.BehaviorSequenceEnableByMission_9")
-        simon_talking = FindObject("BehaviorSequenceEnableByMission", "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5.BehaviorSequenceEnableByMission_7")
-        simon_bpd = FindObject("BehaviorProviderDefinition", "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5")
-        simon_den = FindObject("PopulationOpportunityDen", "Dungeon_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_68")
+        simon_enabled = FindObject(
+            "BehaviorSequenceEnableByMission",
+            "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5.BehaviorSequenceEnableByMission_9",
+        )
+        simon_talking = FindObject(
+            "BehaviorSequenceEnableByMission",
+            "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5.BehaviorSequenceEnableByMission_7",
+        )
+        simon_bpd = FindObject(
+            "BehaviorProviderDefinition",
+            "GD_Wizard_DeadBrotherSimon_Proto2.Character.CharClass_Wizard_DeadBrotherSimon_Proto2:BehaviorProviderDefinition_5",
+        )
+        simon_den = FindObject(
+            "PopulationOpportunityDen",
+            "Dungeon_Mission.TheWorld:PersistentLevel.PopulationOpportunityDen_68",
+        )
 
         if not (simon_enabled and simon_talking and simon_bpd and simon_den):
             raise Exception("Could not locate Simon for My Dead Brother")
@@ -533,9 +733,15 @@ class MyDeadBrother(MapDropper):
         simon_enabled.MissionStatesToLinkTo.bComplete = True
         simon_talking.MissionStatesToLinkTo.bComplete = False
 
-        simon_bpd.BehaviorSequences[4].BehaviorData2[1].Behavior = construct_behaviorsequence_behavior(
-            "GD_Wizard_DeadBrotherSimon_Proto2", "Character", "CharClass_Wizard_DeadBrotherSimon_Proto2", "BehaviorProviderDefinition_5",
-            sequence="TurnInSimon", outer=simon_bpd
+        simon_bpd.BehaviorSequences[4].BehaviorData2[1].Behavior = (
+            construct_behaviorsequence_behavior(
+                "GD_Wizard_DeadBrotherSimon_Proto2",
+                "Character",
+                "CharClass_Wizard_DeadBrotherSimon_Proto2",
+                "BehaviorProviderDefinition_5",
+                sequence="TurnInSimon",
+                outer=simon_bpd,
+            )
         )
 
         simon_den.IsEnabled = True
@@ -549,25 +755,35 @@ class OddestCouple(MissionObject):
             bpd = door.InteractiveObjectDefinition.BehaviorProviderDefinition
 
             kernel = get_behaviorkernel()
-            kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "S020_Brain", 1)
-            kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "S020_TurnIn", 1)
+            kernel.ChangeBehaviorSequenceActivationStatus(
+                handle, bpd, "S020_Brain", 1
+            )
+            kernel.ChangeBehaviorSequenceActivationStatus(
+                handle, bpd, "S020_TurnIn", 1
+            )
 
         return door
 
 
 class Sirentology(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("BackBurner_P")
+    paths = ("BackBurner_P",)
 
     def entered_map(self) -> None:
         for pawn in get_pawns():
-            if pawn.AIClass and pawn.AIClass.Name == "CharClass_mone_GD_Lilith":
+            if (
+                pawn.AIClass
+                and pawn.AIClass.Name == "CharClass_mone_GD_Lilith"
+            ):
                 handle = (pawn.ConsumerHandle.PID,)
                 ai_bpd = pawn.AIClass.AIDef.BehaviorProviderDefinition
                 kernel = get_behaviorkernel()
 
-                ai_bpd.BehaviorSequences[23].CustomEnableCondition.bComplete = True
-                kernel.ChangeBehaviorSequenceActivationStatus(handle, ai_bpd, "S050_GiveMission", 1)
+                ai_bpd.BehaviorSequences[
+                    23
+                ].CustomEnableCondition.bComplete = True
+                kernel.ChangeBehaviorSequenceActivationStatus(
+                    handle, ai_bpd, "S050_GiveMission", 1
+                )
                 break
 
 
@@ -579,67 +795,89 @@ class EchoesOfThePast(MissionObject):
             bpd = echo.InteractiveObjectDefinition.BehaviorProviderDefinition
 
             kernel = get_behaviorkernel()
-            kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "S080_MissionGiver", 1)
+            kernel.ChangeBehaviorSequenceActivationStatus(
+                handle, bpd, "S080_MissionGiver", 1
+            )
 
         return echo
 
+
 class GrandmaStoryRaid(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("Hunger_P")
+    paths = ("Hunger_P",)
 
     def entered_map(self) -> None:
-        granma_ai = FindObject("AIBehaviorProviderDefinition", "GD_Allium_TorgueGranma.Character.AIDef_Torgue:AIBehaviorProviderDefinition_0")
+        granma_ai = FindObject(
+            "AIBehaviorProviderDefinition",
+            "GD_Allium_TorgueGranma.Character.AIDef_Torgue:AIBehaviorProviderDefinition_0",
+        )
         if not granma_ai:
             raise Exception("Could not locate Granma for Grandma Story Raid")
-        granma_ai.BehaviorSequences[1].EventData2[0].OutputLinks.ArrayIndexAndLength = 655361
-        granma_ai.BehaviorSequences[1].EventData2[3].OutputLinks.ArrayIndexAndLength = 655361
+
+        event_data = granma_ai.BehaviorSequences[1].EventData2
+        event_data[0].OutputLinks.ArrayIndexAndLength = 655361
+        event_data[3].OutputLinks.ArrayIndexAndLength = 655361
 
 
 class MichaelMamaril(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("Sanctuary_P")
+    paths = ("Sanctuary_P",)
 
     def entered_map(self) -> None:
-        switch = FindObject("SeqAct_RandomSwitch", "Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0")
+        switch = FindObject(
+            "SeqAct_RandomSwitch",
+            "Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
+        )
         if not switch:
             raise Exception("Could not locate switch for Michael Mamaril")
         switch.LinkCount = 2
 
 
 class MichaelMAirmaril(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("SanctuaryAir_P")
+    paths = ("SanctuaryAir_P",)
 
     def entered_map(self) -> None:
-        switch = FindObject("SeqAct_RandomSwitch", "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0")
+        switch = FindObject(
+            "SeqAct_RandomSwitch",
+            "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
+        )
         if not switch:
             raise Exception("Could not locate switch for Michael Mamaril")
         switch.LinkCount = 2
 
 
 class DahlAbandonGrave(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("OldDust_P")
+    paths = ("OldDust_P",)
 
     def entered_map(self) -> None:
-        grave_bpd = FindObject("BehaviorProviderDefinition", "GD_Anemone_Balance_Treasure.InteractiveObjects.InteractiveObj_Brothers_Pile:BehaviorProviderDefinition_13")
+        grave_bpd = FindObject(
+            "BehaviorProviderDefinition",
+            "GD_Anemone_Balance_Treasure.InteractiveObjects.InteractiveObj_Brothers_Pile:BehaviorProviderDefinition_13",
+        )
         if not grave_bpd:
             raise Exception("Could not locate BPD for Dahl Abandon Grave")
-        grave_bpd.BehaviorSequences[2].BehaviorData2[3].Behavior = grave_bpd.BehaviorSequences[2].BehaviorData2[5].Behavior
+        behavior_data = grave_bpd.BehaviorSequences[2].BehaviorData2
+        behavior_data[3].Behavior = behavior_data[5].Behavior
 
 
 class ButtstallionWithAmulet(MapDropper):
-    def __init__(self) -> None:
-        super().__init__("BackBurner_P")
+    paths = ("BackBurner_P",)
 
     def entered_map(self) -> None:
-        butt_ai = FindObject("AIBehaviorProviderDefinition", "GD_Anem_ButtStallion.Character.AIDef_Anem_ButtStallion:AIBehaviorProviderDefinition_1")
+        butt_ai = FindObject(
+            "AIBehaviorProviderDefinition",
+            "GD_Anem_ButtStallion.Character.AIDef_Anem_ButtStallion:AIBehaviorProviderDefinition_1",
+        )
         if not butt_ai:
             raise Exception("Could not locate AI for Buttstallion With Amulet")
-        butt_ai.BehaviorSequences[5].BehaviorData2[20].Behavior = butt_ai.BehaviorSequences[5].BehaviorData2[26].Behavior
-        butt_ai.BehaviorSequences[5].BehaviorData2[20].LinkedVariables.ArrayIndexAndLength = 0
-        butt_ai.BehaviorSequences[5].BehaviorData2[20].OutputLinks.ArrayIndexAndLength = butt_ai.BehaviorSequences[5].BehaviorData2[26].OutputLinks.ArrayIndexAndLength
 
+        behavior_data = butt_ai.BehaviorSequences[5].BehaviorData2
+        output_links = behavior_data[26].OutputLinks.ArrayIndexAndLength
+
+        behavior_data[20].Behavior = behavior_data[26].Behavior
+        behavior_data[20].LinkedVariables.ArrayIndexAndLength = 0
+        behavior_data[20].OutputLinks.ArrayIndexAndLength = output_links
+
+
+# fmt: off
 
 Locations = (
     Enemy("Knuckle Dragger", Pawn("PawnBalance_PrimalBeast_KnuckleDragger")),

@@ -2,9 +2,9 @@ from unrealsdk import Log, FindObject, KeepAlive
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from ..defines import *
-
 from ..items import ItemPool, Item, ClassMod, BanditGrenade, MultiBarrelWeapon
 
+# fmt: off
 
 Items = (
     ItemPool("Blue Bloodthirster / Blaster / Cowgirl / Brotrap / CEO / Big Game Hunter", Hint.BlueClassMod,

@@ -15,20 +15,33 @@ if __name__ == "__main__":
 
     # TODO: remove
     from Mods.LootRandomizer.Mod import seed
-    # seed.generate_seedversion()
+
+    seed.generate_seedversion()
     # seed.generate_wikis(1)
 
     import sys, importlib
 
     for submodule_name in (
-        # "defines", "seed", "options", "hints", "items", "locations", "missions", "enemies", "other",
-        "defines", "options", "hints", "items", "locations", "enemies", "missions", "other", "seed"
-
-        "bl2", "bl2.items", "bl2.locations",
-        "bl2.v1", "bl2.v2", "bl2.v3", "bl2.v4", "bl2.v5", "bl2.v6", "bl2.v7", "bl2.v8", "bl2.v9",
-
-        "tps", "tps.items", "tps.locations",
-        "tps.v1", "tps.v2", "tps.v3", "tps.v4", "tps.v5", "tps.v6", "tps.v7", "tps.v8", "tps.v9",
+        "defines",
+        "options",
+        "hints",
+        "items",
+        "locations",
+        "enemies",
+        "missions",
+        "other",
+        "seed" "bl2",
+        "bl2.items",
+        "bl2.locations",
+        "bl2.v1",
+        "bl2.v2",
+        "bl2.v3",
+        "bl2.v4",
+        "bl2.v5",
+        "tps",
+        "tps.items",
+        "tps.locations",
+        "tps.v1",
     ):
         module = sys.modules.get("Mods.LootRandomizer.Mod." + submodule_name)
         if module:
@@ -38,11 +51,25 @@ if __name__ == "__main__":
 from typing import Optional, Sequence
 
 from Mods.LootRandomizer.Mod.defines import *
-from Mods.LootRandomizer.Mod import options, hints, items, locations, enemies, missions, other, seed
-if   BL2: from Mods.LootRandomizer.Mod.bl2.locations import Locations
-elif TPS: from Mods.LootRandomizer.Mod.tps.locations import Locations
+from Mods.LootRandomizer.Mod import (
+    options,
+    hints,
+    items,
+    locations,
+    enemies,
+    missions,
+    other,
+    seed,
+)
+
+if BL2:
+    from Mods.LootRandomizer.Mod.bl2.locations import Locations
+elif TPS:
+    from Mods.LootRandomizer.Mod.tps.locations import Locations
 else:
-    raise Exception(f"Loot Randomizer is not available for {ModMenu.Game.GetCurrent().name}")
+    raise Exception(
+        f"Loot Randomizer is not available for {ModMenu.Game.GetCurrent().name}"
+    )
 
 
 class LootRandomizer(ModMenu.SDKMod):
@@ -52,10 +79,11 @@ class LootRandomizer(ModMenu.SDKMod):
     Author: str = "mopioid"
     SupportedGames: ModMenu.Game = ModMenu.Game.BL2 | ModMenu.Game.TPS
     Types: ModMenu.ModTypes = ModMenu.ModTypes.Gameplay
-    SaveEnabledState: ModMenu.EnabledSaveType = ModMenu.EnabledSaveType.LoadOnMainMenu
+    SaveEnabledState: ModMenu.EnabledSaveType = (
+        ModMenu.EnabledSaveType.LoadOnMainMenu
+    )
 
     Options: Sequence[ModMenu.Options.Base] = options.Options
-
 
     def Enable(self):
         for location in Locations:
@@ -81,7 +109,6 @@ class LootRandomizer(ModMenu.SDKMod):
             location.disable()
         super().Disable()
 
-
     @ModMenu.ClientMethod
     def SendSeed(self, seed_string: str, PC: Optional[UObject] = None) -> None:
         host_seed = seed.Seed.FromString(seed_string)
@@ -100,8 +127,10 @@ class LootRandomizer(ModMenu.SDKMod):
 options.mod_instance = LootRandomizer()
 
 if __name__ == "__main__":
-    try: options.mod_instance.__class__.__module__ = _this_module #type: ignore
-    except: pass
+    try:
+        options.mod_instance.__class__.__module__ = _this_module  # type: ignore
+    except:
+        pass
     ModMenu.RegisterMod(options.mod_instance)
     options.mod_instance.Enable()
 else:

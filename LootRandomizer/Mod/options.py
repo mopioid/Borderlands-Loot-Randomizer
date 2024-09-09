@@ -13,6 +13,7 @@ import os
 
 from typing import Callable, Dict, List, Optional, Sequence, Set, Union
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from .. import LootRandomizer
 
@@ -39,7 +40,7 @@ def _LoadSeeds() -> Sequence[str]:
             Log(f"Could not open seeds file at {seeds_file}")
             return ("",)
     else:
-        open(seeds_file, 'w')
+        open(seeds_file, "w")
 
     listed_seeds: List[str] = []
     with open(seeds_file) as file:
@@ -48,7 +49,8 @@ def _LoadSeeds() -> Sequence[str]:
             if line == "":
                 continue
 
-            try: listed_seed = Seed.FromString(line)
+            try:
+                listed_seed = Seed.FromString(line)
             except ValueError as error:
                 Log(error)
                 continue
@@ -86,7 +88,7 @@ def _SeedApplied() -> None:
 
 
 def SaveSeedString(seed_string: str) -> None:
-    with open(seeds_file, 'a+') as file:
+    with open(seeds_file, "a+") as file:
         file.seek(0, 0)
         seeds = file.read()
 
@@ -117,7 +119,7 @@ def _NewSeedGenerateClicked() -> None:
         "Seed Generated and Applied",
         "You will now see the seed's randomization in your game.\n\n"
         "You can review information about the seed in Loot Randomizer options.",
-        1
+        1,
     )
 
     SaveSeedString(new_seed.string)
@@ -129,7 +131,8 @@ def _NewSeedGenerateClicked() -> None:
 def _SelectSeedApplyClicked() -> None:
     seed = Seed.FromString(_SeedsList.LootRandomizer_staged)
 
-    try: seed.apply()
+    try:
+        seed.apply()
     except Exception as error:
         show_dialog("Cannot Apply Seed", str(error), 1)
         return
@@ -137,13 +140,17 @@ def _SelectSeedApplyClicked() -> None:
     _SeedsList.commit_CurrentValue()
     SaveSettings()
     _SeedApplied()
-    show_dialog("Seed Applied", "You will now see the seed's randomization in your game.")
+    show_dialog(
+        "Seed Applied",
+        "You will now see the seed's randomization in your game.",
+    )
 
 
 def _SeedTrackerClicked() -> None:
     if not seed.AppliedSeed:
         return
     os.startfile(seed.AppliedSeed.generate_tracker())
+
 
 def _PopulateHintsClicked() -> None:
     if not seed.AppliedSeed:
@@ -154,7 +161,7 @@ def _PopulateHintsClicked() -> None:
     if Tag.EnableHints not in seed.AppliedTags:
         show_dialog(
             "Cannot Populate Hints",
-            f"Hints and spoilers are disabled for seed {seed_string}."
+            f"Hints and spoilers are disabled for seed {seed_string}.",
         )
         return
 
@@ -162,7 +169,7 @@ def _PopulateHintsClicked() -> None:
         seed.populate_hints()
         show_dialog(
             "Filled In Tracker Hints",
-            f"The hints for seed {seed.string} have been filled in."
+            f"The hints for seed {seed.string} have been filled in.",
         )
 
     show_confirmation(
@@ -171,8 +178,9 @@ def _PopulateHintsClicked() -> None:
             f"This will add a hint for every location to the tracker for seed {seed_string}. "
             "This can only be undone by deleting the tracker file to create a new one."
         ),
-        confirmed
+        confirmed,
     )
+
 
 def _PopulateSpoilersClicked() -> None:
     if not seed.AppliedSeed:
@@ -183,7 +191,7 @@ def _PopulateSpoilersClicked() -> None:
     if Tag.EnableHints not in seed.AppliedTags:
         show_dialog(
             "Cannot Populate Spoilers",
-            f"Hints and spoilers are disabled for seed {seed_string}."
+            f"Hints and spoilers are disabled for seed {seed_string}.",
         )
         return
 
@@ -191,7 +199,7 @@ def _PopulateSpoilersClicked() -> None:
         seed.populate_spoilers()
         show_dialog(
             "Filled In Tracker Spoilers",
-            f"The spoilers for seed {seed.string} have been filled in."
+            f"The spoilers for seed {seed.string} have been filled in.",
         )
 
     show_confirmation(
@@ -200,16 +208,20 @@ def _PopulateSpoilersClicked() -> None:
             f"This will add a spoiler for every location to the tracker for seed {seed_string}. "
             "This can only be undone by deleting the tracker file to create a new one."
         ),
-        confirmed
+        confirmed,
     )
 
 
 def _ResetDismissedClicked() -> None:
-    show_dialog("Dismissed Hints Reset", "All hints items will now appear again.")
+    show_dialog(
+        "Dismissed Hints Reset", "All hints items will now appear again."
+    )
     hints.ResetDismissed()
 
 
-def _WillowScrollingListOnClikEvent(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _WillowScrollingListOnClikEvent(
+    caller: UObject, _f: UFunction, params: FStruct
+) -> bool:
     """
     Copied from ModMenu.OptionManager to detect clicking of menu items, modified to detect
     the descriptions of our "buttons."
@@ -233,17 +245,17 @@ def _WillowScrollingListOnClikEvent(caller: UObject, function: UFunction, params
     return True
 
 
-def _PostLogin(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _PostLogin(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     if params.NewPlayer == get_pc():
         return True
 
     if seed.AppliedSeed and not is_client():
-        mod_instance.SendSeed(seed.AppliedSeed.string, PC = params.NewPlayer)
+        mod_instance.SendSeed(seed.AppliedSeed.string, PC=params.NewPlayer)
 
     return True
 
 
-def _PostBeginPlay(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _PostBeginPlay(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     NewSeedOptions.IsHidden = False
     SelectSeedOptions.IsHidden = False
     return True
@@ -255,7 +267,9 @@ _callback_options: Set[Union[CallbackField, CallbackNested]] = set()
 class CallbackField(ModMenu.Options.Field):
     Callback: Callable[[], None]
 
-    def __init__(self, Caption: str, Description: str, Callback: Callable[[], None]) -> None:
+    def __init__(
+        self, Caption: str, Description: str, Callback: Callable[[], None]
+    ) -> None:
         self.Caption = Caption
         self.Description = f"{Description}<!-- {__package__}.{id(self)} -->"
         self.IsHidden = False
@@ -272,9 +286,13 @@ class CallbackNested(ModMenu.Options.Nested):
         Caption: str,
         Description: str,
         Callback: Callable[[], None],
-        Children: Sequence[ModMenu.Options.Base]
+        Children: Sequence[ModMenu.Options.Base],
     ) -> None:
-        super().__init__(Caption, f"{Description}<!-- {__package__}.{id(self)} -->", Children)
+        super().__init__(
+            Caption,
+            f"{Description}<!-- {__package__}.{id(self)} -->",
+            Children,
+        )
         self.Callback = Callback
         _callback_options.add(self)
 
@@ -295,12 +313,14 @@ class CallbackSpinner(ModMenu.Options.Spinner):
     ):
         self.Callback = Callback
         self._LootRandomizer_value = StartingValue
-        super().__init__(Caption, Description, StartingValue, Choices, IsHidden=IsHidden)
+        super().__init__(
+            Caption, Description, StartingValue, Choices, IsHidden=IsHidden
+        )
 
     @property
     def CurrentValue(self) -> str:
         return self._LootRandomizer_value
-    
+
     @CurrentValue.setter
     def CurrentValue(self, value: str) -> None:
         if value != self._LootRandomizer_value:
@@ -321,7 +341,9 @@ class SeedListSpinner(ModMenu.Options.Spinner):
         *,
         IsHidden: bool = False,
     ):
-        super().__init__(Caption, Description, Choices[0], Choices, IsHidden=IsHidden)
+        super().__init__(
+            Caption, Description, Choices[0], Choices, IsHidden=IsHidden
+        )
         self.StartingValue = ""
         self._LootRandomizer_value = ""
         self.LootRandomizer_staged = ""
@@ -329,7 +351,7 @@ class SeedListSpinner(ModMenu.Options.Spinner):
     @property
     def CurrentValue(self) -> str:
         return self._LootRandomizer_value
-    
+
     @CurrentValue.setter
     def CurrentValue(self, value: str) -> None:
         self.LootRandomizer_staged = value
@@ -345,9 +367,7 @@ class SeedListSpinner(ModMenu.Options.Spinner):
 
 
 _SeedsList = SeedListSpinner(
-    Caption="Seed",
-    Description="",
-    Choices=_LoadSeeds()
+    Caption="Seed", Description="", Choices=_LoadSeeds()
 )
 
 
@@ -357,13 +377,13 @@ NewSeedOptions = ModMenu.Options.Nested(
         "Create a new seed. Each seed defines a shuffling of loot sources that is consistent each "
         "time you play the seed."
     ),
-    Children=()
+    Children=(),
 )
 
 _EditSeedFileButton = CallbackField(
     Caption="Edit Seeds",
     Description="Open your Seeds.txt file in a text editor so that you may add or remove seeds.",
-    Callback=lambda: os.startfile(seeds_file)
+    Callback=lambda: os.startfile(seeds_file),
 )
 
 SelectSeedOptions = CallbackNested(
@@ -375,13 +395,12 @@ SelectSeedOptions = CallbackNested(
     Callback=_ReloadSeeds,
     Children=(
         _SeedsList,
-
         CallbackField(
             Caption="APPLY SEED",
             Description="Confirm selection of the above seed, and apply it to your game.",
-            Callback=_SelectSeedApplyClicked
+            Callback=_SelectSeedApplyClicked,
         ),
-    )
+    ),
 )
 
 AutoLog = ModMenu.Options.Boolean(
@@ -390,31 +409,28 @@ AutoLog = ModMenu.Options.Boolean(
         "When a location drops its hint or item, whether to automatically record that information "
         "in the seed's tracker."
     ),
-    StartingValue=True
+    StartingValue=True,
 )
 
 HintDisplay = CallbackSpinner(
     Caption="Hint Display",
     Description=(
-        "How much information loot sources should reveal about their item drop. \"Vague\" will only"
-        " describe rarity and type, while \"spoiler\" will name the exact item."
+        'How much information loot sources should reveal about their item drop. "Vague" will only'
+        ' describe rarity and type, while "spoiler" will name the exact item.'
     ),
     Callback=lambda value: hints.UpdateHints(),
     Choices=("None", "Vague", "Spoiler"),
-    StartingValue="Vague"
+    StartingValue="Vague",
 )
 
 HintTrainingSeen = ModMenu.Options.Hidden(
-    Caption="Seen Hint Training",
-    StartingValue=False
+    Caption="Seen Hint Training", StartingValue=False
 )
 DudTrainingSeen = ModMenu.Options.Hidden(
-    Caption="Seen Dud Training",
-    StartingValue=False
+    Caption="Seen Dud Training", StartingValue=False
 )
 RewardsTrainingSeen = ModMenu.Options.Hidden(
-    Caption="Seen Rewards Training",
-    StartingValue=False
+    Caption="Seen Rewards Training", StartingValue=False
 )
 
 
@@ -428,7 +444,7 @@ Options = (
             "Open the text file listing every location and what has been found in the selected "
             "seed."
         ),
-        Callback=_SeedTrackerClicked
+        Callback=_SeedTrackerClicked,
     ),
     ModMenu.Options.Nested(
         Caption="Configure Seed Tracker",
@@ -438,22 +454,21 @@ Options = (
             CallbackField(
                 Caption="FILL IN TRACKER HINTS",
                 Description="Add a hint for every location to the tracker for the selected seed.",
-                Callback=_PopulateHintsClicked
+                Callback=_PopulateHintsClicked,
             ),
             CallbackField(
                 Caption="FILL IN TRACKER SPOILERS",
                 Description="Add a spoiler for every location to the tracker for the selected seed.",
-                Callback=_PopulateSpoilersClicked
+                Callback=_PopulateSpoilersClicked,
             ),
-        )
+        ),
     ),
     HintDisplay,
     CallbackField(
         Caption="Reset Dismissed Hints",
         Description="Revert every dismissed hint so that they drop in game again.",
-        Callback=_ResetDismissedClicked
+        Callback=_ResetDismissedClicked,
     ),
-
     HintTrainingSeen,
     DudTrainingSeen,
     RewardsTrainingSeen,
@@ -462,10 +477,14 @@ Options = (
 
 class SeedHeader(ModMenu.Options.Field):
     def __init__(self, Caption: str) -> None:
-        self.Caption = Caption; self.Description = ""; self.IsHidden = False
+        self.Caption = Caption
+        self.Description = ""
+        self.IsHidden = False
+
 
 class SeedOption(ModMenu.Options.Spinner):
     tag: Tag
+
     def __init__(self, tag: Tag) -> None:
         if (tag & ContentTags) and not (tag & OwnedContent):
             StartingValue = "Off"
@@ -473,7 +492,7 @@ class SeedOption(ModMenu.Options.Spinner):
         else:
             Choices = ("Off", "On")
             StartingValue = "On" if tag.default else "Off"
-        
+
         super().__init__(tag.caption, tag.description, StartingValue, Choices)
         self.tag = tag
 
@@ -496,8 +515,8 @@ def Enable():
             _SeedApplied()
         except ValueError as error:
             Log(error)
-    
-    categories: Dict[str, List[Tag]] = dict() #type: ignore
+
+    categories: Dict[str, List[Tag]] = dict()  # type: ignore
     for tag in TagList:
         if hasattr(tag, "category"):
             tag_list = categories.setdefault(tag.category, [])
@@ -511,12 +530,26 @@ def Enable():
             NewSeedOptions.Children.append(SeedOption(tag))
 
     NewSeedOptions.Children.append(
-        CallbackField("GENERATE SEED", "Confirm selections and and generate the new seed.", _NewSeedGenerateClicked)
+        CallbackField(
+            "GENERATE SEED",
+            "Confirm selections and and generate the new seed.",
+            _NewSeedGenerateClicked,
+        )
     )
 
-    RunHook("WillowGame.WillowScrollingList.OnClikEvent", "LootRandomizer", _WillowScrollingListOnClikEvent)
-    RunHook("WillowGame.WillowGameInfo.PostLogin", "LootRandomizer", _PostLogin)
-    RunHook("WillowGame.WillowGameInfo.PostBeginPlay", "LootRandomizer", _PostBeginPlay)
+    RunHook(
+        "WillowGame.WillowScrollingList.OnClikEvent",
+        "LootRandomizer",
+        _WillowScrollingListOnClikEvent,
+    )
+    RunHook(
+        "WillowGame.WillowGameInfo.PostLogin", "LootRandomizer", _PostLogin
+    )
+    RunHook(
+        "WillowGame.WillowGameInfo.PostBeginPlay",
+        "LootRandomizer",
+        _PostBeginPlay,
+    )
 
 
 def Disable():

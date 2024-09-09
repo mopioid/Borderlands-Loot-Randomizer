@@ -1,12 +1,23 @@
 {
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+    },
+
     "python.analysis.typeCheckingMode": "strict",
     "python.analysis.extraPaths": ["C:\\Users\\mopioid\\Documents\\My Games\\Borderlands 2"],
     "python.analysis.diagnosticSeverityOverrides": {
         "reportIncompatibleVariableOverride": false,
         "reportUnusedImport": false,
     },
+    "python.linting.ignorePatterns": [
+        "**/test.py",
+        "**/log.py"
+    ],
     "python.analysis.exclude": [
         "C:\\Users\\mopioid\\Documents\\My Games\\Borderlands 2\\Mods\\test.py",
         "C:\\Users\\mopioid\\Documents\\My Games\\Borderlands 2\\Mods\\log.py"
+        // "**test.py",
+        // "**log.py"
     ]
 }

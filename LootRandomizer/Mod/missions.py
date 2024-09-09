@@ -1,19 +1,30 @@
 from __future__ import annotations
 
-from unrealsdk import Log, FindObject, FindAll, GetEngine, KeepAlive
-from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
+import enum
+from typing import Callable, List, Optional, Sequence
 
-from . import options, items
+from unrealsdk import (
+    FindAll,
+    FindObject,
+    FStruct,
+    GetEngine,
+    KeepAlive,
+    Log,
+    RemoveHook,
+    RunHook,
+    UFunction,
+    UObject,
+)
+
+from . import items, options
 from .defines import *
 from .locations import Dropper, Location, MapDropper, RegistrantDropper
-
-import enum
-
-from typing import Callable, Generator, List, Optional, Sequence
 
 
 class PlaythroughDelegate(MapDropper):
     paths = ("*",)
+
+    playthrough: int
 
     def entered_map(self) -> None:
         pc = get_pc()
@@ -24,12 +35,18 @@ class PlaythroughDelegate(MapDropper):
         if new_playthrough == self.playthrough:
             return
 
-        if   BL2: from .bl2.locations import Locations
-        elif TPS: from .tps.locations import Locations
-        else: raise
+        if BL2:
+            from .bl2.locations import Locations
+        elif TPS:
+            from .tps.locations import Locations
+        else:
+            raise
 
         for location in Locations:
-            if isinstance(location, Mission) and Tag.Excluded not in location.tags:
+            if (
+                isinstance(location, Mission)
+                and Tag.Excluded not in location.tags
+            ):
                 if new_playthrough == 2:
                     location.mission_definition.restore_xp()
                 else:
@@ -41,34 +58,79 @@ class PlaythroughDelegate(MapDropper):
         super().enable()
         self.playthrough = 2
 
+
 _playthrough_delegate = PlaythroughDelegate()
 
 
 def Enable() -> None:
     _playthrough_delegate.enable()
 
-    RunHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer", lambda c,f,p: False)
+    RunHook(
+        "WillowGame.WillowPlayerController.AcceptMission",
+        "LootRandomizer",
+        _AcceptMission,
+    )
+    RunHook(
+        "WillowGame.WillowPlayerController.ServerCompleteMission",
+        "LootRandomizer",
+        _CompleteMission,
+    )
 
-    RunHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer", _AcceptMission)
-    RunHook("WillowGame.WillowPlayerController.ServerCompleteMission", "LootRandomizer", _CompleteMission)
+    RunHook(
+        "WillowGame.WillowMissionItem.MissionDenyPickup",
+        "LootRandomizer",
+        _MissionDenyPickup,
+    )
+    RunHook(
+        "Engine.WillowInventory.PickupAssociated",
+        "LootRandomizer",
+        _PickupAssociated,
+    )
 
-    RunHook("WillowGame.WillowMissionItem.MissionDenyPickup", "LootRandomizer", _MissionDenyPickup)
-    RunHook("Engine.WillowInventory.PickupAssociated", "LootRandomizer", _PickupAssociated)
+    RunHook(
+        "WillowGame.WillowPlayerController.TryPromptForFastForward",
+        "LootRandomizer",
+        lambda c, f, p: False,
+    )
+    RunHook(
+        "WillowGame.WillowPlayerController.CheckAllSideMissionsCompleteAchievement",
+        "LootRandomizer",
+        lambda c, f, p: False,
+    )
 
 
 def Disable() -> None:
     _playthrough_delegate.disable()
 
-    RemoveHook("WillowGame.WillowPlayerController.TryPromptForFastForward", "LootRandomizer")
+    RemoveHook(
+        "WillowGame.WillowPlayerController.AcceptMission",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.WillowPlayerController.ServerCompleteMission",
+        "LootRandomizer",
+    )
 
-    RemoveHook("WillowGame.WillowPlayerController.AcceptMission", "LootRandomizer")
-    RemoveHook("WillowGame.WillowPlayerController.ServerCompleteMission", "LootRandomizer")
+    RemoveHook(
+        "Engine.WillowInventory.PickupAssociated",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.WillowMissionItem.MissionDenyPickup",
+        "LootRandomizer",
+    )
 
-    RemoveHook("Engine.WillowInventory.PickupAssociated", "LootRandomizer")
-    RemoveHook("WillowGame.WillowMissionItem.MissionDenyPickup", "LootRandomizer")
+    RemoveHook(
+        "WillowGame.WillowPlayerController.TryPromptForFastForward",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.WillowPlayerController.CheckAllSideMissionsCompleteAchievement",
+        "LootRandomizer",
+    )
 
 
-def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _AcceptMission(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     missiondef = params.Mission
     registry = MissionDefinition.Registrants(missiondef)
     if not registry:
@@ -89,7 +151,7 @@ def _AcceptMission(caller: UObject, function: UFunction, params: FStruct) -> boo
     return True
 
 
-def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _CompleteMission(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     missiondef = params.Mission
     registry = MissionDefinition.Registrants(missiondef)
     if not registry:
@@ -98,51 +160,63 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
     pc = get_pc()
     playthrough = pc.GetCurrentPlaythrough()
     mission_index = pc.NativeGetMissionIndex(missiondef)
-    mission_data = pc.MissionPlaythroughs[playthrough].MissionList[mission_index]
+    mission_list = pc.MissionPlaythroughs[playthrough].MissionList
+    mission_data = mission_list[mission_index]
     mission_level = mission_data.GameStage
-    alt_reward, _ = missiondef.ShouldGrantAlternateReward(tuple(mission_data.ObjectivesProgress))
+    alt_reward, _ = missiondef.ShouldGrantAlternateReward(
+        tuple(mission_data.ObjectivesProgress)
+    )
 
-    mission_dropper: Optional[MissionDefinition] = None
+    mission_definition: Optional[MissionDefinition] = None
 
     delegates: List[Callable[[], None]] = []
 
-    for a_mission_dropper in registry:
-        for dropper in a_mission_dropper.location.droppers:
+    for mission_dropper in registry:
+        for dropper in mission_dropper.location.droppers:
             if isinstance(dropper, MissionStatusDelegate):
                 delegates.append(dropper.completed)
 
-        if isinstance(a_mission_dropper, MissionDefinitionAlt) == alt_reward:
-            mission_dropper = a_mission_dropper
+        if isinstance(mission_dropper, MissionDefinitionAlt) == alt_reward:
+            mission_definition = mission_dropper
 
-    if not (mission_dropper and mission_dropper.location.item):
+    if not (mission_definition and mission_definition.location.item):
         return True
-    
-    def revert(): mission_dropper.reward.RewardItemPools = ()
+
+    def revert():
+        mission_definition.reward.RewardItemPools = ()
+
     do_next_tick(*delegates, revert)
 
-    pool = mission_dropper.location.prepare_pools(1)[0]
-    mission_dropper.reward.RewardItemPools = (pool,)
+    pool = mission_definition.location.prepare_pools(1)[0]
+    mission_definition.reward.RewardItemPools = (pool,)
 
-    if mission_dropper.location.item == items.DudItem:
+    if mission_definition.location.item == items.DudItem:
         return True
 
     for pri in GetEngine().GetCurrentWorldInfo().GRI.PRIArray:
         pc = pri.Owner
 
-        bonuses = len(mission_dropper.location.rarities)
+        bonuses = len(mission_definition.location.rarities)
         if pc is get_pc():
             bonuses -= 1
         if not bonuses:
             continue
 
         if pc is get_pc() and (not options.RewardsTrainingSeen.CurrentValue):
+
             def training() -> None:
-                show_dialog("Multiple Rewards", (
-                    "The mission you just completed takes longer than average to complete. As a "
-                    "reward, a bonus instance of its loot item has been added to your backpack."
-                ), 5)
+                show_dialog(
+                    "Multiple Rewards",
+                    (
+                        "The mission you just completed takes longer than average to complete. "
+                        "As a reward, a bonus instance of its loot item has been added to your "
+                        "backpack."
+                    ),
+                    5,
+                )
                 options.RewardsTrainingSeen.CurrentValue = True
                 options.SaveSettings()
+
             do_next_tick(training)
 
         def loot_callback(item: UObject, pc: UObject = pc) -> None:
@@ -152,12 +226,18 @@ def _CompleteMission(caller: UObject, function: UFunction, params: FStruct) -> b
             definition_data = convert_struct(definition_data)
 
             if definition_data[0].Class.Name == "WeaponTypeDefinition":
-                pc.GetPawnInventoryManager().ClientAddWeaponToBackpack(definition_data, 1)
+                pc.GetPawnInventoryManager().ClientAddWeaponToBackpack(
+                    definition_data, 1
+                )
             else:
-                pc.GetPawnInventoryManager().ClientAddItemToBackpack(definition_data, 1, 1)
+                pc.GetPawnInventoryManager().ClientAddItemToBackpack(
+                    definition_data, 1, 1
+                )
 
         for _ in range(bonuses):
-            spawn_item(mission_dropper.location.item.pool, pc, loot_callback)
+            spawn_item(
+                mission_definition.location.item.pool, pc, loot_callback
+            )
 
     return True
 
@@ -169,7 +249,7 @@ def _itemdef_make_repeatable(itemdef: UObject) -> bool:
     registry = MissionDefinition.Registrants(itemdef.MissionDirective)
     if not registry:
         return False
-    
+
     for mission_dropper in registry:
         if not Tag.Excluded in mission_dropper.location.tags:
             break
@@ -177,27 +257,34 @@ def _itemdef_make_repeatable(itemdef: UObject) -> bool:
         return False
 
     return mission_dropper.location.current_status in (
-        Mission.Status.NotStarted, Mission.Status.Complete
+        Mission.Status.NotStarted,
+        Mission.Status.Complete,
     )
 
 
-def _MissionDenyPickup(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _MissionDenyPickup(
+    caller: UObject, _f: UFunction, params: FStruct
+) -> bool:
     itemdef = caller.GetInventoryDefinition()
     if not _itemdef_make_repeatable(itemdef):
         return True
 
+    # TODO: remove
     # if get_missiontracker().GetMissionStatus(itemdef.MissionDirective) not in (0, 4):
     #     return True
 
     # Don't judge me; this is literally how the game does it.
     for pickup in FindAll("WillowPickup"):
-        if pickup.Inventory and pickup.Inventory.GetInventoryDefinition() == itemdef:
+        if (
+            pickup.Inventory
+            and pickup.Inventory.GetInventoryDefinition() == itemdef
+        ):
             return True
 
     return False
 
 
-def _PickupAssociated(caller: UObject, function: UFunction, params: FStruct) -> bool:
+def _PickupAssociated(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     itemdef = caller.GetInventoryDefinition()
     if not _itemdef_make_repeatable(itemdef):
         return True
@@ -206,6 +293,7 @@ def _PickupAssociated(caller: UObject, function: UFunction, params: FStruct) -> 
         pickup.SetPickupability(True)
         if not is_client():
             get_missiontracker().RegisterMissionDirector(pickup)
+
     do_next_tick(enable_pickup)
     return True
 
@@ -230,12 +318,14 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
     next_link: UObject
     repeatable: bool
 
-    def __init__(self,
+    def __init__(
+        self,
         path: str,
         block_weapon: bool = True,
         unlink_next: bool = False,
     ) -> None:
-        self.block_weapon = block_weapon; self.unlink_next = unlink_next
+        self.block_weapon = block_weapon
+        self.unlink_next = unlink_next
         super().__init__(path)
 
     @property
@@ -260,7 +350,9 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
         self.reward_pools = tuple(self.reward.RewardItemPools)
         self.reward.RewardItemPools = ()
 
-        self.reward_xp_scale = self.reward.ExperienceRewardPercentage.BaseValueScaleConstant
+        self.reward_xp_scale = (
+            self.reward.ExperienceRewardPercentage.BaseValueScaleConstant
+        )
 
         self.prepare_attributes()
 
@@ -300,7 +392,9 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
         self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = 0
 
     def restore_xp(self) -> None:
-        self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = self.reward_xp_scale
+        self.reward.ExperienceRewardPercentage.BaseValueScaleConstant = (
+            self.reward_xp_scale
+        )
 
     def make_repeatable(self) -> None:
         self.uobject.bRepeatable = True
@@ -317,10 +411,17 @@ class MissionDefinitionAlt(MissionDefinition):
     def reward(self) -> FStruct:
         return self.uobject.AlternativeReward
 
-    def prepare_attributes(self) -> None: pass
-    def revert_attributes(self) -> None: pass
-    def make_repeatable(self) -> None: pass
-    def revert_repeatable(self) -> None: pass
+    def prepare_attributes(self) -> None:
+        pass
+
+    def revert_attributes(self) -> None:
+        pass
+
+    def make_repeatable(self) -> None:
+        pass
+
+    def revert_repeatable(self) -> None:
+        pass
 
 
 class MissionStatusDelegate(MissionDropper):
@@ -351,7 +452,7 @@ class MissionObject(MissionStatusDelegate, MapDropper):
             if not is_client():
                 get_missiontracker().RegisterMissionDirector(obj)
         return obj
-    
+
     def entered_map(self) -> None:
         if self.location.current_status != Mission.Status.NotStarted:
             self.apply()
@@ -371,7 +472,9 @@ class MissionPickup(MissionObject):
             if spawner.MissionPickup:
                 spawner.MissionPickup.SetPickupability(True)
                 if not is_client():
-                    get_missiontracker().RegisterMissionDirector(spawner.MissionPickup)
+                    get_missiontracker().RegisterMissionDirector(
+                        spawner.MissionPickup
+                    )
         return spawner
 
 
@@ -381,8 +484,11 @@ class MissionGiver(MissionObject):
     ends: bool
     mission: Optional[str]
 
-    def __init__(self, path: str, begins: bool, ends: bool, *map_names: str) -> None:
-        self.begins = begins; self.ends = ends
+    def __init__(
+        self, path: str, begins: bool, ends: bool, *map_names: str
+    ) -> None:
+        self.begins = begins
+        self.ends = ends
         super().__init__(path, *map_names)
 
     def apply(self) -> Optional[UObject]:
@@ -433,12 +539,17 @@ class Mission(Location):
 
         if not self.rarities:
             self.rarities = [100]
-            if self.tags & Tag.LongMission:     self.rarities += (100,)
-            if self.tags & Tag.VeryLongMission: self.rarities += (100,100,100)
-            if self.tags & Tag.RaidEnemy:       self.rarities += (100,100,100)
+            if self.tags & Tag.LongMission:
+                self.rarities += (100,)
+            if self.tags & Tag.VeryLongMission:
+                self.rarities += (100, 100, 100)
+            if self.tags & Tag.RaidEnemy:
+                self.rarities += (100, 100, 100)
 
         self.mission_definition, *_ = self.mission_definitions = tuple(
-            dropper for dropper in self.droppers if isinstance(dropper, MissionDefinition)
+            dropper
+            for dropper in self.droppers
+            if isinstance(dropper, MissionDefinition)
         )
 
         if Tag.Excluded not in self.tags:
@@ -451,7 +562,9 @@ class Mission(Location):
 
     @property
     def current_status(self) -> Status:
-        status = get_missiontracker().GetMissionStatus(self.mission_definition.uobject)
+        status = get_missiontracker().GetMissionStatus(
+            self.mission_definition.uobject
+        )
         return Mission.Status(status)
 
     def __str__(self) -> str:

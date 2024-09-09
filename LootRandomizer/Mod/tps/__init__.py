@@ -12,12 +12,12 @@ SupportedVersions = (1,)
 class Character(enum.Enum):
     attr_init: UObject
 
-    Gladiator    = "GD_PlayerClassId.Gladiator"
-    Enforcer     = "GD_PlayerClassId.Enforcer"
-    Lawbringer   = "GD_PlayerClassId.Lawbringer"
-    Prototype    = "GD_PlayerClassId.Prototype"
+    Gladiator = "GD_PlayerClassId.Gladiator"
+    Enforcer = "GD_PlayerClassId.Enforcer"
+    Lawbringer = "GD_PlayerClassId.Lawbringer"
+    Prototype = "GD_PlayerClassId.Prototype"
     Doppelganger = "GD_QuincePackageDef.PlayerClassId.Doppel"
-    Baroness     = "GD_CrocusPackageDef.PlayerClassId.Baroness"
+    Baroness = "GD_CrocusPackageDef.PlayerClassId.Baroness"
 
 
 class Category(str, enum.Enum):
@@ -40,41 +40,43 @@ class Tag(enum.IntFlag):
     content_title: Optional[str]
     dlc_path: Optional[str]
 
-    BaseGame           = enum.auto()
-    Holodome           = enum.auto()
-    ClaptasticVoyage   = enum.auto()
-    ShockDrop          = enum.auto()
-    TalesLoyalty       = enum.auto()
+    BaseGame = enum.auto()
+    Holodome = enum.auto()
+    ClaptasticVoyage = enum.auto()
+    ShockDrop = enum.auto()
+    TalesLoyalty = enum.auto()
 
-    ShortMission       = enum.auto()
-    LongMission        = enum.auto()
-    VeryLongMission    = enum.auto()
-    Slaughter          = enum.auto()
-    VehicleMission     = enum.auto()
+    ShortMission = enum.auto()
+    LongMission = enum.auto()
+    VeryLongMission = enum.auto()
+    Slaughter = enum.auto()
+    VehicleMission = enum.auto()
 
-    UniqueEnemy        = enum.auto()
-    SlowEnemy          = enum.auto()
-    RareEnemy          = enum.auto()
-    VeryRareEnemy      = enum.auto()
-    MobFarm            = enum.auto()
-    RaidEnemy          = enum.auto()
-    MissionEnemy       = enum.auto()
-    EvolvedEnemy       = enum.auto()
+    UniqueEnemy = enum.auto()
+    SlowEnemy = enum.auto()
+    RareEnemy = enum.auto()
+    VeryRareEnemy = enum.auto()
+    MobFarm = enum.auto()
+    RaidEnemy = enum.auto()
+    MissionEnemy = enum.auto()
+    EvolvedEnemy = enum.auto()
 
-    Miscellaneous      = enum.auto()
+    Miscellaneous = enum.auto()
 
-    DuplicateItems     = enum.auto()
-    EnableHints        = enum.auto()
+    DuplicateItems = enum.auto()
+    EnableHints = enum.auto()
 
+    Excluded = 0x1 << 36
 
-    Excluded           = 0x1 << 36
 
 TagList: List[Tag] = []
 
 ContentTags = Tag(0)
 MissionTags = Tag(0)
-EnemyTags   = Tag(0)
-OtherTags   = Tag(0)
+EnemyTags = Tag(0)
+OtherTags = Tag(0)
+
+# fmt: off
 
 for tag, content_title, dlc_path in (
     ( Tag.BaseGame, "Borderlands: The Pre-Sequel", None),
@@ -112,14 +114,23 @@ for tag, category, default, caption, description in (
     (Tag.DuplicateItems,     Category.Settings, False, "Duplicate Items",    "For seeds with more locations than items, random items can have multiple locations."),
     (Tag.EnableHints,        Category.Settings, True,  "Allow Hints",        "Whether this seed should generate a spoiler log, and also whether hints should be allowed while playing it."),
 ):
-    tag.category = category; tag.default = default; tag.caption = caption; tag.description = description
+    tag.category = category
+    tag.default = default
+    tag.caption = caption
+    tag.description = description
 
     TagList.append(tag)
 
-    if category == Category.Content:  ContentTags |= tag
-    if category == Category.Missions: MissionTags |= tag
-    if category == Category.Enemies:  EnemyTags   |= tag
-    if category == Category.Other:    OtherTags   |= tag
+    if category == Category.Content:
+        ContentTags |= tag
+    if category == Category.Missions:
+        MissionTags |= tag
+    if category == Category.Enemies:
+        EnemyTags |= tag
+    if category == Category.Other:
+        OtherTags |= tag
+
+# fmt: on
 
 
 class Hint(str, enum.Enum):
@@ -171,12 +182,28 @@ class Hint(str, enum.Enum):
     LegendaryOz = "Legendary Oz Kit"
 
 
-def _format_dud       (string: str) -> str: return f"<font color='#bc9898'>{string}</font>"
-def _format_blue      (string: str) -> str: return f"<font color='#3c8eff'>{string}</font>"
-def _format_purple    (string: str) -> str: return f"<font color='#a83fe5'>{string}</font>"
-def _format_legendary (string: str) -> str: return f"<font color='#ffb400'>{string}</font>"
-def _format_unique    (string: str) -> str: return f"<font color='#dc4646'>{string}</font>"
-# def _format_glitch    (string: str) -> str: return f"<font color='#ffa4e7'>{string}</font>"
+def _format_dud(string: str) -> str:
+    return f"<font color='#bc9898'>{string}</font>"
+
+
+def _format_blue(string: str) -> str:
+    return f"<font color='#3c8eff'>{string}</font>"
+
+
+def _format_purple(string: str) -> str:
+    return f"<font color='#a83fe5'>{string}</font>"
+
+
+def _format_legendary(string: str) -> str:
+    return f"<font color='#ffb400'>{string}</font>"
+
+
+def _format_unique(string: str) -> str:
+    return f"<font color='#dc4646'>{string}</font>"
+
+
+# def _format_glitch(string: str) -> str:
+#     return f"<font color='#ffa4e7'>{string}</font>"
 
 
 Hint.Dud.formatter = _format_dud

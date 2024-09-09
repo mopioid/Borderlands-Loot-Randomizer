@@ -13,7 +13,7 @@ from .items import ItemPool
 from base64 import b32encode, b32decode
 import random, os, importlib
 
-from typing import List, Optional, Sequence, TYPE_CHECKING
+from typing import List, Optional, Sequence
 from types import ModuleType
 
 if BL2:
@@ -37,7 +37,8 @@ class SeedEntry:
     tags: Tag
 
     def __init__(self, name: str, tags: Tag = Tag(0)) -> None:
-        self.name = name; self.tags = tags
+        self.name = name
+        self.tags = tags
 
     def match_item(self) -> ItemPool:
         for item in Items:
@@ -49,7 +50,9 @@ class SeedEntry:
         for location in Locations:
             if str(location) == self.name:
                 return location
-        raise ValueError(f"Could not locate location for seed entry '{self.name}'")
+        raise ValueError(
+            f"Could not locate location for seed entry '{self.name}'"
+        )
 
 
 def _stringify(data: bytes) -> str:
@@ -70,8 +73,13 @@ class Seed:
     items: Sequence[ItemPool]
     item_count: int
 
-    def __init__(self, data: bytes, version: int, tags: Tag, string: str) -> None:
-        self.data = data; self.version = version; self.tags = tags; self.string = string
+    def __init__(
+        self, data: bytes, version: int, tags: Tag, string: str
+    ) -> None:
+        self.data = data
+        self.version = version
+        self.tags = tags
+        self.string = string
 
     @classmethod
     def Generate(cls, tags: Tag, version: int = CurrentVersion) -> Seed:
@@ -79,24 +87,28 @@ class Seed:
         value |= tags.value << 6
         value |= version
 
-        data = value.to_bytes(length=9, byteorder='big')
+        data = value.to_bytes(length=9, byteorder="big")
 
         return cls(data, version, tags, _stringify(data))
 
     @classmethod
     def FromString(cls, string: str) -> Seed:
         try:
-            data = b32decode("".join(char.upper() for char in string if char.isalnum()) + "=")
-            assert(len(data) == 9)
+            data = b32decode(
+                "".join(char.upper() for char in string if char.isalnum())
+                + "="
+            )
+            assert len(data) == 9
         except:
-            raise ValueError("Failed to read seed with invalid format: " + string)
+            raise ValueError(
+                "Failed to read seed with invalid format: " + string
+            )
 
-        value = int.from_bytes(bytes=data, byteorder='big')
-        version = (2 ** 6 - 1) & value
-        tags = (2 ** 36 - 1) & (value >> 6)
+        value = int.from_bytes(bytes=data, byteorder="big")
+        version = (2**6 - 1) & value
+        tags = (2**36 - 1) & (value >> 6)
 
         return cls(data, version, Tag(tags), _stringify(data))
-
 
     def apply(self) -> None:
         global AppliedSeed, AppliedTags
@@ -107,15 +119,21 @@ class Seed:
                 "If you would like to play it, please install a version of Loot Randomizer that "
                 f"specifies a seed version of {self.version}."
             )
-        
+
         missing_dlcs = ""
         for tag in Tag:
             content_title = getattr(tag, "content_title", None)
-            if content_title and (tag & self.tags) and not (tag & options.OwnedContent):
+            if (
+                content_title
+                and (tag & self.tags)
+                and not (tag & options.OwnedContent)
+            ):
                 missing_dlcs += "\n &#x2022; " + content_title
 
         if missing_dlcs != "":
-            raise ValueError(f"Seed {self.string} requires additional DLCs to play:{missing_dlcs}")
+            raise ValueError(
+                f"Seed {self.string} requires additional DLCs to play:{missing_dlcs}"
+            )
 
         if AppliedSeed:
             AppliedSeed.unapply()
@@ -126,15 +144,27 @@ class Seed:
         if not is_client():
             options.mod_instance.SendSeed(self.string)
 
-        if BL2: module_name = "bl2"
-        else: module_name = "tps"
+        if BL2:
+            module_name = "bl2"
+        else:
+            module_name = "tps"
 
-        self.version_module = importlib.import_module(f".{module_name}.v{self.version}", __package__)
+        self.version_module = importlib.import_module(
+            f".{module_name}.v{self.version}", __package__
+        )
         version_items: Sequence[SeedEntry] = self.version_module.Items
         version_locations: Sequence[SeedEntry] = self.version_module.Locations
 
-        self.items = [entry.match_item() for entry in version_items if entry.tags & self.tags]
-        self.locations = tuple(entry.match_location() for entry in version_locations if entry.tags in self.tags)
+        self.items = [
+            entry.match_item()
+            for entry in version_items
+            if entry.tags & self.tags
+        ]
+        self.locations = tuple(
+            entry.match_location()
+            for entry in version_locations
+            if entry.tags in self.tags
+        )
 
         for item in self.items:
             item.apply(self.tags)
@@ -151,8 +181,10 @@ class Seed:
             randomizer.shuffle(self.items)
 
         elif self.tags & Tag.DuplicateItems:
-            self.items *= (location_count // item_count)
-            self.items += randomizer.sample(self.items, location_count % item_count)
+            self.items *= location_count // item_count
+            self.items += randomizer.sample(
+                self.items, location_count % item_count
+            )
             randomizer.shuffle(self.items)
 
         else:
@@ -168,7 +200,6 @@ class Seed:
 
         self.generate_tracker()
 
-
     def unapply(self) -> None:
         global AppliedSeed, AppliedTags
         AppliedSeed = None
@@ -178,7 +209,6 @@ class Seed:
             for location in self.locations:
                 location.item = None
 
-
     def generate_tracker(self) -> str:
         path = os.path.join(seeds_dir, f"{self.string}.txt")
         if os.path.exists(path):
@@ -186,8 +216,12 @@ class Seed:
 
         version_tags: Tag = self.version_module.Tags
 
-        with open(path, 'w', encoding='utf-8') as file:
-            item_warning = " (not all accessible)" if self.item_count > len(self.locations) else ""
+        with open(path, "w", encoding="utf-8") as file:
+            item_warning = (
+                " (not all accessible)"
+                if self.item_count > len(self.locations)
+                else ""
+            )
 
             file.write(
                 f"Loot Randomizer Seed {self.string}\n\n"
@@ -200,13 +234,19 @@ class Seed:
 
                 caption = getattr(tag, "caption", None)
                 if caption:
-                    file.write(f"{tag.caption}: {'On' if (tag in self.tags) else 'Off'}\n")
+                    file.write(
+                        f"{tag.caption}: {'On' if (tag in self.tags) else 'Off'}\n"
+                    )
 
             for tag in TagList:
                 if not tag & ContentTags & self.tags:
                     continue
 
-                locations = tuple(location for location in self.locations if tag in location.content)
+                locations = tuple(
+                    location
+                    for location in self.locations
+                    if tag in location.content
+                )
                 if not len(locations):
                     continue
 
@@ -214,9 +254,8 @@ class Seed:
 
                 for location in locations:
                     file.write(f"{location}\n")
-        
-        return path
 
+        return path
 
     def update_tracker(self, location: Location, drop: bool) -> None:
         if not is_client():
@@ -224,23 +263,23 @@ class Seed:
 
         if not (location.item and options.AutoLog.CurrentValue):
             return
-        
-        if options.HintDisplay.CurrentValue == 'None' and not drop:
+
+        if options.HintDisplay.CurrentValue == "None" and not drop:
             return
-        
-        log_item = bool(drop or options.HintDisplay.CurrentValue == 'Spoiler')
+
+        log_item = bool(drop or options.HintDisplay.CurrentValue == "Spoiler")
 
         none_log = f"{location.tracker_name}\n"
         hint_log = f"{location.tracker_name} - {location.item.hint}\n"
         full_log = f"{location.tracker_name} - {location.item.name}\n"
-        
+
         path = self.generate_tracker()
 
         try:
-            with open(path, 'r', encoding='utf-8') as file:
+            with open(path, "r", encoding="utf-8") as file:
                 lines = file.readlines()
         except:
-            with open(path, 'r') as file:
+            with open(path, "r") as file:
                 lines = file.readlines()
 
         for index in range(len(lines)):
@@ -248,23 +287,24 @@ class Seed:
 
             if line == none_log:
                 lines[index] = full_log if log_item else hint_log
-                with open(path, 'w', encoding='utf-8') as file: file.writelines(lines)
+                with open(path, "w", encoding="utf-8") as file:
+                    file.writelines(lines)
                 return
 
             if line == hint_log:
                 if log_item:
                     lines[index] = full_log
-                    with open(path, 'w', encoding='utf-8') as file: file.writelines(lines)
+                    with open(path, "w", encoding="utf-8") as file:
+                        file.writelines(lines)
                 return
 
             if line == full_log:
                 return
 
-
     def populate_tracker(self, spoiler: bool) -> None:
         path = self.generate_tracker()
 
-        with open(path, 'r', encoding='utf-8') as file:
+        with open(path, "r", encoding="utf-8") as file:
             lines = file.readlines()
 
         for location, item in zip(self.locations, self.items):
@@ -282,9 +322,8 @@ class Seed:
                     lines[index] = full_log if spoiler else hint_log
                     break
 
-        with open(path, 'w', encoding='utf-8') as file:
+        with open(path, "w", encoding="utf-8") as file:
             file.writelines(lines)
-
 
     def populate_hints(self) -> None:
         self.populate_tracker(False)
@@ -304,9 +343,13 @@ def generate_wikis(version: int) -> None:
     dummy_seed = Seed.Generate(dummy_tags)
     dummy_seed.apply()
     version_items: Sequence[SeedEntry] = dummy_seed.version_module.Items
-    version_locations: Sequence[SeedEntry] = dummy_seed.version_module.Locations
+    version_locations: Sequence[SeedEntry] = (
+        dummy_seed.version_module.Locations
+    )
 
-    with open(os.path.join(mod_dir, "locations wiki.txt"), 'w', encoding='utf-8') as file:
+    with open(
+        os.path.join(mod_dir, "locations wiki.txt"), "w", encoding="utf-8"
+    ) as file:
         for content_tag in Tag:
             content_title = getattr(content_tag, "content_title", None)
             if not content_title:
@@ -322,7 +365,9 @@ def generate_wikis(version: int) -> None:
                 continue
 
             file.write(f"\n### {escape(content_title)}\n")
-            file.write("\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n")
+            file.write(
+                "\n| **Type** | **Location** | **Rolls** | **Required Settings** |\n| - | - | - | - |\n"
+            )
 
             for location in locations:
                 location.enable()
@@ -332,9 +377,11 @@ def generate_wikis(version: int) -> None:
                     rolls.append(f"<kbd>{rarity}%</kbd>")
 
                 if len(rolls) <= 4:
-                    rolls_string = ' '.join(rolls)
+                    rolls_string = " ".join(rolls)
                 else:
-                    rolls_string = f"{' '.join(rolls[:4])}<br />{' '.join(rolls[4:])}"
+                    rolls_string = (
+                        f"{' '.join(rolls[:4])}<br />{' '.join(rolls[4:])}"
+                    )
 
                 settings: List[str] = []
                 for tag in Tag:
@@ -345,18 +392,24 @@ def generate_wikis(version: int) -> None:
                         settings.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
                 if len(settings) <= 2:
-                    settings_string = ' '.join(settings)
+                    settings_string = " ".join(settings)
                 else:
                     settings_string = f"{' '.join(settings[:2])}<br />{' '.join(settings[2:])}"
 
-                if isinstance(location, enemies.Enemy): category = "Enemy"
-                elif isinstance(location, missions.Mission): category = "Mission"
-                else: category = "Other"
+                if isinstance(location, enemies.Enemy):
+                    category = "Enemy"
+                elif isinstance(location, missions.Mission):
+                    category = "Mission"
+                else:
+                    category = "Other"
 
-                file.write(f"| {category} | {escape(location.name)} | {rolls_string} | {settings_string} |\n")
-                
+                file.write(
+                    f"| {category} | {escape(location.name)} | {rolls_string} | {settings_string} |\n"
+                )
 
-    with open(os.path.join(mod_dir, "items wiki.txt"), 'w', encoding='utf-8') as file:
+    with open(
+        os.path.join(mod_dir, "items wiki.txt"), "w", encoding="utf-8"
+    ) as file:
         for hint in Hint:
             if hint is Hint.Dud:
                 continue
@@ -376,40 +429,53 @@ def generate_wikis(version: int) -> None:
                         if tag & item.tags:
                             content.append(f"<kbd>{escape(tag.caption)}</kbd>")
 
-                file.write(f"| {escape(item.name)} | {' or '.join(content)} |\n")
+                file.write(
+                    f"| {escape(item.name)} | {' or '.join(content)} |\n"
+                )
 
 
 def generate_seedversion() -> None:
-    if BL2: module_name = "bl2"
-    else: module_name = "tps"
-    
+    if BL2:
+        module_name = "bl2"
+    else:
+        module_name = "tps"
+
     path = os.path.join(mod_dir, "Mod", module_name, f"v{CurrentVersion}.py")
 
-    with open(path, 'w', encoding='utf-8') as file:
+    with open(path, "w", encoding="utf-8") as file:
         file.write(
             "from . import Tag\n"
             "from ..seed import SeedEntry\n"
-            "\n\n"
-            "Tags = "
+            "\n"
+            "Tags = (\n    "
         )
 
-        file.write("|".join(f"Tag.{tag.name}" for tag in Tag if tag < Tag.Excluded))
+        file.write(
+            "\n    | ".join(
+                f"Tag.{tag.name}" for tag in Tag if tag < Tag.Excluded
+            )
+        )
 
-        file.write(f"\n\n\n")
+        file.write(f"\n)\n\n# fmt: off\n\n")
         file.write(f"Items = (\n")
 
         for item in Items:
-            tag_string = "|".join(f"Tag.{tag.name}" for tag in Tag if (tag & item.tags))
-            file.write(f"    SeedEntry(\"{item.name}\", {tag_string}),\n")
+            tag_string = "|".join(
+                f"Tag.{tag.name}" for tag in Tag if (tag & item.tags)
+            )
+            file.write(f'    SeedEntry("{item.name}", {tag_string}),\n')
 
         file.write(f")\n\n\n")
         file.write(f"Locations = (\n")
 
         for location in Locations:
-            tag_string = "|".join(f"Tag.{tag.name}" for tag in Tag if tag in location.tags)
-            file.write(f"    SeedEntry(\"{location}\", {tag_string}),\n")
+            tag_string = "|".join(
+                f"Tag.{tag.name}" for tag in Tag if tag in location.tags
+            )
+            file.write(f'    SeedEntry("{location}", {tag_string}),\n')
 
         file.write(f")\n")
+
 
 """
 TODO:
