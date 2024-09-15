@@ -118,6 +118,8 @@ class Location:
     _rarities: Sequence[int]
     _hint_pool: Optional[UObject] = None
 
+    default_rarity: int = 100
+
     def __init__(
         self,
         name: str,
@@ -151,11 +153,14 @@ class Location:
             dropper.enable()
 
         self.tags = self.specified_tags
-        self.rarities = (
-            self.specified_rarities if self.specified_rarities else (100,)
+        rarities: List[int] = (
+            list(self.specified_rarities) if self.specified_rarities
+            else [self.default_rarity]
         )
 
         if self.mission_name:
+            self.tags |= Tag.MissionLocation
+
             from .missions import Mission
 
             if BL2:
@@ -179,12 +184,20 @@ class Location:
 
             self.tags |= self.mission.tags
             self.content = self.mission.content
+
+            if not self.specified_rarities:
+                if self.tags & Tag.LongMission:
+                    rarities += (self.default_rarity,)
+                if self.tags & Tag.VeryLongMission:
+                    rarities += (self.default_rarity,) * 2
         else:
             self.content = self.tags & ContentTags
 
         if not self.content:
             self.tags |= Tag.BaseGame
             self.content = Tag.BaseGame
+
+        self.rarities = rarities
 
     def disable(self) -> None:
         for dropper in self.droppers:

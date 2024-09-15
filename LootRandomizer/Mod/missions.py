@@ -373,6 +373,11 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
             KeepAlive(self.mission_weapon)
             self.uobject.MissionWeapon = None
 
+            self.give_weapon_set = self.uobject.GiveWeaponSet
+            if self.give_weapon_set:
+                KeepAlive(self.give_weapon_set)
+                self.uobject.GiveWeaponSet = None
+
         if self.unlink_next:
             self.next_link = self.uobject.NextMissionInChain
             KeepAlive(self.next_link)
@@ -384,6 +389,8 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
 
         if self.block_weapon:
             self.uobject.MissionWeapon = self.mission_weapon
+            if self.give_weapon_set:
+                self.uobject.GiveWeaponSet = self.give_weapon_set
 
         if self.unlink_next:
             self.uobject.NextMissionInChain = self.next_link
@@ -546,9 +553,19 @@ class Mission(Location):
             if self.tags & Tag.RaidEnemy:
                 self.rarities += (100, 100, 100)
 
+        # TODO: Removes
+        # self.mission_definition = None
+        # self.mission_definitions = []
+        # for dropper in self.droppers:
+        #     superclasses = tuple(cls.__name__ for cls in dropper.__class__.mro())
+        #     if "MissionDefinition" in superclasses:
+        #         if not self.mission_definition:
+        #             self.mission_definition = dropper
+        #         else:
+        #             self.mission_definitions.append(dropper)
+
         self.mission_definition, *_ = self.mission_definitions = tuple(
-            dropper
-            for dropper in self.droppers
+            dropper for dropper in self.droppers
             if isinstance(dropper, MissionDefinition)
         )
 

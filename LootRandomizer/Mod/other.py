@@ -1,15 +1,20 @@
-from unrealsdk import FindObject
+from unrealsdk import FindObject, Log
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from .defines import *
 from .locations import Location, RegistrantDropper
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
 
 
 def Enable() -> None:
     RunHook(
         "WillowGame.Behavior_AttachItems.ApplyBehaviorToContext",
+        "LootRandomizer",
+        _Behavior_AttachItems,
+    )
+    RunHook(
+        "WillowGame.Behavior_DropItems.ApplyBehaviorToContext",
         "LootRandomizer",
         _Behavior_AttachItems,
     )
@@ -28,6 +33,10 @@ def Enable() -> None:
 def Disable() -> None:
     RemoveHook(
         "WillowGame.Behavior_AttachItems.ApplyBehaviorToContext",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.Behavior_DropItems.ApplyBehaviorToContext",
         "LootRandomizer",
     )
     RemoveHook(
@@ -102,19 +111,41 @@ class Attachment(RegistrantDropper):
         self, path: str, *attachments: int, configuration: int = 0
     ) -> None:
         self.configuration = configuration
-        self.attachments = attachments if attachments else (0,)
+        self.attachments = attachments
         super().__init__(path)
 
     def inject(self, obj: UObject) -> None:
-        pools = self.location.prepare_pools(len(self.attachments))
 
         for index, loot_configuration in enumerate(obj.Loot):
             if index != self.configuration:
                 loot_configuration.Weight = (0, None, None, 0)
 
         obj_attachments = obj.Loot[self.configuration].ItemAttachments
-        for index, pool in zip(self.attachments, pools):
+        attachments = (
+            self.attachments if len(self.attachments)
+            else tuple(range(len(tuple(obj_attachments))))
+        )
+        pools = self.location.prepare_pools(len(attachments))
+        for index, pool in zip(attachments, pools):
+            obj_attachments[index].InvBalanceDefinition = None
             obj_attachments[index].ItemPool = pool
+
+
+class PositionalChest(Attachment):
+    position: Tuple[int, int, int]
+
+    def __init__(self, path: str, x: int, y: int, z: int) -> None:
+        self.position = (x, y, z)
+        super().__init__(path, configuration=0)
+
+    def inject(self, obj: UObject) -> None:
+        if (
+            (int(obj.Location.X), int(obj.Location.Y), int(obj.Location.Z))
+            == self.position
+        ):
+            obj_attachments = tuple(obj.Loot[self.configuration].ItemAttachments)
+            self.attachments = range(len(obj_attachments))
+            super().inject(obj)
 
 
 def _Behavior_AttachItems(

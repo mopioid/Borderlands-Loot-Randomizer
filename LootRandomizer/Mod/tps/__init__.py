@@ -58,7 +58,7 @@ class Tag(enum.IntFlag):
     VeryRareEnemy = enum.auto()
     MobFarm = enum.auto()
     RaidEnemy = enum.auto()
-    MissionEnemy = enum.auto()
+    MissionLocation = enum.auto()
     EvolvedEnemy = enum.auto()
 
     Miscellaneous = enum.auto()
@@ -106,10 +106,10 @@ for tag, category, default, caption, description in (
     (Tag.VeryRareEnemy,      Category.Enemies,  False, "Very Rare Enemies",  "Assign items to enemies that are very rare spawns. Very rare enemies drop loot with much greater frequency."),
     (Tag.MobFarm,            Category.Enemies,  False, "Mob Farms",          "Assign items to mobs which have rare drops in the vanilla game. Mob farm enemies drop loot rarely (but not too rarely)."),
     (Tag.RaidEnemy,          Category.Enemies,  False, "Raid Enemies",       "Assign items to raid bosses. Raid bosses drop multiple loot instances guaranteed."),
-    (Tag.MissionEnemy,       Category.Enemies,  False, "Mission Enemies",    "Assign items to enemies that are only available while doing (or re-doing) a mission."),
     (Tag.EvolvedEnemy,       Category.Enemies,  False, "Evolved Enemies",    "Assign items to enemies that are evolved forms of other enemies."),
 
     (Tag.Miscellaneous,      Category.Other,    True,  "Miscellaneous",      "Assign items to miscellaneous loot locations (boxes that give unique items, etcetera)."),
+    (Tag.MissionLocation,    Category.Other,    False, "Mission Locations",  "Assign items to locations that are only available while doing (or re-doing) a mission."),
 
     (Tag.DuplicateItems,     Category.Settings, False, "Duplicate Items",    "For seeds with more locations than items, random items can have multiple locations."),
     (Tag.EnableHints,        Category.Settings, True,  "Allow Hints",        "Whether this seed should generate a spoiler log, and also whether hints should be allowed while playing it."),
@@ -129,6 +129,8 @@ for tag, category, default, caption, description in (
         EnemyTags |= tag
     if category == Category.Other:
         OtherTags |= tag
+
+    EnemyTags |= Tag.MissionLocation
 
 # fmt: on
 

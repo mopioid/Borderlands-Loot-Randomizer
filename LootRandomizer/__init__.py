@@ -13,24 +13,13 @@ if __name__ == "__main__":
         _this_module = mod.__class__.__module__
         break
 
-    # TODO: remove
-    from Mods.LootRandomizer.Mod import seed
-
-    seed.generate_seedversion()
-    # seed.generate_wikis(1)
+    # seed.generate_seedversion()
 
     import sys, importlib
 
     for submodule_name in (
-        "defines",
-        "options",
-        "hints",
-        "items",
-        "locations",
-        "enemies",
-        "missions",
-        "other",
-        "seed" "bl2",
+        "defines", "options", "hints", "items", "locations", "missions", "enemies", "other",
+        "bl2",
         "bl2.items",
         "bl2.locations",
         "bl2.v1",
@@ -42,15 +31,26 @@ if __name__ == "__main__":
         "tps.items",
         "tps.locations",
         "tps.v1",
+        "seed"
     ):
         module = sys.modules.get("Mods.LootRandomizer.Mod." + submodule_name)
         if module:
             importlib.reload(module)
 
-
-from typing import Optional, Sequence
-
-from Mods.LootRandomizer.Mod.defines import *
+# TODO: Remove
+#     from Mods.LootRandomizer.Mod import options, items, hints, locations, enemies, missions, other
+    
+#     if ModMenu.Game.GetCurrent() == ModMenu.Game.BL2:
+#         from Mods.LootRandomizer.Mod.bl2.locations import Locations
+#     elif ModMenu.Game.GetCurrent() == ModMenu.Game.TPS:
+#         from Mods.LootRandomizer.Mod.tps.locations import Locations
+#     else:
+#         raise Exception(
+#             f"Loot Randomizer is not available for {ModMenu.Game.GetCurrent().name}"
+#         )
+    
+#     from Mods.LootRandomizer.Mod import seed
+# else:
 from Mods.LootRandomizer.Mod import (
     options,
     hints,
@@ -59,17 +59,18 @@ from Mods.LootRandomizer.Mod import (
     enemies,
     missions,
     other,
-    seed,
 )
-
-if BL2:
+if ModMenu.Game.GetCurrent() == ModMenu.Game.BL2:
     from Mods.LootRandomizer.Mod.bl2.locations import Locations
-elif TPS:
+elif ModMenu.Game.GetCurrent() == ModMenu.Game.TPS:
     from Mods.LootRandomizer.Mod.tps.locations import Locations
 else:
     raise Exception(
         f"Loot Randomizer is not available for {ModMenu.Game.GetCurrent().name}"
     )
+from Mods.LootRandomizer.Mod import seed
+
+from typing import Optional, Sequence
 
 
 class LootRandomizer(ModMenu.SDKMod):

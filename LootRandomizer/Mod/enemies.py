@@ -6,7 +6,7 @@ from .defines import *
 from . import locations, seed
 from .locations import Location, RegistrantDropper
 
-from typing import Optional
+from typing import Optional, Sequence
 
 
 def Enable() -> None:
@@ -16,42 +16,45 @@ def Enable() -> None:
 def Disable() -> None:
     RemoveHook("WillowGame.WillowAIPawn.Died", "LootRandomizer")
 
-
 class Enemy(Location):
+    default_rarity: int = 15
+
     def enable(self) -> None:
         super().enable()
 
-        if self.mission_name:
-            self.tags |= Tag.MissionEnemy
+        # TODO: fix rarity assignments by tag
 
         if not (self.tags & EnemyTags):
             self.tags |= Tag.UniqueEnemy
 
-        if not self.specified_rarities:
-            self.rarities = []
+        if self.specified_rarities:
+            return
 
-            if self.tags & Tag.SlowEnemy:
-                self.rarities += (33,)
-            if self.tags & Tag.MobFarm:
-                self.rarities += (3,)
-            if self.tags & Tag.RareEnemy:
-                self.rarities += (33,)
-            if self.tags & Tag.VeryRareEnemy:
-                self.rarities += (100, 50, 50)
-            if self.tags & Tag.EvolvedEnemy:
-                self.rarities += (50, 50)
-            if self.tags & Tag.RaidEnemy:
-                self.rarities += (100, 100, 100, 50, 50, 50)
+        rarities = list(self.rarities)
 
-            if self.tags & Tag.MissionEnemy:
-                self.rarities += (50,)
-            if self.tags & Tag.LongMission:
-                self.rarities += (50,)
-            if self.tags & Tag.VeryLongMission:
-                self.rarities += (100, 50)
+        if self.mission_name:
+            rarities = [50] * len(rarities)
 
-            if not self.rarities:
-                self.rarities += (15,)
+        if self.tags & Tag.SlowEnemy:
+            rarities += (33,)
+        if self.tags & Tag.MobFarm:
+            rarities += (3,)
+        if self.tags & Tag.RareEnemy:
+            rarities = (33,)
+            if self.mission_name:
+                rarities *= 2
+        if self.tags & Tag.VeryRareEnemy:
+            rarities = (100, 50, 50)
+            if self.mission_name:
+                rarities *= 3
+        if self.tags & Tag.EvolvedEnemy:
+            rarities = (50, 50)
+            if self.mission_name:
+                rarities *= 2
+        if self.tags & Tag.RaidEnemy:
+            rarities += (100, 100, 100, 50, 50, 50)
+
+        self.rarities = rarities
 
     def __str__(self) -> str:
         return f"Enemy: {self.name}"

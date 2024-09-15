@@ -1072,7 +1072,7 @@ Locations = (
     Enemy("Grendel", Pawn("PawnBalance_Orchid_Grendel"), tags=Tag.PiratesBooty),
     Enemy("Benny the Booster", Pawn("PawnBalance_Orchid_Deserter1"), tags=Tag.PiratesBooty),
     Enemy("Deckhand", Pawn("PawnBalance_Orchid_Deserter2"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
-    Enemy("Toothless Terry", Pawn("PawnBalance_Orchid_Deserter3"), mission="Just Desserts for Desert Deserters", tags=Tag.SlowEnemy),
+    Enemy("Toothless Terry", Pawn("PawnBalance_Orchid_Deserter3"), mission="Just Desserts for Desert Deserters"),
     Enemy("P3RV-E", Pawn("PawnBalance_Orchid_Pervbot"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
     Enemy("H3RL-E", Pawn("PawnBalance_Orchid_LoaderBoss"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
     Enemy("DJ Tanner", Pawn("PawnBalance_Orchid_PirateRadioGuy"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
@@ -1081,7 +1081,7 @@ Locations = (
     Enemy("Lieutenant White", Pawn("PawnBalance_Orchid_PirateHenchman"), mission="Treasure of the Sands"),
     Enemy("Lieutenant Hoffman", Pawn("PawnBalance_Orchid_PirateHenchman2"), mission="Treasure of the Sands"),
     Enemy("Captain Scarlett", Behavior("GD_Orchid_PirateQueen_Combat.Animation.Anim_Farewell:BehaviorProviderDefinition_0.Behavior_SpawnItems_10"), mission="Treasure of the Sands"),
-    Enemy("Leviathan", Leviathan(), mission="Treasure of the Sands", tags=Tag.SlowEnemy),
+    Enemy("Leviathan", Leviathan(), mission="Treasure of the Sands"),
     Enemy("Hyperius the Invincible",
         Pawn("PawnBalance_Orchid_RaidEngineer"),
         Behavior(
@@ -1261,7 +1261,7 @@ Locations = (
         inject=False),
     tags=Tag.DragonKeep|Tag.RaidEnemy),
     Enemy("Warlord Slog", Pawn("PawnBalance_Orc_WarlordSlog", evolved=4), mission="Magic Slaughter: Badass Round"),
-    Enemy("King of Orks", Pawn("PawnBalance_Orc_WarlordSlog", transform=4), mission="Magic Slaughter: Badass Round", tags=Tag.EvolvedEnemy),
+    Enemy("King of Orks", Pawn("PawnBalance_Orc_WarlordSlog", transform=4), `mission="Magic Slaughter: Badass Round", tags=`Tag.EvolvedEnemy),
 
     Enemy("Sand Worm",
           Pawn("PawnBalance_SandWorm_Queen", "PawnBalance_InfectedSandWorm"),
@@ -1343,7 +1343,7 @@ Locations = (
         Behavior("GD_PumpkinheadFlying.Character.DeathDef_Pumpkinheadflying:BehaviorProviderDefinition_0.Behavior_SpawnItems_209"),
         Behavior("GD_Flax_Lootables.IOs.IO_Pumpkin_BossLoot:BehaviorProviderDefinition_1.Behavior_SpawnItems_210", inject=False),
     tags=Tag.BloodyHarvest|Tag.SlowEnemy, rarities=(33,33,33)),
-    Enemy("Clark the Combusted Cryptkeeper", Pawn("PawnBalance_UndeadFirePsycho_Giant"), tags=Tag.BloodyHarvest|Tag.SlowEnemy|Tag.MissionEnemy|Tag.VeryLongMission),
+    Enemy("Clark the Combusted Cryptkeeper", Pawn("PawnBalance_UndeadFirePsycho_Giant"), tags=Tag.BloodyHarvest|Tag.SlowEnemy|Tag.MissionLocation|Tag.VeryLongMission),
 
     Enemy("Son of Crawmerax the Invincible", Pawn("PawnBalance_Crawmerax_Son"), mission="Fun, Sun, and Guns", rarities=(33,33,33)),
     Enemy("The Invincible Son of Crawmerax the Invincible",
@@ -1902,6 +1902,8 @@ Locations = (
 
 """
 TODO:
+    NEW BL2 SEEDVERSION
+
     Fix leviathan's loot fling with smol items
     BL2fix midget compatibility
     prevent mcshooty from despawning after completion?
