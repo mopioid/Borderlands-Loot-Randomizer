@@ -13,6 +13,7 @@ import os
 from typing import (
     Any,
     Callable,
+    Dict,
     Generator,
     Iterator,
     List,
@@ -51,6 +52,7 @@ __all__ = (
     "MissionTags",
     "EnemyTags",
     "OtherTags",
+    "pool_whitelist",
     "Package",
     "mod_dir",
     "seeds_dir",
@@ -149,7 +151,7 @@ def construct_object(
     path: Optional[str] = None
     class_name = basis
 
-    kwargs = {"Class": basis, "Outer": Package}
+    kwargs: Dict[str, Any] = {"Class": basis, "Outer": Package}
 
     if isinstance(name, str):
         name = "".join(char for char in name if char.isalnum() or char == "_")

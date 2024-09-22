@@ -142,6 +142,10 @@ def _AcceptMission(caller: UObject, _f: UFunction, params: FStruct) -> bool:
             if isinstance(dropper, MissionStatusDelegate):
                 delegates.append(dropper.accepted)
 
+    if get_missiontracker().GetMissionStatus(missiondef) == Mission.Status.NotStarted:
+        do_next_tick(*delegates)
+        return True
+
     def play_kickoff(missiondef: UObject = missiondef):
         tracker = get_missiontracker()
         tracker.PlayKickoff(missiondef)
@@ -317,6 +321,8 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
     mission_weapon: UObject
     next_link: UObject
     repeatable: bool
+    give_weapon_set: UObject
+    take_weapon_set: UObject
 
     def __init__(
         self,
@@ -378,6 +384,11 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
                 KeepAlive(self.give_weapon_set)
                 self.uobject.GiveWeaponSet = None
 
+            self.take_weapon_set = self.uobject.TakeWeaponSet
+            if self.take_weapon_set:
+                KeepAlive(self.take_weapon_set)
+                self.uobject.TakeWeaponSet = None
+
         if self.unlink_next:
             self.next_link = self.uobject.NextMissionInChain
             KeepAlive(self.next_link)
@@ -391,6 +402,8 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
             self.uobject.MissionWeapon = self.mission_weapon
             if self.give_weapon_set:
                 self.uobject.GiveWeaponSet = self.give_weapon_set
+            if self.take_weapon_set:
+                self.uobject.TakeWeaponSet = self.take_weapon_set
 
         if self.unlink_next:
             self.uobject.NextMissionInChain = self.next_link
@@ -505,22 +518,82 @@ class MissionGiver(MissionObject):
 
         missiondef = self.location.mission_definition.uobject
 
-        matched_directive = False
-        for directive in giver.MissionDirectives:
-            if directive.MissionDefinition == missiondef:
-                directive.bBeginsMission = self.begins
-                directive.bEndsMission = self.ends
-                matched_directive = True
-                break
+        if self.begins or self.ends:
+            for directive in giver.MissionDirectives:
+                if directive.MissionDefinition == missiondef:
+                    directive.bBeginsMission = self.begins
+                    directive.bEndsMission = self.ends
+                    break
+            else:
+                directives = convert_struct(giver.MissionDirectives)
+                directives.append((missiondef, self.begins, self.ends, 0))
+                giver.MissionDirectives = directives
 
-        if not matched_directive:
-            directives = convert_struct(giver.MissionDirectives)
-            directives.append((missiondef, self.begins, self.ends, 0))
+            if not is_client():
+                get_missiontracker().RegisterMissionDirector(giver)
+        else:
+            directives = tuple(
+                convert_struct(directive) for directive in giver.MissionDirectives
+                if directive.MissionDefinition != missiondef
+            )
             giver.MissionDirectives = directives
+            if not is_client() and not len(directives):
+                get_missiontracker().UnregisterMissionDirector(giver)
 
-        if not is_client():
-            get_missiontracker().RegisterMissionDirector(giver)
         return giver
+
+
+class ObjectiveKillInfo(MissionDropper):
+    damage_type: Optional[int]
+    damage_causer: Optional[int]
+
+    original_mission_weapon: bool
+    original_damage_type: int
+    original_damage_causer: int
+
+    def __init__(
+        self,
+        path: str,
+        damage_type: Optional[int] = None,
+        damage_causer: Optional[int] = None,
+    ) -> None:
+        self.path = path
+        self.damage_type = damage_type
+        self.damage_causer = damage_causer
+        super().__init__()
+
+    def enable(self) -> None:
+        super().enable()
+
+        killinfo = FindObject("MissionObjectiveKillInfo", self.path)
+        if not killinfo:
+            raise Exception("Could not locate objective kill info")
+
+        if self.damage_type:
+            self.original_damage_type = killinfo.DamageType
+            killinfo.DamageType = self.damage_type
+
+        if self.damage_causer:
+            self.original_damage_causer = killinfo.DamageCauserType
+            killinfo.DamageCauserType = self.damage_causer
+
+        self.original_mission_weapon = killinfo.bMissionWeapon
+        killinfo.bMissionWeapon = False
+
+    def disable(self) -> None:
+        super().disable()
+
+        killinfo = FindObject("MissionObjectiveKillInfo", self.path)
+        if not killinfo:
+            raise Exception("Could not locate objective kill info")
+
+        if self.damage_type:
+            killinfo.DamageType = self.original_damage_type
+
+        if self.damage_causer:
+            killinfo.DamageCauserType = self.original_damage_causer
+
+        killinfo.bMissionWeapon = self.original_mission_weapon
 
 
 class Mission(Location):
@@ -550,7 +623,7 @@ class Mission(Location):
                 self.rarities += (100,)
             if self.tags & Tag.VeryLongMission:
                 self.rarities += (100, 100, 100)
-            if self.tags & Tag.RaidEnemy:
+            if self.tags & Tag.Raid:
                 self.rarities += (100, 100, 100)
 
         # TODO: Removes

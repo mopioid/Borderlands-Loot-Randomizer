@@ -998,7 +998,7 @@ Locations = (
             "GD_ThresherShared.Anims.Anim_Raid_Death1:BehaviorProviderDefinition_29.Behavior_SpawnItems_46",
             "GD_ThresherShared.Anims.Anim_Raid_Death1:BehaviorProviderDefinition_29.Behavior_SpawnItems_47",
         inject=False),
-    tags=Tag.RaidEnemy),
+    tags=Tag.Raid),
 
     Enemy("Loot Midget",
         Midget(
@@ -1063,7 +1063,7 @@ Locations = (
         transform=5),
     tags=Tag.EvolvedEnemy),
     Enemy("Ultimate Badass Varkid", Pawn("PawnBalance_BugMorphUltimateBadass"), tags=Tag.EvolvedEnemy|Tag.VeryRareEnemy),
-    Enemy("Vermivorous the Invincible", Pawn("PawnBalance_BugMorphRaid"), tags=Tag.EvolvedEnemy|Tag.VeryRareEnemy|Tag.RaidEnemy),
+    Enemy("Vermivorous the Invincible", Pawn("PawnBalance_BugMorphRaid"), tags=Tag.EvolvedEnemy|Tag.VeryRareEnemy|Tag.Raid),
 
     Enemy("No-Beard", Pawn("PawnBalance_Orchid_NoBeard"), tags=Tag.PiratesBooty|Tag.Excluded),
     Enemy("Tinkles", Pawn("PawnBalance_Orchid_StalkerPet"), tags=Tag.PiratesBooty),
@@ -1088,7 +1088,7 @@ Locations = (
             "GD_Orchid_RaidEngineer.Death.BodyDeath_Orchid_RaidEngineer:BehaviorProviderDefinition_6.Behavior_SpawnItems_203",
             "GD_Orchid_RaidEngineer.Death.BodyDeath_Orchid_RaidEngineer:BehaviorProviderDefinition_6.Behavior_SpawnItems_204",
         inject=False),
-    tags=Tag.PiratesBooty|Tag.RaidEnemy),
+    tags=Tag.PiratesBooty|Tag.Raid),
     Enemy("Master Gee the Invincible",
         Pawn("PawnBalance_Orchid_RaidShaman"),
         Behavior(
@@ -1097,7 +1097,7 @@ Locations = (
             "GD_Orchid_RaidShaman.Character.AIDef_Orchid_RaidShaman:AIBehaviorProviderDefinition_0.Behavior_SpawnItems_257",
             "Transient.Behavior_SpawnItems_Orchid_MasterGeeDeath",
         inject=False),
-    tags=Tag.PiratesBooty|Tag.RaidEnemy),
+    tags=Tag.PiratesBooty|Tag.Raid),
 
     Enemy("Gladiator Goliath", Pawn("Iris_PawnBalance_ArenaGoliath", evolved=5), mission="Tier 2 Battle: Appetite for Destruction"),
     Enemy("Pete's Burner",
@@ -1135,7 +1135,7 @@ Locations = (
             "GD_Iris_Raid_PyroPete.Death.BodyDeath_Iris_Raid_PyroPete:BehaviorProviderDefinition_6.Behavior_SpawnItems_8",
             "GD_Iris_Raid_PyroPete.Death.BodyDeath_Iris_Raid_PyroPete:BehaviorProviderDefinition_6.Behavior_SpawnItems_9",
         inject=False),
-    tags=Tag.CampaignOfCarnage|Tag.RaidEnemy),
+    tags=Tag.CampaignOfCarnage|Tag.Raid),
 
     Enemy("Bulstoss", Pawn("PawnBalance_Sage_AcquiredTaste_Creature"), tags=Tag.HammerlocksHunt|Tag.SlowEnemy),
     Enemy("Der Monstrositat", Pawn("PawnBalance_Sage_BorokCage_Creature"), mission="Still Just a Borok in a Cage"),
@@ -1164,14 +1164,14 @@ Locations = (
             "GD_Sage_Raid_Beast.Character.DeathDef_Sage_Raid_Beast:BehaviorProviderDefinition_0.Behavior_SpawnItems_1",
             "GD_Sage_Raid_Beast.Character.DeathDef_Sage_Raid_Beast:BehaviorProviderDefinition_0.Behavior_SpawnItems_2",
         inject=False),
-    tags=Tag.HammerlocksHunt|Tag.RaidEnemy),
+    tags=Tag.HammerlocksHunt|Tag.Raid),
     Enemy("Omnd-Omnd-Ohk",
         Pawn("PawnBalance_Native_Badass", "PawnBalance_Nast_Native_Badass", transform=3),
     tags=Tag.HammerlocksHunt|Tag.EvolvedEnemy|Tag.VeryRareEnemy),
     Enemy("Dexiduous the Invincible",
         Pawn("PawnBalance_DrifterRaid"),
         Behavior("GD_DrifterRaid.Anims.Anim_Raid_Death:BehaviorProviderDefinition_29.Behavior_SpawnItems_38", inject=False),
-    tags=Tag.HammerlocksHunt|Tag.RaidEnemy),
+    tags=Tag.HammerlocksHunt|Tag.Raid),
 
     Enemy("Mister Boney Pants Guy", Pawn("PawnBalance_BoneyPants"), tags=Tag.DragonKeep),
     Enemy("Treant",
@@ -1201,7 +1201,7 @@ Locations = (
     Enemy("Maxibillion", Pawn("PawnBalance_GolemFlying_Maxibillion"), mission="My Kingdom for a Wand", rarities=(5,)),
     Enemy("Magical Spider", Pawn("PawnBalance_Spider_ClaptrapWand"), mission="My Kingdom for a Wand", rarities=(5,)),
     Enemy("Magical Orc", Pawn("PawnBalance_Orc_ClaptrapWand"), mission="My Kingdom for a Wand", rarities=(5,)),
-    Enemy("Iron GOD", Pawn("PawnBalance_Golem_Badass", transform=5), tags=Tag.DragonKeep|Tag.SlowEnemy|Tag.EvolvedEnemy|Tag.RaidEnemy),
+    Enemy("Iron GOD", Pawn("PawnBalance_Golem_Badass", transform=5), tags=Tag.DragonKeep|Tag.SlowEnemy|Tag.EvolvedEnemy|Tag.Raid),
     Enemy("Gold Golem", Pawn("PawnBalance_GolemGold"), tags=Tag.DragonKeep|Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("The Darkness", Pawn("PawnBalance_Darkness"), tags=Tag.DragonKeep),
     Enemy("Sir Boil", Pawn("PawnBalance_SirBoil"), mission="Loot Ninja"),
@@ -1259,7 +1259,7 @@ Locations = (
             "GD_Aster_RaidBossData.IOs.IO_LootSpewer:BehaviorProviderDefinition_0.Behavior_SpawnItems_710",
             "GD_Aster_RaidBossData.IOs.IO_LootSpewer:BehaviorProviderDefinition_0.Behavior_SpawnItems_711",
         inject=False),
-    tags=Tag.DragonKeep|Tag.RaidEnemy),
+    tags=Tag.DragonKeep|Tag.Raid),
     Enemy("Warlord Slog", Pawn("PawnBalance_Orc_WarlordSlog", evolved=4), mission="Magic Slaughter: Badass Round"),
     Enemy("King of Orks", Pawn("PawnBalance_Orc_WarlordSlog", transform=4), `mission="Magic Slaughter: Badass Round", tags=`Tag.EvolvedEnemy),
 
@@ -1299,7 +1299,7 @@ Locations = (
         Attachment("ObjectGrade_DalhEpicCrate_Digi_PeakOpener", *range(12), configuration=0),
         Behavior("GD_Anemone_SandWormBoss_1.Character.BodyDeath_Anemone_SandWormBoss_1:BehaviorProviderDefinition_2.Behavior_SpawnItems_5", inject=False),
         Haderax(),
-    tags=Tag.FightForSanctuary|Tag.RaidEnemy),
+    tags=Tag.FightForSanctuary|Tag.Raid),
     Other("Writhing Deep Dune Raider Chest",
         Attachment("ObjectGrade_DalhEpicCrate_Digi_RocketLauncher", *range(10)),
     tags=Tag.FightForSanctuary|Tag.Excluded),
@@ -1354,7 +1354,7 @@ Locations = (
             "GD_Nasturtium_Lootables.IOs.IO_BossLootSpout:BehaviorProviderDefinition_0.Behavior_SpawnItems_7",
             "GD_Nasturtium_Lootables.IOs.IO_BossLootSpout:BehaviorProviderDefinition_0.Behavior_SpawnItems_8",
         inject=False),
-    tags=Tag.SonOfCrawmerax|Tag.RaidEnemy),
+    tags=Tag.SonOfCrawmerax|Tag.Raid),
     Enemy("Sparky, Son of Flynt", Pawn("PawnBalance_FlyntSon", "PawnBalance_FlyntSon_Run"), tags=Tag.SonOfCrawmerax|Tag.SlowEnemy),
 
     Enemy("BLNG Loader", Pawn("PawnBalance_BlingLoader"), mission="A Match Made on Pandora"),
@@ -1592,7 +1592,7 @@ Locations = (
         # ECHO rakk doesnt respawn on repeat
     Mission("Hungry Like the Skag", MissionDefinition("GD_Z3_HungryLikeSkag.M_HungryLikeSkag")), 
         # Skags dont drop mission pickup after completion
-    Mission("You. Will. Die. (Seriously.)", MissionDefinition("GD_Z2_ThresherRaid.M_ThresherRaid"), tags=Tag.RaidEnemy),
+    Mission("You. Will. Die. (Seriously.)", MissionDefinition("GD_Z2_ThresherRaid.M_ThresherRaid"), tags=Tag.Raid),
         # Terra no respawn after first completion
 
     Mission("Message in a Bottle (Oasis)", MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle1"),
@@ -1642,8 +1642,8 @@ Locations = (
         MissionDefinition("GD_Orchid_Plot_Mission09.M_Orchid_PlotMission09"),
     tags=Tag.PiratesBooty|Tag.VeryLongMission),
         # Roscoe/Scarlett dont respawn until savequit
-    Mission("Hyperius the Invincible", MissionDefinition("GD_Orchid_Raid.M_Orchid_Raid1"), tags=Tag.PiratesBooty|Tag.RaidEnemy),
-    Mission("Master Gee the Invincible", MissionDefinition("GD_Orchid_Raid.M_Orchid_Raid3"), tags=Tag.PiratesBooty|Tag.RaidEnemy),
+    Mission("Hyperius the Invincible", MissionDefinition("GD_Orchid_Raid.M_Orchid_Raid1"), tags=Tag.PiratesBooty|Tag.Raid),
+    Mission("Master Gee the Invincible", MissionDefinition("GD_Orchid_Raid.M_Orchid_Raid3"), tags=Tag.PiratesBooty|Tag.Raid),
 
     Mission("Tier 2 Battle: Appetite for Destruction", MissionDefinition("GD_IrisEpisode02_Battle.M_IrisEp2Battle_CoP2"), tags=Tag.CampaignOfCarnage|Tag.Slaughter),
     Mission("Tier 3 Battle: Appetite for Destruction", MissionDefinition("GD_IrisEpisode02_Battle.M_IrisEp2Battle_CoP3"), tags=Tag.CampaignOfCarnage|Tag.Slaughter),
@@ -1678,7 +1678,7 @@ Locations = (
         # Skags dont respawn without savequit
     Mission("Say That To My Face", MissionDefinition("GD_IrisDL3_PSYouSuck.M_IrisDL3_PSYouSuck"), tags=Tag.CampaignOfCarnage),
     Mission("Commercial Appeal", MissionDefinition("GD_IrisDL3_CommAppeal.M_IrisDL3_CommAppeal", block_weapon=False), tags=Tag.CampaignOfCarnage|Tag.LongMission),
-    Mission("Pete the Invincible", MissionDefinition("GD_IrisRaidBoss.M_Iris_RaidPete"), tags=Tag.CampaignOfCarnage|Tag.RaidEnemy),
+    Mission("Pete the Invincible", MissionDefinition("GD_IrisRaidBoss.M_Iris_RaidPete"), tags=Tag.CampaignOfCarnage|Tag.Raid),
         # Pete doesnt respawn without savequit
 
     Mission("An Acquired Taste", MissionDefinition("GD_Sage_SM_AcquiredTaste.M_Sage_AcquiredTaste"), tags=Tag.HammerlocksHunt),
@@ -1700,7 +1700,7 @@ Locations = (
         # Dribbles wave fight doesnt reset without savequit
     Mission("Big Feet", MissionDefinition("GD_Sage_SM_BigFeet.M_Sage_BigFeet"), tags=Tag.HammerlocksHunt),
     Mission("Now You See It", MissionDefinition("GD_Sage_SM_NowYouSeeIt.M_Sage_NowYouSeeIt"), tags=Tag.HammerlocksHunt|Tag.LongMission),
-    Mission("Voracidous the Invincible", MissionDefinition("GD_Sage_Raid.M_Sage_Raid"), tags=Tag.HammerlocksHunt|Tag.RaidEnemy),
+    Mission("Voracidous the Invincible", MissionDefinition("GD_Sage_Raid.M_Sage_Raid"), tags=Tag.HammerlocksHunt|Tag.Raid),
 
     Mission("Fake Geek Guy", MissionDefinition("GD_Aster_FakeGeekGuy.M_FakeGeekGuy"), tags=Tag.DragonKeep),
         # Questions dont respawn until savequit
@@ -1738,7 +1738,7 @@ Locations = (
         # Upon reaccepting mission, Miz has no behavior
     Mission("Pet Butt Stallion", MissionDefinition("GD_Aster_PetButtStallion.M_PettButtStallion"), tags=Tag.DragonKeep),
     Mission("Feed Butt Stallion", MissionDefinition("GD_Aster_FeedButtStallion.M_FeedButtStallion"), tags=Tag.DragonKeep),
-    Mission("Raiders of the Last Boss", MissionDefinition("GD_Aster_RaidBoss.M_Aster_RaidBoss"), tags=Tag.DragonKeep|Tag.RaidEnemy),
+    Mission("Raiders of the Last Boss", MissionDefinition("GD_Aster_RaidBoss.M_Aster_RaidBoss"), tags=Tag.DragonKeep|Tag.Raid),
     Mission("Post-Crumpocalyptic", MissionDefinition("GD_Aster_Post-Crumpocalyptic.M_Post-Crumpocalyptic"), tags=Tag.DragonKeep|Tag.VeryLongMission),
     Mission("Find Murderlin's Temple", MissionDefinition("GD_Aster_TempleSlaughter.M_TempleSlaughterIntro"), tags=Tag.DragonKeep),
     Mission("Magic Slaughter: Round 1", MissionDefinition("GD_Aster_TempleSlaughter.M_TempleSlaughter1"), tags=Tag.DragonKeep|Tag.Slaughter),
@@ -1759,7 +1759,7 @@ Locations = (
     Mission("The Vaughnguard", MissionDefinition("GD_Anemone_Side_VaughnPart1.M_Anemone_VaughnPart1"), tags=Tag.FightForSanctuary|Tag.LongMission),
         # Recruits dont respawn without savequit
     Mission("The Hunt is Vaughn", MissionDefinition("GD_Anemone_Side_VaughnPart2.M_Anemone_VaughnPart2"), tags=Tag.FightForSanctuary),
-    Mission("A Most Cacophonous Lure", MissionDefinition("GD_Anemone_Side_RaidBoss.M_Anemone_CacophonousLure"), tags=Tag.FightForSanctuary|Tag.RaidEnemy),
+    Mission("A Most Cacophonous Lure", MissionDefinition("GD_Anemone_Side_RaidBoss.M_Anemone_CacophonousLure"), tags=Tag.FightForSanctuary|Tag.Raid),
         # Haderax doesnt respawn without savequit
     Mission("Claptocurrency", MissionDefinition("GD_Anemone_Side_Claptocurrency.M_Claptocurrency"), tags=Tag.FightForSanctuary),
         # On repeat, cannot place blocks without savequit
@@ -1791,7 +1791,7 @@ Locations = (
     Mission("Grandma Flexington's Story: Raid Difficulty", MissionDefinition("GD_Allium_Side_GrandmaRaid.M_ListenToGrandmaRaid"),
         Behavior("GD_Allium_TorgueGranma.Character.AIDef_Torgue:AIBehaviorProviderDefinition_0.Behavior_SpawnItems_3"),
         GrandmaStoryRaid(),
-    tags=Tag.WattleGobbler|Tag.RaidEnemy|Tag.VeryLongMission),
+    tags=Tag.WattleGobbler|Tag.Raid|Tag.VeryLongMission),
         # Grandma not interactable without savequit after completion
 
     Mission("Get Frosty",

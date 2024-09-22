@@ -2,6 +2,7 @@ from unrealsdk import FindObject, Log
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from .defines import *
+from . import locations, hints
 from .locations import Location, RegistrantDropper
 
 from typing import Optional, Sequence, Tuple
@@ -114,38 +115,45 @@ class Attachment(RegistrantDropper):
         self.attachments = attachments
         super().__init__(path)
 
-    def inject(self, obj: UObject) -> None:
+    def should_inject(self, obj: UObject) -> bool:
+        return True
 
+    def inject(self, obj: UObject) -> None:
         for index, loot_configuration in enumerate(obj.Loot):
             if index != self.configuration:
                 loot_configuration.Weight = (0, None, None, 0)
 
-        obj_attachments = obj.Loot[self.configuration].ItemAttachments
+        obj_attachments = tuple(obj.Loot[self.configuration].ItemAttachments)
+
         attachments = (
             self.attachments if len(self.attachments)
-            else tuple(range(len(tuple(obj_attachments))))
+            else tuple(range(len(obj_attachments)))
         )
         pools = self.location.prepare_pools(len(attachments))
-        for index, pool in zip(attachments, pools):
-            obj_attachments[index].InvBalanceDefinition = None
-            obj_attachments[index].ItemPool = pool
+
+        for index, obj_attachment in enumerate(obj_attachments):
+            obj_attachment.InvBalanceDefinition = None
+            try:
+                pool = pools[attachments.index(index)]
+                obj_attachment.ItemPool = pool
+            except ValueError:
+                original_pool = obj_attachment.ItemPool
+                if original_pool and original_pool.Name not in pool_whitelist:
+                    obj_attachment.ItemPool = hints.padding_pool
 
 
 class PositionalChest(Attachment):
+    map_name: str
     position: Tuple[int, int, int]
 
-    def __init__(self, path: str, x: int, y: int, z: int) -> None:
-        self.position = (x, y, z)
+    def __init__(self, path: str, map_name: str, x: int, y: int, z: int) -> None:
+        self.map_name = map_name.casefold()
+        self.position = x, y, z
         super().__init__(path, configuration=0)
 
-    def inject(self, obj: UObject) -> None:
-        if (
-            (int(obj.Location.X), int(obj.Location.Y), int(obj.Location.Z))
-            == self.position
-        ):
-            obj_attachments = tuple(obj.Loot[self.configuration].ItemAttachments)
-            self.attachments = range(len(obj_attachments))
-            super().inject(obj)
+    def should_inject(self, obj: UObject) -> bool:
+        position = int(obj.Location.X), int(obj.Location.Y), int(obj.Location.Z)
+        return position == self.position and locations.map_name == self.map_name
 
 
 def _Behavior_AttachItems(
@@ -160,8 +168,10 @@ def _Behavior_AttachItems(
         return True
 
     attachments = Attachment.Registrants(balance.Name)
-    if attachments:
-        next(iter(attachments)).inject(obj)
+    for attachment in attachments:
+        if attachment.should_inject(obj):
+            attachment.inject(obj)
+            break
 
     return True
 

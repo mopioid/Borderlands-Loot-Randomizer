@@ -44,7 +44,6 @@ class Tag(enum.IntFlag):
     Holodome = enum.auto()
     ClaptasticVoyage = enum.auto()
     ShockDrop = enum.auto()
-    TalesLoyalty = enum.auto()
 
     ShortMission = enum.auto()
     LongMission = enum.auto()
@@ -57,9 +56,8 @@ class Tag(enum.IntFlag):
     RareEnemy = enum.auto()
     VeryRareEnemy = enum.auto()
     MobFarm = enum.auto()
-    RaidEnemy = enum.auto()
+    Raid = enum.auto()
     MissionLocation = enum.auto()
-    EvolvedEnemy = enum.auto()
 
     Miscellaneous = enum.auto()
 
@@ -96,20 +94,19 @@ for tag, category, default, caption, description in (
 
     (Tag.ShortMission,       Category.Missions, True,  "Short Missions",     "Assign items to short side missions."),
     (Tag.LongMission,        Category.Missions, True,  "Long Missions",      "Assign items to longer side missions. Longer mission turn-ins provide bonus loot options."),
-    (Tag.VeryLongMission,    Category.Missions, False, "Very Long Missions", "Assign items to very long side missions (including Headhunter missions). Very long mission turn-ins provide even more bonus loot options."),
+    (Tag.VeryLongMission,    Category.Missions, True,  "Very Long Missions", "Assign items to very long side missions (including Headhunter missions). Very long mission turn-ins provide even more bonus loot options."),
     (Tag.VehicleMission,     Category.Missions, True,  "Vehicle Missions",   "Assign items to missions primarily involving driving vehicles."),
-    (Tag.Slaughter,          Category.Missions, False, "Slaughter Missions", "Assign items to slaughter missions."),
+    (Tag.Slaughter,          Category.Missions, True,  "Slaughter Missions", "Assign items to slaughter missions."),
 
     (Tag.UniqueEnemy,        Category.Enemies,  True,  "Unique Enemies",     "Assign items to refarmable enemies."),
     (Tag.SlowEnemy,          Category.Enemies,  True,  "Slow Enemies",       "Assign items to enemies which take longer than usual each kill. Slower enemies drop loot with greater frequency."),
     (Tag.RareEnemy,          Category.Enemies,  True,  "Rare Enemies",       "Assign items to enemies that are rare spawns. Rare enemies drop loot with greater frequency."),
-    (Tag.VeryRareEnemy,      Category.Enemies,  False, "Very Rare Enemies",  "Assign items to enemies that are very rare spawns. Very rare enemies drop loot with much greater frequency."),
-    (Tag.MobFarm,            Category.Enemies,  False, "Mob Farms",          "Assign items to mobs which have rare drops in the vanilla game. Mob farm enemies drop loot rarely (but not too rarely)."),
-    (Tag.RaidEnemy,          Category.Enemies,  False, "Raid Enemies",       "Assign items to raid bosses. Raid bosses drop multiple loot instances guaranteed."),
-    (Tag.EvolvedEnemy,       Category.Enemies,  False, "Evolved Enemies",    "Assign items to enemies that are evolved forms of other enemies."),
+    (Tag.VeryRareEnemy,      Category.Enemies,  True,  "Very Rare Enemies",  "Assign items to enemies that are very rare spawns. Very rare enemies drop loot with much greater frequency."),
+    (Tag.MobFarm,            Category.Enemies,  True,  "Mob Farms",          "Assign items to mobs which have rare drops in the vanilla game. Mob farm enemies drop loot rarely (but not too rarely)."),
 
+    (Tag.Raid,               Category.Other,    True,  "Raids",              "Assign items to locations that are a part of raids. Raid locations drop many loot instances guaranteed."),
+    (Tag.MissionLocation,    Category.Other,    True,  "Mission Locations",  "Assign items to locations that are only available while doing (or re-doing) a mission."),
     (Tag.Miscellaneous,      Category.Other,    True,  "Miscellaneous",      "Assign items to miscellaneous loot locations (boxes that give unique items, etcetera)."),
-    (Tag.MissionLocation,    Category.Other,    False, "Mission Locations",  "Assign items to locations that are only available while doing (or re-doing) a mission."),
 
     (Tag.DuplicateItems,     Category.Settings, False, "Duplicate Items",    "For seeds with more locations than items, random items can have multiple locations."),
     (Tag.EnableHints,        Category.Settings, True,  "Allow Hints",        "Whether this seed should generate a spoiler log, and also whether hints should be allowed while playing it."),
@@ -171,8 +168,7 @@ class Hint(str, enum.Enum):
     UniqueShield = "Unique Shield"
     LegendaryShield = "Legendary Shield"
 
-    BlueClassMod = "Blue Class Mod"
-    PurpleClassMod = "Purple Class Mod"
+    ClassMod = "Class Mod"
     LegendaryClassMod = "Legendary Class Mod"
 
     PurpleGrenade = "Purple Grenade"
@@ -241,8 +237,7 @@ Hint.PurpleShield.formatter = _format_purple
 Hint.UniqueShield.formatter = _format_unique
 Hint.LegendaryShield.formatter = _format_legendary
 
-Hint.BlueClassMod.formatter = _format_blue
-Hint.PurpleClassMod.formatter = _format_purple
+Hint.ClassMod.formatter = _format_blue
 Hint.LegendaryClassMod.formatter = _format_legendary
 
 Hint.PurpleGrenade.formatter = _format_purple
@@ -252,3 +247,20 @@ Hint.LegendaryGrenade.formatter = _format_legendary
 Hint.PurpleOz.formatter = _format_purple
 Hint.UniqueOz.formatter = _format_unique
 Hint.LegendaryOz.formatter = _format_legendary
+
+
+pool_whitelist = (
+    "Pool_Ammo_All_DropAlways",
+    "Pool_Ammo_All_Emergency",
+    "Pool_Ammo_All_NeedOnly",
+    "Pool_Ammo_Grenades_BoomBoom",
+    "Pool_Health_All",
+    "Pool_Money",
+    "Pool_Money_1_BIG",
+    "Pool_Money_1or2",
+    "Pool_Moonstone",
+    "Pool_Moonstone_Cluster",
+    "Pool_Oxygen_Instant",
+    "IP_NovaNoProblemEcho",
+    # "Pool_EpicChest_Weapons_GunsAndGear", "Pool_ClassMod_02_Uncommon", "Pool_ClassMod_04_Rare", "Pool_ClassMod_05_VeryRare", "Pool_ClassMod_06_Legendary", "Pool_GrenadeMods_02_Uncommon", "Pool_GrenadeMods_04_Rare", "Pool_GrenadeMods_05_VeryRare", "Pool_GrenadeMods_06_Legendary", "Pool_GunsAndGear", "Pool_GunsAndGear_02_Uncommon", "Pool_GunsAndGear_02_UncommonsRaid", "Pool_GunsAndGear_04_Rare", "Pool_GunsAndGear_05_VeryRare", "Pool_GunsAndGearDropNumPlayersPlusOne", "Pool_Shields_All_02_Uncommon", "Pool_Shields_All_04_Rare", "Pool_Shields_All_05_VeryRare", "Pool_Shields_All_06_Legendary", "Pool_VehicleSkins_All", "Pool_Weapons_All", "Pool_Weapons_All_02_Uncommon", "Pool_Weapons_All_04_Rare", "Pool_Weapons_All_05_VeryRare", "Pool_Weapons_All_06_Legendary",
+)

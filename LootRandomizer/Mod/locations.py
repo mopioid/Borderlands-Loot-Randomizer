@@ -28,36 +28,6 @@ if TYPE_CHECKING:
     from .missions import Mission
 
 
-pool_whitelist = (
-    "Pool_Ammo_All_DropAlways",
-    "Pool_Ammo_All_Emergency",
-    "Pool_Ammo_All_NeedOnly",
-    "Pool_Ammo_Grenades_BoomBoom",
-    "Pool_Health_All",
-    "Pool_Eridium_Bar",
-    "Pool_Eridium_Stick",
-    "Pool_Money",
-    "Pool_Money_1_BIG",
-    "Pool_Money_1or2",
-    "Pool_Orchid_SeraphCrystals",
-    "Pool_Iris_SeraphCrystals",
-    "Pool_Sage_SeraphCrystals",
-    "Pool_Aster_SeraphCrystals",
-    "ItemPool_TorgueToken_Qty10",
-    "ItemPool_TorgueToken_Qty100",
-    "ItemPool_TorgueToken_Qty15",
-    "ItemPool_TorgueToken_Qty25",
-    "ItemPool_TorgueToken_Qty3",
-    "ItemPool_TorgueToken_Qty5",
-    "ItemPool_TorgueToken_Qty50",
-    "ItemPool_TorgueToken_Qty7",
-    "ItemPool_TorgueToken_Qty75",
-    "ItemPool_TorgueToken_Single",
-    "ItemPool_MoxxiPicture",
-    # "Pool_EpicChest_Weapons_GunsAndGear", "Pool_ClassMod_02_Uncommon", "Pool_ClassMod_04_Rare", "Pool_ClassMod_05_VeryRare", "Pool_ClassMod_06_Legendary", "Pool_GrenadeMods_02_Uncommon", "Pool_GrenadeMods_04_Rare", "Pool_GrenadeMods_05_VeryRare", "Pool_GrenadeMods_06_Legendary", "Pool_GunsAndGear", "Pool_GunsAndGear_02_Uncommon", "Pool_GunsAndGear_02_UncommonsRaid", "Pool_GunsAndGear_04_Rare", "Pool_GunsAndGear_05_VeryRare", "Pool_GunsAndGearDropNumPlayersPlusOne", "Pool_Shields_All_02_Uncommon", "Pool_Shields_All_04_Rare", "Pool_Shields_All_05_VeryRare", "Pool_Shields_All_06_Legendary", "Pool_VehicleSkins_All", "Pool_Weapons_All", "Pool_Weapons_All_02_Uncommon", "Pool_Weapons_All_04_Rare", "Pool_Weapons_All_05_VeryRare", "Pool_Weapons_All_06_Legendary",
-)
-
-
 def Enable() -> None:
     # RunHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer", _PostCommitMapChange)
     RunHook(

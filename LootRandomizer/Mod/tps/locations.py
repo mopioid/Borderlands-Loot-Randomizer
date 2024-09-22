@@ -1,16 +1,18 @@
-from unrealsdk import Log, FindObject, KeepAlive
+from unrealsdk import Log, FindAll, FindObject, KeepAlive
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from ..defines import *
+
+from .. import locations
 
 from ..locations import Behavior, MapDropper
 from ..enemies import Enemy, Pawn
 from ..missions import Mission, MissionDefinition, MissionDefinitionAlt
 from ..missions import MissionDropper, MissionStatusDelegate, MissionPickup
-from ..missions import MissionGiver, MissionObject
+from ..missions import MissionGiver, MissionObject, ObjectiveKillInfo
 from ..other import Other, Attachment, PositionalChest
 
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 
 class WorldUniques(MapDropper):
@@ -137,7 +139,7 @@ class Dick(MapDropper):
             "GD_Co_LastRequests.M_LastRequests:BehaviorProviderDefinition_0",
         )
         if not bpd:
-            raise Exception("Could not located BPD for calling Nel a dick")
+            raise Exception("Could not locate BPD for calling Nel a dick")
 
         output_links = bpd.BehaviorSequences[0].ConsolidatedOutputLinkData
         output_links[0].ActivateDelay = 11.25
@@ -192,9 +194,9 @@ class TorgueO(MapDropper):
             if not (
                 caller.AIClass
                 and caller.AIClass.Name == "CharClass_UniqueCharger"
+                and params.InstigatedBy
+                and params.InstigatedBy.Class.Name == "WillowPlayerController"
             ):
-                return True
-            if params.InstigatedBy.Class.Name != "WillowPlayerController":
                 return True
 
             behavior = FindObject(
@@ -234,6 +236,17 @@ class SwordInStone(MapDropper):
 
         event_data = bpd.BehaviorSequences[0].EventData2[0]
         event_data.OutputLinks.ArrayIndexAndLength = 327681
+
+
+class Swagman(Pawn):
+    map_name: str
+
+    def __init__(self, map_name: str) -> None:
+        self.map_name = map_name.casefold()
+        super().__init__("PawnBalance_ScavWastelandWalker")
+
+    def should_inject(self, pawn: UObject) -> bool:
+        return locations.map_name == self.map_name
 
 
 class ToArms(MapDropper):
@@ -347,7 +360,7 @@ class PopRacing(MapDropper):
         )
         if not (loaded1 and loaded6):
             raise Exception(
-                "Could not located loading sequences for Pop Racing"
+                "Could not locate loading sequences for Pop Racing"
             )
 
         loaded1.OutputLinks[0].Links = ()
@@ -510,7 +523,7 @@ class PoopDeck(MapDropper):
         poop = FindObject("PopulationOpportunityDen", "Wreck_Combat2.TheWorld:PersistentLevel.PopulationOpportunityDen_9")
         seq = FindObject("SeqEvent_PopulatedActor", "Wreck_Combat2.TheWorld:PersistentLevel.Main_Sequence.SeqEvent_PopulatedActor_0")
         if not (mission and poop and seq):
-            raise Exception("Could not located objects for Poop Deck")
+            raise Exception("Could not locate objects for Poop Deck")
 
         mission_status = get_missiontracker().GetMissionStatus(mission)
         if mission_status == Mission.Status.Complete:
@@ -656,14 +669,6 @@ class SubLevel13(MapDropper):
     paths = ("Sublevel13_P",)
 
     def entered_map(self) -> None:
-        # loaded = FindObject("SeqEvent_LevelLoaded", "Sublevel13_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqEvent_LevelLoaded_3")
-        # mission_event = FindObject("WillowSeqAct_MissionCustomEvent", "Sublevel13_Dynamic.TheWorld:PersistentLevel.Main_Sequence.WillowSeqAct_MissionCustomEvent_11")
-
-        # loaded.OutputLinks[0].Links = (
-        #     convert_struct(loaded.OutputLinks[0].Links[0]),
-        #     (mission_event, 0)
-        # )
-
         keypad = FindObject("WillowInteractiveObject", "Sublevel13_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_0")
         if not keypad:
             raise Exception("Could not locate keypad for Sub-Level 13")
@@ -707,9 +712,9 @@ class ChefVoyage(MissionDropper, MapDropper):
 
 class Bob(MapDropper):
     paths = ("centralterminal_p",)
+        # TODO: BUFF BAHB
 
     def entered_map(self) -> None:
-        # TODO: BUFF BAHB
         pass
         # bob = FindObject("WillowAIPawn", "GD_DahlMarine_CentralTerm.Character.Pawn_DahlMarine_CentralTerm")
         # event47 = FindObject("SeqEvent_RemoteEvent", "CentralTerminal_Dynamic.TheWorld:PersistentLevel.Main_Sequence.Map_Combat.SeqEvent_RemoteEvent_47")
@@ -873,8 +878,6 @@ class ChefReturn(MissionDropper, MapDropper):
         if self.location.current_status != Mission.Status.Complete:
             return
 
-        # Digsite_SideMissions.TheWorld:PersistentLevel.PopulationOpportunityDen_14
-
         loaded24 = FindObject("SeqEvent_LevelLoaded", "Digsite_SideMissions.TheWorld:PersistentLevel.Main_Sequence.SeqEvent_LevelLoaded_30")
         if not loaded24:
             raise Exception("Could not locate loading for Return Of Captain Chef")
@@ -902,6 +905,12 @@ class InjuredSoldier(MapDropper):
     paths = ("Digsite_Rk5arena_P",)
 
     def entered_map(self) -> None:
+        den = FindObject("PopulationOpportunityDen", "Digsite_Rk5arena_Audio.TheWorld:PersistentLevel.PopulationOpportunityDen_1")
+        if not den:
+            raise Exception("Could not locate den for Injured Soldier")
+        
+        den.IsEnabled = True
+
         def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
             if not (caller.AIClass and caller.AIClass.Name == "CharClass_NPCInjuredSoldier"):
                 return True
@@ -965,9 +974,594 @@ class Hanna(MapDropper):
 class SentinelRaid(MapDropper):
     paths = ("InnerCore_P",)
 
+    def block_loot(self) -> None:
+        def hook_loot(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            path = UObject.PathName(caller)
+            return path != "Vault_Boss.TheWorld:PersistentLevel.Main_Sequence.SeqAct_ApplyBehavior_3.Behavior_RemoteCustomEvent_0"
+
+        RunHook(
+            "WillowGame.Behavior_RemoteCustomEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}.block_loot",
+            hook_loot,
+        )
+
+    def unblock_loot(self) -> None:
+        RemoveHook(
+            "WillowGame.Behavior_RemoteCustomEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}.block_loot",
+        )
+
+    def detect_loot(self) -> None:
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            path = UObject.PathName(caller)
+            if path in (
+                "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_82",
+                "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_83",
+                "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_88",
+                "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_89",
+            ):
+                self.undetect_loot()
+                self.block_loot()
+            return True
+        RunHook(
+            "WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}.detect_loot",
+            hook,
+        )
+
+    def undetect_loot(self) -> None:
+        RemoveHook(
+            "WillowGame.Behavior_RemoteCustomEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}.detect_loot",
+        )
+
+    def detect_kill(self) -> None:
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if (
+                UObject.PathName(caller) ==
+                "GD_FinalBossCorkBig.Character.AIDef_FBCBig:AIBehaviorProviderDefinition_0.Behavior_RemoteEvent_19"
+            ):
+                self.detect_loot()
+                self.unblock_loot()
+            return True
+        RunHook(
+            "Engine.Behavior_RemoteEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}.detect_kill",
+            hook,
+        )
+
+    def undetect_kill(self) -> None:
+        RemoveHook(
+            "Engine.Behavior_RemoteEvent.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}.detect_kill",
+        )
+
     def entered_map(self) -> None:
-        applybehavior18 = FindObject("SeqAct_ApplyBehavior", "Vault_Boss.TheWorld:PersistentLevel.Main_Sequence.SeqAct_ApplyBehavior_18")
+        self.detect_kill()
+
+        for path in (
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_81",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_82",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_83",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_84",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_85",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_86",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_87",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_88",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_89",
+        ):
+            spawner = FindObject("Behavior_SpawnItems", path)
+            if spawner:
+                spawner.ItemDropOffset.Z = 256
         
+    def exited_map(self) -> None:
+        self.undetect_loot()
+        self.undetect_kill()
+        self.unblock_loot()
+
+
+class MasterPoacher(MapDropper):
+    paths = ("Digsite_P",)
+
+    def entered_map(self) -> None:
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if UObject.PathName(caller.AIClass) != "GD_Co_NPCs_GuardianHunter.Character.CharClass_ScavBandit":
+                return True
+
+            mission = self.location.mission
+            if not mission:
+                raise Exception("Could not locate mission for Master Poacher")
+
+            spawn_loot(
+                self.location.prepare_pools(),
+                mission.mission_definition.uobject,
+                (caller.Location.X, caller.Location.Y, caller.Location.Z)
+            )
+            return True
+
+        RunHook(
+            "WillowGame.WillowAIPawn.Died",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
+
+    def exited_map(self) -> None:
+        RemoveHook(
+            "WillowGame.WillowAIPawn.Died",
+            f"LootRandomizer.{id(self)}",
+        )
+
+
+class PopupAd(MapDropper):
+    paths = ("Ma_Nexus_P", "Ma_Motherboard_P")
+
+    def entered_map(self) -> None:
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if UObject.PathName(caller) == "GD_Ma_AdPopup.BE_Shared_AdPopup:Behavior_SpawnLootAtPoints_3":
+                caller.ItemPools = self.location.prepare_pools()
+            return True
+
+        RunHook(
+            "WillowGame.Behavior_SpawnLoot.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
+
+    def exited_map(self) -> None:
+        RemoveHook(
+            "WillowGame.Behavior_SpawnLoot.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+        )
+
+
+class SpywareChest(Attachment):
+    def inject(self, obj: UObject) -> None:
+        rarities = self.location.rarities
+        self.location.rarities = (100,) * 11
+        super().inject(obj)
+        self.location.rarities = rarities
+
+
+class SpywareBug(MissionDropper, MapDropper):
+    paths = ("Ma_Nexus_P",)
+
+    def entered_map(self) -> None:
+        chest_bpd = FindObject("BehaviorProviderDefinition", "GD_Ma_Side_SpywareData.InteractiveObjects.InteractiveObj_SpywareChest:BehaviorProviderDefinition_0")
+        if not chest_bpd:
+            raise Exception("Could not locate chest for Spyware Who Came in from the Cold")
+
+        behavior_data = chest_bpd.BehaviorSequences[1].BehaviorData2
+        set_flag = behavior_data[1].Behavior
+
+        behavior_data[1].Behavior = behavior_data[4].Behavior
+        behavior_data[1].LinkedVariables.ArrayIndexAndLength = 0
+
+        behavior_data[4].Behavior = set_flag
+        behavior_data[4].LinkedVariables.ArrayIndexAndLength = 1
+
+        if self.location.current_status != Mission.Status.Complete:
+            return
+
+        for pawn in get_pawns():
+            if pawn.AIClass and pawn.AIClass.Name == "CharacterClass_Ma_HoneyPot":
+                break
+        else:
+            raise Exception("Could not locate bug for Spyware Who Came in from the Cold")
+
+        handle = (pawn.ConsumerHandle.PID,)
+        bpd = pawn.AIClass.AIDef.BehaviorProviderDefinition
+        kernel = get_behaviorkernel()
+        
+        kernel.ChangeBehaviorSequenceActivationStatus(
+            handle, bpd, "Brain", 1
+        )
+
+class RoseTinting(MissionDropper, MapDropper):
+    paths = ("Ma_LeftCluster_P",)
+
+    def entered_map(self) -> None:
+        completed_event = FindObject("WillowSeqEvent_MissionRemoteEvent", "Ma_LeftCluster_SideMissions.TheWorld:PersistentLevel.Main_Sequence.WillowSeqEvent_MissionRemoteEvent_33")
+        sequence_conditions = FindObject("BehaviorSequenceEnableByMultipleConditions", "GD_Ma_Side_MINACData.InteractiveObjects.IO_MinacMissionObject:BehaviorProviderDefinition_1.BehaviorSequenceEnableByMultipleConditions_0")
+        minac_eye = FindObject("WillowInteractiveObject", "Ma_LeftCluster_SideMissions.TheWorld:PersistentLevel.WillowInteractiveObject_0")
+        if not (completed_event and sequence_conditions and minac_eye):
+            raise Exception("Could not locate objects for Rose Tinting")
+
+        completed_event.OutputLinks[0].Links = ()
+
+        sequence_conditions.EnableConditions = ()
+
+        kernel = get_behaviorkernel()
+        handle = (minac_eye.ConsumerHandle.PID,)
+        bpd = minac_eye.InteractiveObjectDefinition.BehaviorProviderDefinition
+
+        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "MissionComplete", 2)
+        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "MissionAvailable", 1)
+
+
+class DataMining(MissionDropper, MapDropper):
+    paths = ("Ma_LeftCluster_P",)
+
+    def entered_map(self) -> None:
+        completed_event = FindObject("WillowSeqEvent_MissionRemoteEvent", "Ma_LeftCluster_SideMissions.TheWorld:PersistentLevel.Main_Sequence.WillowSeqEvent_MissionRemoteEvent_37")
+        kill_event = FindObject("WillowSeqEvent_MissionRemoteEvent", "Ma_LeftCluster_SideMissions.TheWorld:PersistentLevel.Main_Sequence.WillowSeqEvent_MissionRemoteEvent_31")
+        if not (completed_event and kill_event):
+            raise Exception("Could not locate objects for Data Mining")
+
+        completed_event.OutputLinks[0].Links = ()
+        kill_event.OutputLinks[0].Links = ()
+
+
+class ClaptasticStash(MapDropper):
+    bpd_path: str
+
+    def __init__(self, bpd_path: str, map_name: str) -> None:
+        self.bpd_path = bpd_path
+        super().__init__(map_name)
+
+    def entered_map(self) -> None:
+        bpd = FindObject("BehaviorProviderDefinition", self.bpd_path)
+        if not bpd:
+            raise Exception("Could not locate BPD for hidden stash")
+
+        closed_events = bpd.BehaviorSequences[0].EventData2        
+        for event in closed_events:
+            if event.UserData.EventName == "OnBehaviorSequenceEnabled":
+                event.OutputLinks.ArrayIndexAndLength = 0
+
+        pt02_events = bpd.BehaviorSequences[4].EventData2
+        for event in pt02_events:
+            if event.UserData.EventName == "OnBehaviorSequenceEnabled":
+                event.OutputLinks.ArrayIndexAndLength = 0
+
+
+
+class Dignity(MissionStatusDelegate, MapDropper):
+    paths = ("Ma_Motherboard_P",)
+
+    den: Optional[UObject] = None
+    monocle: Optional[UObject] = None
+
+    def spawn_dignity(self) -> None:
+        if self.den:
+            self.den.Aspect = None
+            self.den.IsEnabled = True
+            self.den.RespawnKilledActors(1)
+
+    def hide_monocle(self) -> None:
+        if self.monocle:
+            get_behaviorkernel().ChangeBehaviorSequenceActivationStatus(
+                (self.monocle.ConsumerHandle.PID,),
+                self.monocle.InteractiveObjectDefinition.BehaviorProviderDefinition,
+                "Invisible",
+                1
+            )
+            self.monocle.ChangeInstanceDataSwitch("PooPile", 0)
+
+    def completed(self) -> None:
+        self.spawn_dignity()
+        self.hide_monocle()
+
+    def entered_map(self) -> None:
+        self.den = FindObject("PopulationOpportunityDen", "Ma_Motherboard_Side.TheWorld:PersistentLevel.PopulationOpportunityDen_0")
+        loaded2 = FindObject("SeqEvent_LevelLoaded", "Ma_Motherboard_Side.TheWorld:PersistentLevel.Main_Sequence.SeqEvent_LevelLoaded_2")
+        pop_eval = FindObject("OzMissionExpressionEvaluator", "GD_Ma_DignityTrap.Population.BD_Dignity:OzMissionExpressionEvaluator_0")
+        if not (self.den and loaded2 and pop_eval):
+            raise Exception("Could not locate den for Dignity")
+
+        for obj in FindAll("WillowInteractiveObject"):
+            obj_def = obj.InteractiveObjectDefinition
+            if (obj_def and obj_def.Name == "IO_Ma_ShredOfDignity"):
+                break
+        else:
+            raise Exception("Could not locate monocle for Dignity")
+        self.monocle = obj
+
+        loaded2.OutputLinks[0].Links = ()
+        pop_eval.ObjectiveStatesToLinkTo.bComplete = True
+
+        if self.location.current_status == Mission.Status.Complete:
+            self.hide_monocle()
+            self.spawn_dignity()
+
+    def exited_map(self) -> None:
+        self.den = None
+        self.monocle = None
+
+
+class EgoTrap(MissionStatusDelegate, MapDropper):
+    paths = ("Ma_Nexus_P",)
+
+    def apply(self) -> None:
+        for pawn in get_pawns():
+            if pawn.AIClass and pawn.AIClass.Name == "CharacterClass_Ma_EgoTrap":
+                break
+        else:
+            raise Exception("Could not locate 3G0-TP")
+
+        get_behaviorkernel().ChangeBehaviorSequenceActivationStatus(
+            (pawn.ConsumerHandle.PID,),
+            pawn.AIClass.AIDef.BehaviorProviderDefinition,
+            "Brain",
+            1
+        )
+
+    def entered_map(self) -> None:
+        if self.location.current_status == Mission.Status.Complete:
+            self.apply()
+
+    def completed(self) -> None:
+        Log("EgoTrap completed")
+        self.apply()
+
+
+class StopTheMusic(MissionDropper, MapDropper):
+    paths = ("Ma_Nexus_P",)
+
+    def entered_map(self) -> None:
+        loaded2 = FindObject("SeqEvent_LevelLoaded", "Ma_Nexus_Side.TheWorld:PersistentLevel.Main_Sequence.SeqEvent_LevelLoaded_2")
+        if not loaded2:
+            raise Exception("Could not locate loading for Stop The Music")
+        loaded2.OutputLinks[0].Links = ()
+
+
+class ByteClub(MissionDropper, MapDropper):
+    paths = ("Ma_RightCluster_P",)
+
+    def entered_map(self) -> None:
+        den = FindObject("PopulationOpportunityDen", "Ma_RightCluster_SideMission.TheWorld:PersistentLevel.PopulationOpportunityDen_7")
+        if not den:
+            raise Exception("Could not locate den for Byte Club")
+
+        turnedin_enable = FindObject("BehaviorSequenceEnableByMission", "GD_Ma_BotPit.Character.AIDef_Ma_BotPit:AIBehaviorProviderDefinition_0.BehaviorSequenceEnableByMission_2")
+        brain_enable = FindObject("BehaviorSequenceEnableByMission", "GD_Ma_BotPit.Character.AIDef_Ma_BotPit:AIBehaviorProviderDefinition_0.BehaviorSequenceEnableByMission_0")
+        if not (turnedin_enable and brain_enable):
+            raise Exception("Could not locate objects for Byte Club")
+
+        den.IsEnabled = True
+
+        turnedin_enable.MissionStatesToLinkTo.bComplete = False
+        brain_enable.MissionStatesToLinkTo.bComplete = True
+
+
+class SupaEgoTrap(MissionDropper, MapDropper):
+    paths = ("Ma_Nexus_P",)
+
+    def entered_map(self) -> None:
+        den = FindObject("PopulationOpportunityDen", "Ma_Nexus_Side.TheWorld:PersistentLevel.PopulationOpportunityDen_1")
+        mission_enable = FindObject("BehaviorSequenceEnableByMission", "GD_Ma_SuperEgoTrap.Character.AIDef_Ma_SuperEgoTrap:AIBehaviorProviderDefinition_0.BehaviorSequenceEnableByMission_0")
+        if not (den and mission_enable):
+            raise Exception("Could not locate objects for 5UP4-3G0-TP")
+        
+        den.IsEnabled = True
+        mission_enable.MissionStatesToLinkTo.bComplete = True
+
+
+class JackBobble(MapDropper):
+    paths = ("Ma_Subconscious_P",)
+
+    def entered_map(self) -> None:
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if UObject.PathName(caller) != "Ma_Subconscious_Game.TheWorld:PersistentLevel.Emitter_2":
+                return True
+
+            missiondef = FindObject("MissionDefinition", "GD_Ma_Chapter05.M_Ma_Chapter05")
+            if not missiondef:
+                raise Exception(
+                    f"No mission for {self.location.name}"
+                )
+
+            spawn_loot(
+                self.location.prepare_pools(),
+                missiondef,
+                (-54300, -6464, 5028),
+                (-212, 1037, 0)
+            )
+            return True
+
+        RunHook(
+            "Engine.Actor.OnToggleHidden",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
+
+    def exited_map(self) -> None:
+        RemoveHook(
+            "Engine.Actor.OnToggleHidden",
+            f"LootRandomizer.{id(self)}",
+        )
+        
+
+class DeadlierGame(MissionStatusDelegate, MapDropper):
+    paths = ("Ma_Subconscious_P",)
+
+    def apply(self) -> None:
+        pawn = FindObject("WillowAIPawn", "Ma_Subconscious_SideMissions.TheWorld:PersistentLevel.WillowAIPawn_0")
+        icon = FindObject("InteractionIconDefinition", "GD_InteractionIcons.Default.Icon_DefaultTalk")
+        if not (pawn and icon):
+            raise Exception("Could not locate objects for Deadlier Game")
+
+        pawn.SetInteractionIcon(icon, 0)
+        pawn.SetUsable(True, None, 0)
+
+        bpd = pawn.AIClass.AIDef.BehaviorProviderDefinition
+        kernel = get_behaviorkernel()
+        handle = (pawn.ConsumerHandle.PID,)
+
+        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "MissionComplete", 2)
+        kernel.ChangeBehaviorSequenceActivationStatus(handle, bpd, "Brain", 1)
+
+
+    def entered_map(self) -> None:
+        if self.location.current_status == Mission.Status.Complete:
+            self.apply()
+
+    def completed(self) -> None:
+        self.apply()
+
+
+class SumFears(MapDropper):
+    paths = ("Ma_Subconscious_P",)
+
+    def entered_map(self) -> None:
+        turnin_enable = FindObject("BehaviorSequenceEnableByMission", "GD_Ma_MetaTrap_SomeFears.Character.AIDef_Ma_MetaTrap_SomeFears:AIBehaviorProviderDefinition_0.BehaviorSequenceEnableByMission_0")
+        if not turnin_enable:
+            raise Exception("Could not locate objects for Sum Of Some Fears")
+        turnin_enable.MissionStatesToLinkTo.bComplete = True
+
+
+def get_mutator_multiplier() -> int:
+    machine_attr = FindObject(
+        "DesignerAttributeDefinition",
+        "GD_Ma_Mutator.Attributes.Att_MutatorMachineType"
+    )
+    if not machine_attr:
+        raise Exception("Could not locate objects for Mutator Chest")
+
+    for machine in FindAll("WillowInteractiveObject"):
+        obj_def = machine.InteractiveObjectDefinition
+        if not (obj_def and obj_def.Name == "IO_MutatorMachine"):
+            continue
+
+        machine_type, *_ = machine_attr.GetValue(machine)
+        if int(machine_type) == 2:
+            break
+    else:
+        raise Exception("Could not locate level machine for Mutator Chest")
+        
+    for datum in machine.InstanceState.Data:
+        if datum.Name == "NumberSwitch":
+            level = datum.Int
+            break
+    else:
+        raise Exception("Could not determine level for Mutator Chest")
+
+    if   level in (1, 2):    return 1
+    elif level in (3, 4):    return 2
+    elif level in (5, 6):    return 3
+    elif level in (7, 8, 9): return 4
+    else: raise Exception(f"Found unexpected level {level} for Mutator Chest")
+
+
+class MutatorChest(Attachment):
+    def inject(self, obj: UObject) -> None:
+        original_rarities = self.location.rarities
+        self.location.rarities = (100,) * get_mutator_multiplier()
+        super().inject(obj)
+        self.location.rarities = original_rarities
+
+
+class MutatorPawn(Pawn):
+    def inject(self, pools: List[Any]) -> None:
+        original_rarities = tuple(self.location.rarities)
+        self.location.rarities = original_rarities * get_mutator_multiplier()
+        Log(f"--- MutatorPawn rarities: {self.location.rarities} ---")
+        super().inject(pools)
+        self.location.rarities = original_rarities
+
+
+class HolodomeMission(MissionDropper, MapDropper):
+    paths = ("Eridian_slaughter_P",)
+
+    compare_path: str
+    objective_path: str
+    didntdo_behavior_path: str
+    did_behavior_path: str
+
+    def __init__(
+        self,
+        *,
+        objective_path: str,
+        compare_path: str,
+        didntdo_behavior_path: str,
+        did_behavior_path: str,
+    ) -> None:
+        self.objective_path = objective_path
+        self.compare_path = compare_path
+        self.didntdo_behavior_path = didntdo_behavior_path
+        self.did_behavior_path = did_behavior_path
+        super().__init__()
+
+    def entered_map(self) -> None:
+        objective = FindObject("MissionObjectiveDefinition", self.objective_path)
+        didntdo_bevavior = FindObject("Behavior_UpdateMissionObjective", self.didntdo_behavior_path)
+        did_behavior = FindObject("Behavior_UpdateMissionObjective", self.did_behavior_path)
+        if not (objective and did_behavior and didntdo_bevavior):
+            raise Exception("Could not locate objectives for Holodome")
+
+        didntdo_objective = didntdo_bevavior.MissionObjective
+        did_objective = did_behavior.MissionObjective
+
+        Log(f"didntdo_objective: {UObject.PathName(didntdo_objective)}")
+        Log(f"did_objective: {UObject.PathName(did_objective)}")
+
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if UObject.PathName(caller) != self.compare_path:
+                return True
+            
+            objective_complete = get_missiontracker().IsMissionObjectiveComplete(objective)
+            Log(f"objective_complete: {objective_complete}")
+
+            if objective_complete:
+                didntdo_bevavior.MissionObjective = did_objective
+                did_behavior.MissionObjective = did_objective
+            else:
+                didntdo_bevavior.MissionObjective = didntdo_objective
+                did_behavior.MissionObjective = didntdo_objective
+
+            return True
+
+        RunHook(
+            "GearboxFramework.Behavior_CompareBool.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
+
+    def exited_map(self) -> None:
+        RemoveHook(
+            "GearboxFramework.Behavior_CompareBool.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+        )
+
+
+class HolodomeScientists(MapDropper):
+    paths = ("Eridian_slaughter_P",)
+
+    def entered_map(self) -> None:
+        button_bpd = FindObject("BehaviorProviderDefinition", "GD_EridianSlaughterData.InteractiveObjects.GenericButtonDigi:BehaviorProviderDefinition_0")
+        if not button_bpd:
+            raise Exception("Could not locate button for Scientists")
+        
+        off_sequence = button_bpd.BehaviorSequences[5]
+        off_sequence.ConsolidatedOutputLinkData[6].ActivateDelay = 1
+
+        def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+            if UObject.PathName(caller) != "GD_EridianSlaughterData.InteractiveObjects.GenericButtonDigi:BehaviorProviderDefinition_0.Behavior_InterpolateFloatOverTime_10":
+                return True
+            
+            mission = self.location.mission
+            if not mission:
+                raise Exception("Could not locate mission for Scientists")
+
+            spawn_loot(
+                tuple(self.location.prepare_pools()) * 4,
+                mission.mission_definition.uobject,
+                (14958, -3456, 674),
+                (-468, -544, 0),
+                64
+            )
+            return True
+
+        RunHook(
+            "GearboxFramework.Behavior_InterpolateFloatOverTime.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+            hook,
+        )
+
+    def exited_map(self) -> None:
+        RemoveHook(
+            "GearboxFramework.Behavior_InterpolateFloatOverTime.ApplyBehaviorToContext",
+            f"LootRandomizer.{id(self)}",
+        )
 
 
 # fmt: off
@@ -998,7 +1592,8 @@ Locations = (
     Enemy("Nel (Called a Dick)", Dick(), mission="Last Requests"),
     Enemy("Nel", Pawn("PawnBalance_Nel"), tags=Tag.SlowEnemy),
     Mission("Nova? No Problem!", MissionDefinition("GD_Co_NovaNoProblem.M_NovaNoProblem")),
-    Other("Janey's Chest", Attachment("BD_DahlShockChest"), mission="Nova? No Problem!"),
+    Other("Janey's Chest", Attachment("BD_DahlShockChest", 0), mission="Nova? No Problem!"),
+    Other("Janey's Safe", Attachment("BD_ElectronicObjectThree", 0), mission="Nova? No Problem!"),
     Mission("Torgue-o! Torgue-o! (Turn in Janey)", MissionDefinition("GD_Co_ToroToro.M_ToroToro"), TorgueO()),
     Mission("Torgue-o! Torgue-o! (Turn in Lava)", MissionDefinitionAlt("GD_Co_ToroToro.M_ToroToro"), TorgueO()),
     Enemy("Antagonized Kraggon", Pawn("PawnBalance_UniqueCharger"), mission="Torgue-o! Torgue-o! (Turn in Janey)", rarities=(5,)),
@@ -1011,7 +1606,8 @@ Locations = (
         SwordInStone(),
         Behavior("GD_Co_EasterEggs.Excalibastard.InteractiveObject_Excalibastard:BehaviorProviderDefinition_0.Behavior_SpawnItems_44"),
     tags=Tag.Miscellaneous),
-    Enemy("Swagman", Pawn("PawnBalance_ScavWastelandWalker")),
+    Enemy("Swagman (Stanton's Liver)", Swagman("StantonsLiver_P")),
+    Other("Obelisk Chest", PositionalChest("ObjectGrade_TreasureChest", "StantonsLiver_P", 15677, 24953, -14827)),
     Mission("Recruitment Drive", MissionDefinition("GD_Cork_Resistors.M_Resistors"), tags=Tag.VehicleMission),
     Enemy("Magma Rivers", Pawn("PawnBalance_LittleDarksiderBadassBandit")),
     Enemy("Wally Wrong", Pawn("PawnBalance_DarksiderBadassBandit")),
@@ -1033,9 +1629,19 @@ Locations = (
     Enemy("Giant Shuggurath of Ice", Pawn("PawnBalance_GiantCryoHive")),
     Mission("Pop Racing", MissionDefinition("GD_Co_PopRacing.M_Co_PopRacing"), PopRacing(), tags=Tag.VehicleMission),
     Enemy("Lunestalker Snr", Pawn("PawnBalance_LunestalkerSnrRider")),
-    Mission("Zapped 1.0", MissionDefinition("GD_Co_Zapped.M_Co_Zapped1", block_weapon=False), Zapped1()),
-    Mission("Zapped 2.0", MissionDefinition("GD_Co_Zapped.M_Co_Zapped2", block_weapon=False)),
-    Mission("Zapped 3.0", MissionDefinition("GD_Co_Zapped.M_Co_Zapped3", block_weapon=False)),
+    Mission("Zapped 1.0",
+        MissionDefinition("GD_Co_Zapped.M_Co_Zapped1"),
+        Zapped1(),
+        ObjectiveKillInfo("GD_Co_Zapped.M_Co_Zapped1:KillScavengers.MissionObjectiveKillInfo_12", damage_type=1), # DAMAGE_TYPE_Incindiary
+    ),
+    Mission("Zapped 2.0",
+        MissionDefinition("GD_Co_Zapped.M_Co_Zapped2"),
+        ObjectiveKillInfo("GD_Co_Zapped.M_Co_Zapped2:Killtorks.MissionObjectiveKillInfo_13", damage_type=8), # DAMAGE_TYPE_Ice
+    ),
+    Mission("Zapped 3.0", MissionDefinition("GD_Co_Zapped.M_Co_Zapped3")),
+    Enemy("Malfunctioning CL4P-TP", Pawn("BD_MalfunctioningClaptrap"), mission="Zapped 3.0", rarities=(10,)),
+    Enemy("Swagman (Outlands Canyon)", Swagman("Outlands_P2")),
+    Other("Perfect Timing Chest", PositionalChest("ObjectGrade_TreasureChest", "Outlands_P2", -28896, 56862, -828)),
     Mission("Boomshakalaka", MissionDefinition("GD_Co_Boomshakalaka.M_Boomshakalaka"), Boomshakalaka()),
     Enemy("Dunks Watson", DunksWatson(), mission="Boomshakalaka"),
     Mission("Space Slam", MissionDefinition("GD_Co_SpaceSlam.M_SpaceSlam"), SpaceSlam()),
@@ -1046,7 +1652,7 @@ Locations = (
         MissionDefinition("GD_Co_SecretChamber.M_SecretChamber"),
         MissionPickup("Wreck_SideMissions.TheWorld:PersistentLevel.WillowMissionPickupSpawner_0", "Wreck_P"),
     tags=Tag.LongMission),
-    Other("Zarpedon's Stash", Attachment("Balance_Chest_ZarpedonsStash", *range(10)), mission="The Secret Chamber"),
+    Other("Zarpedon's Stash", Attachment("Balance_Chest_ZarpedonsStash"), mission="The Secret Chamber"),
     Mission("Wiping the Slate", MissionDefinition("GD_Co_WipingSlate.M_WipingSlate")),
     Mission("No Such Thing as a Free Launch", FreeLaunch(), MissionDefinition("GD_Cork_Rocketeering.M_Rocketeering"), tags=Tag.LongMission),
     Enemy("Tony Slows", Pawn("PawnBalance_TonySlows"), mission="No Such Thing as a Free Launch"),
@@ -1080,6 +1686,7 @@ Locations = (
     Mission("Sub-Level 13: Part 2 (Turn in Pickle)", SubLevel13(), MissionDefinition("GD_Co_SubLevel13.M_Co_SubLevel13Part2")),
     Mission("Sub-Level 13: Part 2 (Turn in Schmidt)", MissionDefinitionAlt("GD_Co_SubLevel13.M_Co_SubLevel13Part2")),
     Mission("The Voyage of Captain Chef", ChefVoyage(), MissionDefinition("GD_Co_VoyageOfCaptainChef.M_VoyageOfCaptainChef")),
+    Enemy("Benjamin Blue", Attachment("BD_Ben")),
     Enemy("X-STLK-23-3", Pawn("PawnBalance_Stalker_RnD")),
     Enemy("Corporal Bob", Bob(), Pawn("PawnBalance_DahlMarine_CentralTerm"), tags=Tag.VeryRareEnemy),
     Mission("Boarding Party", MissionDefinition("GD_Co_Boarding_Party.M_BoardingParty")),
@@ -1103,6 +1710,7 @@ Locations = (
         MissionDefinition("GD_Co_Side_Lab19.M_Lab19")
     ),
     Mission("Red, Then Dead", MissionDefinition("GD_Co_Side_Reshirt.M_RedShirt")),
+    Mission("Things That Go Boom", MissionDefinition("GD_Co_Side_Exploders.M_Exploders")),
     Enemy("Lost Legion Courier", Pawn("PawnBalance_DahlRedShirt"), mission="Red, Then Dead"),
     Enemy("Lost Legion Powersuit Noob", Pawn("PawnBalance_DahlRedShirtPowersuit")),
     Mission("To the Moon", MissionDefinition("GD_Co_Side_EngineerMoonShot.M_EngineerMoonShot")),
@@ -1127,7 +1735,7 @@ Locations = (
         MissionDefinition("GD_Co_Side_PickingUp.M_PickingUpThePieces"),
         MissionPickup("Laser_P.TheWorld:PersistentLevel.WillowMissionPickupSpawner_3", "Laser_P"),
     ),
-    Other("Scientist Laser Stash", Attachment("ObjectGrade_HypWeaponChest_Laser", 0, 1), mission="Picking Up the Pieces"),
+    Other("Scientist Laser Stash", Attachment("ObjectGrade_HypWeaponChest_Laser"), mission="Picking Up the Pieces"),
     Mission("These are the Bots",
         MissionDefinition("GD_Co_Side_TheseAreTheBots.M_TheseAreTheBots"),
         TheseAreTheBots(),
@@ -1137,14 +1745,10 @@ Locations = (
         MissionDefinition("GD_Co_ReturnOfCapnChef.M_ReturnOfCaptainChef"),
         ChefReturn(),
     tags=Tag.LongMission),
-    Enemy("Injured Lost Legion Soldier", InjuredSoldier()), #TODO
-    Enemy("Raum-Kampfjet Mark V", #TODO test non-story kill
+    Enemy("Injured Lost Legion Soldier", InjuredSoldier()),
+    Enemy("Raum-Kampfjet Mark V",
         Behavior("GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_104"),
         Behavior(
-            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_100",
-            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_101",
-            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_102",
-            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_103",
             "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_84",
             "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_85",
             "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_86",
@@ -1161,18 +1765,23 @@ Locations = (
             "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_97",
             "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_98",
             "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_99",
+            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_100",
+            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_101",
+            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_102",
+            "GD_ZarpedonJetP1Boss.Character.AIDef_ZarpedonJetP1Boss:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_103",
         inject=False),
     tags=Tag.SlowEnemy),
-    Other("Compression Chamber Dahl Chest", PositionalChest("ObjectGrade_DahlEpic", -21260, 35075, 78528)),
-    Other("Mario Easter Egg Chest", Attachment("ObjectGrade_8bitTreasureChest")),
+    Other("Compression Chamber Chest", PositionalChest("ObjectGrade_DahlEpic", "Access_P", -21260, 35075, 78528)),
+    Other("8-bit Chest", Attachment("ObjectGrade_8bitTreasureChest")),
+    Mission("Z8N-TP", MissionDefinition("GD_Co_Side_Z8MTRP.M_Z8nTRP")),
     Mission("Don't Shoot the Messenger",
         MissionDefinition("GD_Co_DontShootMessenger.MissionDef.M_DontShootMsgr"),
         MissionPickup("11B_Access_GAME.TheWorld:PersistentLevel.WillowMissionPickupSpawner_0", "Access_P"),
     tags=Tag.LongMission),
     Enemy("Hanna", Hanna(), mission="Don't Shoot the Messenger"),
     Enemy("Opha Superior", Pawn("PawnBalance_OphaBoss")),
-    Enemy("The Sentinel", #TODO test non-story kill
-        # Pawn("PawnBalance_FinalBossCork"),
+    Enemy("The Sentinel (First Phase)", Pawn("PawnBalance_FinalBossCork"), tags=Tag.Excluded),
+    Enemy("The Sentinel",
         Behavior("GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_86"),
         Behavior(
             "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_81",
@@ -1182,65 +1791,267 @@ Locations = (
         inject=False),
     tags=Tag.SlowEnemy, rarities=(50, 50)),
     Mission("The Beginning of the End", MissionDefinition("GD_Co_Chapter11.M_DahlDigsite"), tags=Tag.Excluded),
-    Mission("The Bestest Story Ever Told", MissionDefinition("GD_Co_CorkRaid.M_CorkRaid"), tags=Tag.RaidEnemy),
+    Mission("The Bestest Story Ever Told", MissionDefinition("GD_Co_CorkRaid.M_CorkRaid"), tags=Tag.Raid),
+    Enemy("The Invincible Sentinel (First Phase)", Pawn("PawnBalance_RaidBossCork"), tags=Tag.Excluded),
     Enemy("The Invincible Sentinel",
-        # Pawn("PawnBalance_RaidBossCork"),
         SentinelRaid(),
-        Behavior("GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_83"),
         Behavior(
             "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_82",
-            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_85",
-            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_87",
+            "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_83",
             "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_88",
             "GD_FinalBossCorkBig.IOs.IO_LootSpew:BehaviorProviderDefinition_0.Behavior_SpawnItems_89",
+        ),
+    tags=Tag.Raid),
+    Enemy("Iwajira",
+        Pawn("PawnBalance_Rockzilla"),
+        Behavior(
+            "GD_Rockzilla.Death.DeathDef_Rockzilla:BehaviorProviderDefinition_0.Behavior_SpawnItems_147",
+            "GD_Rockzilla.Death.DeathDef_Rockzilla:BehaviorProviderDefinition_0.Behavior_SpawnItems_146",
         inject=False),
-    tags=Tag.RaidEnemy),
-    # TODO iwajira
-
-    Mission("Guardian Hunter", MissionDefinition("GD_Co_GuardianHunter.MissionDef.M_GuardianHunter")),
-    Mission("Sterwin Forever", MissionDefinition("GD_Co_GuardianHunter.MissionDef.M_SterwinForever")),
-    Mission("Things That Go Boom", MissionDefinition("GD_Co_Side_Exploders.M_Exploders")),
-    Mission("Z8N-TP", MissionDefinition("GD_Co_Side_Z8MTRP.M_Z8nTRP")),
-    Mission("l33t h4X0rz", MissionDefinition("GD_Ma_Side_H4X0rz.M_Ma_Side_H4X0rz_Repeat")),
-    Mission("A Deadlier Game", MissionDefinition("GD_Ma_Side_BadTrap.M_Ma_Side_BadTrap")),
-    Mission("Byte Club", MissionDefinition("GD_Ma_Side_ByteClub.M_Ma_Side_ByteClub")),
-    Mission("Chip's Data Mining Adventure", MissionDefinition("GD_Ma_Side_CookieDataMining.M_Ma_Side_CookieDataMining")),
-    Mission("3G0-TP", MissionDefinition("GD_Ma_Side_EgoTrap.M_Ma_Side_EgoTrap")),
-    Mission("1D-TP", MissionDefinition("GD_Ma_Side_IdTrap.M_Ma_Side_IdTrap")),
-    Mission("Rose Tinting", MissionDefinition("GD_Ma_Side_MINAC.M_Ma_Side_MINAC")),
-    Mission("Corrosion of Dignity", MissionDefinition("GD_Ma_Side_ShredOfDignity.M_Ma_Side_ShredOfDignity")),
-    Mission("Spyware Who Came in from the Cold", MissionDefinition("GD_Ma_Side_SpywareInFromCold.M_Ma_Side_SpywareInFromCold")),
-    Mission("You Can Stop the Music", MissionDefinition("GD_Ma_Side_StopTheMusic.M_Ma_Side_StopTheMusic")),
-    Mission("The Sum of Some Fears", MissionDefinition("GD_Ma_Side_SumOfSomeFears.M_Ma_Side_SumOfSomeFears")),
-    Mission("5UP4-3G0-TP", MissionDefinition("GD_Ma_Side_SuperEgoTrap.M_Ma_Side_SuperEgoTrap")),
-    Mission("The Temple of Boom", MissionDefinition("GD_Ma_Side_TempleOfBoom.M_Ma_Side_TempleofBoom")),
-    Mission("h4X0rz", MissionDefinition("GD_Ma_Side_H4X0rz.M_Ma_Side_H4X0rz")),
-    Mission("Digistructed Madness: Round 1", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter01")),
-    Mission("Digistructed Madness: Round 2", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter02")),
-    Mission("Digistructed Madness: Round 3", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter03")),
-    Mission("Digistructed Madness: Round 4", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter04")),
-    Mission("Digistructed Madness: Round 5", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter05")),
-    Mission("Digistructed Madness: The Badass Round", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter_Badass")),
+    tags=Tag.SlowEnemy),
+    Mission("Guardian Hunter (Turn in Sterwin)", MissionDefinition("GD_Co_GuardianHunter.MissionDef.M_GuardianHunter", block_weapon=False), tags=Tag.LongMission),
+    Mission("Guardian Hunter (Turn in Master Poacher)", MissionDefinitionAlt("GD_Co_GuardianHunter.MissionDef.M_GuardianHunter"), tags=Tag.LongMission),
+    Enemy("Master Poacher", MasterPoacher(), mission="Guardian Hunter (Turn in Sterwin)"),
+    Mission("Sterwin Forever", MissionDefinition("GD_Co_GuardianHunter.MissionDef.M_SterwinForever", block_weapon=False)),
 
     Mission("DAHL Combat Training: Round 1", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter01", unlink_next=True), DAHLTraining(), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
     Mission("DAHL Combat Training: Round 2", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter02", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
     Mission("DAHL Combat Training: Round 3", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter03", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
     Mission("DAHL Combat Training: Round 4", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter04", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
     Mission("DAHL Combat Training: Round 5", MissionDefinition("GD_Co_MoonSlaughter.M_Co_MoonSlaughter05", unlink_next=True), tags=Tag.ShockDrop|Tag.Slaughter|Tag.LongMission),
+
+    Enemy("Bug",
+          Pawn("PawnBalance_AdBug"),
+          Pawn("PawnBalance_BadassBug"),
+          Pawn("PawnBalance_Bug"),
+          Pawn("PawnBalance_SimpleBug"),
+          Pawn("PawnBalance_SimpleBug_Eos"),
+          Pawn("PawnBalance_SpyBug"),
+          Pawn("PawnBalance_UnstableBug"),
+    tags=Tag.ClaptasticVoyage|Tag.MobFarm),
+    Enemy("Insecurity Bot",
+        Pawn("PawnBalance_BadassClapDawg"),
+        Pawn("PawnBalance_BotRider"),
+        Pawn("PawnBalance_ClapDawg"),
+        Pawn("PawnBalance_ClapDawgRider"),
+        Pawn("PawnBalance_ClapPuppy"),
+        Pawn("PawnBalance_ClapTurret"),
+        Pawn("PawnBalance_ClapTurret_Missile"),
+        Pawn("PawnBalance_CleanupRuntime"),
+        Pawn("PawnBalance_FireWall"),
+        Pawn("PawnBalance_FlyTrap"),
+        Pawn("PawnBalance_InsecWheelie"),
+        Pawn("PawnBalance_InsecurityBot"),
+        Pawn("PawnBalance_InsecurityBot_LowDamage"),
+        Pawn("PawnBalance_InsecuritySniper"),
+        Pawn("PawnBalance_MinacMinion"),
+        Pawn("PawnBalance_PermFlyTrap"),
+        Pawn("PawnBalance_RexLoaderMinion"),
+        Pawn("PawnBalance_VeryInsecureBadass"),
+        Pawn("PawnBalance_VeryInsecureBadassClapDawg"),
+        Pawn("PawnBalance_VeryInsecureBot"),
+        Pawn("PawnBalance_VeryInsecureClapPuppy"),
+        Pawn("PawnBalance_VeryInsecureFlight"),
+        Pawn("PawnBalance_VeryInsecureSentry"),
+        Pawn("PawnBalance_VeryInsecureSniper"),
+        Pawn("PawnBalance_ShadowClone"),
+    tags=Tag.ClaptasticVoyage|Tag.MobFarm),
+    Enemy("Virus",
+        Pawn("PawnBalance_BadassVirus"),
+        Pawn("PawnBalance_MiniVirus"),
+        Pawn("PawnBalance_ParasiticVirus"),
+        Pawn("PawnBalance_Virus"),
+        Pawn("PawnBalance_VirusLauncher"),
+        Pawn("PawnBalance_Virus_Deletion"),
+    tags=Tag.ClaptasticVoyage|Tag.MobFarm),
+    Enemy("Fragmented Bandit",
+        Pawn("PawnBalance_FragBadassBandit"),
+        Pawn("PawnBalance_FragBadassPsycho"),
+        Pawn("PawnBalance_FragBandit"),
+        Pawn("PawnBalance_FragBanditMidget"),
+        Pawn("PawnBalance_FragPsycho"),
+        Pawn("PawnBalance_FragPsychoMidget"),
+        Pawn("PawnBalance_FragSuicidePsycho"),
+        Pawn("PawnBalance_FragSuicidePsychoMidget"),
+    tags=Tag.ClaptasticVoyage|Tag.MobFarm),
+    Other("Popup Ad", PopupAd(), tags=Tag.ClaptasticVoyage, rarities=(33,)),
+    Enemy("Loot Bug", Pawn("PawnBalance_LootBug"), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Mission("Spyware Who Came in from the Cold", #TODO make repeatable
+        MissionDefinition("GD_Ma_Side_SpywareInFromCold.M_Ma_Side_SpywareInFromCold"),
+        SpywareChest("Balance_SpywareChest"),
+        SpywareBug(),
+    tags=Tag.ClaptasticVoyage|Tag.VeryLongMission),
+    Mission("Rose Tinting",
+        MissionDefinition("GD_Ma_Side_MINAC.M_Ma_Side_MINAC"),
+        RoseTinting(),
+    tags=Tag.ClaptasticVoyage),
+    Mission("Chip's Data Mining Adventure (Kill Shame)",
+        MissionDefinition("GD_Ma_Side_CookieDataMining.M_Ma_Side_CookieDataMining"),
+        DataMining(),
+    tags=Tag.ClaptasticVoyage),
+    Enemy("Shame", Pawn("PawnBalance_Trojan_Shame"), mission="Chip's Data Mining Adventure (Kill Shame)"),
+    Mission("Chip's Data Mining Adventure (Kill Cookies)", MissionDefinitionAlt("GD_Ma_Side_CookieDataMining.M_Ma_Side_CookieDataMining"), tags=Tag.ClaptasticVoyage),
+    Enemy("Chip", Pawn("PawnBalance_Ma_Chip"), mission="Chip's Data Mining Adventure (Kill Cookies)"),
+    Mission("1D-TP", MissionDefinition("GD_Ma_Side_IdTrap.M_Ma_Side_IdTrap"), tags=Tag.ClaptasticVoyage),
+    Mission("3G0-TP", EgoTrap(), MissionDefinition("GD_Ma_Side_EgoTrap.M_Ma_Side_EgoTrap"), tags=Tag.ClaptasticVoyage|Tag.LongMission),
+    Mission("Corrosion of Dignity",
+        MissionDefinition("GD_Ma_Side_ShredOfDignity.M_Ma_Side_ShredOfDignity"),
+        Dignity(),
+    tags=Tag.ClaptasticVoyage),
+    Other("Motherlessboard Hidden Stash",
+        ClaptasticStash("GD_Ma_Population_Treasure.InteractiveObjects.InteractiveObj_HiddenStash_03:BehaviorProviderDefinition_0", "Ma_Motherboard_P"),
+        Attachment("Balance_HiddenStash_03"),
+    tags=Tag.ClaptasticVoyage),    
+    Other("Cluster 99002 0V3RL00K Hidden Stash",
+        ClaptasticStash("GD_Ma_Population_Treasure.InteractiveObjects.InteractiveObj_HiddenStash_02:BehaviorProviderDefinition_0", "Ma_RightCluster_P"),
+        Attachment("Balance_HiddenStash_02"),
+    tags=Tag.ClaptasticVoyage),
+    Other("Faptrap", PositionalChest("ObjectGrade_DahlWeaponChest_Marigold", "Ma_RightCluster_P", 63919, 1298, 128), tags=Tag.ClaptasticVoyage),
+    Mission("You Can Stop the Music",
+        MissionDefinition("GD_Ma_Side_StopTheMusic.M_Ma_Side_StopTheMusic"),
+        StopTheMusic(),
+    tags=Tag.ClaptasticVoyage),
+    Enemy("Denial Subroutine", Pawn("PawnBalance_CodeWorm"), tags=Tag.ClaptasticVoyage),
+    Enemy("Teh Earworm", Pawn("PawnBalance_EarWorm"), tags=Tag.ClaptasticVoyage),
+    Enemy("Catchy Hook!", Pawn("PawnBalance_EarWormTentacle", transform=0), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Enemy("Most Requested!", Pawn("PawnBalance_EarWormTentacle", transform=1), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Enemy("Key Change!", Pawn("PawnBalance_EarWormTentacle", transform=2), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Enemy("Tween Favorite!", Pawn("PawnBalance_EarWormTentacle", transform=3), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Enemy("Verse Chorus Verse Chorus Bridge Chorus (x2)!", Pawn("PawnBalance_EarWormTentacle", transform=5), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Enemy("Sparkly Formula!", Pawn("PawnBalance_EarWormTentacle", transform=6), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Enemy("Floor Filler!", Pawn("PawnBalance_EarWormTentacle", transform=4), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
+    Mission("Byte Club", ByteClub(), MissionDefinition("GD_Ma_Side_ByteClub.M_Ma_Side_ByteClub"), tags=Tag.ClaptasticVoyage),
+    Mission("5UP4-3G0-TP", SupaEgoTrap(), MissionDefinition("GD_Ma_Side_SuperEgoTrap.M_Ma_Side_SuperEgoTrap"), tags=Tag.ClaptasticVoyage),
+    Enemy("5UP4-3G0-TP", Pawn("BD_Ma_SuperEgoTrap"), mission="5UP4-3G0-TP"),
+    Mission("The Temple of Boom (Turn in Tannis)", MissionDefinition("GD_Ma_Side_TempleOfBoom.M_Ma_Side_TempleofBoom"), tags=Tag.ClaptasticVoyage),
+    Mission("The Temple of Boom (Turn in Gladstone)", MissionDefinitionAlt("GD_Ma_Side_TempleOfBoom.M_Ma_Side_TempleofBoom"), tags=Tag.ClaptasticVoyage),
+    Enemy("The Sponx", Pawn("Balance_Ma_Sponx"), tags=Tag.ClaptasticVoyage|Tag.SlowEnemy),
+    Enemy("Despair", Pawn("PawnBalance_Despair"), tags=Tag.ClaptasticVoyage|Tag.SlowEnemy),
+    Enemy("Self-Loathing", Pawn("PawnBalance_SelfLoathing"), tags=Tag.ClaptasticVoyage|Tag.SlowEnemy),
+    Other("Jack's Bobble Head", JackBobble(), tags=Tag.ClaptasticVoyage),
+    Mission("A Deadlier Game", DeadlierGame(), MissionDefinition("GD_Ma_Side_BadTrap.M_Ma_Side_BadTrap"), tags=Tag.ClaptasticVoyage),
+    Mission("The Sum of Some Fears",
+        MissionDefinition("GD_Ma_Side_SumOfSomeFears.M_Ma_Side_SumOfSomeFears"),
+        MissionGiver("GD_Ma_MetaTrap_SomeFears.Character.Pawn_Ma_MetaTrap_SomeFears:MissionDirectivesDefinition_0", True, True, "Ma_Subconscious_P"),
+        MissionGiver("Ma_Subconscious_SideMissions.TheWorld:PersistentLevel.WillowInteractiveObject_1.MissionDirectivesDefinition_0", False, False, "Ma_Subconscious_P"),
+        SumFears(),
+    tags=Tag.ClaptasticVoyage|Tag.LongMission),
+    Other("T.K. Baha's Chest",
+        Attachment("Balance_HiddenStash_01"),
+        ClaptasticStash("GD_Ma_Population_Treasure.InteractiveObjects.InteractiveObj_HiddenStash_01:BehaviorProviderDefinition_0", "Ma_Subconscious_P"),
+    tags=Tag.ClaptasticVoyage),
+    Enemy("ECLIPSE", Pawn("PawnBalance_VoltronTrap"), tags=Tag.ClaptasticVoyage|Tag.Raid, rarities=(100, 50, 50)),
+    Enemy("EOS",
+        Behavior(
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_146",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_152",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_153",
+        ),
+        Behavior(
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_144",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_145",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_147",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_148",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_149",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_150",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_151",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_154",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_155",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_156",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_157",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_158",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_159",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_160",
+            "GD_Ma_Chapter05_Data.IO_Ma_LootShower:BehaviorProviderDefinition_1.Behavior_SpawnItems_161",
+        inject=False),
+    tags=Tag.ClaptasticVoyage|Tag.Raid),
+    Mission("System Shutdown", MissionDefinition("GD_Ma_Chapter06.M_Ma_Chapter06"), tags=Tag.Excluded),
+    Mission("h4X0rz", MissionDefinition("GD_Ma_Side_H4X0rz.M_Ma_Side_H4X0rz"), tags=Tag.ClaptasticVoyage|Tag.LongMission),
+    Mission("l33t h4X0rz", MissionDefinition("GD_Ma_Side_H4X0rz.M_Ma_Side_H4X0rz_Repeat"), tags=Tag.ClaptasticVoyage|Tag.Slaughter),
+    Other("Black Mutator Chest", MutatorChest("ObjectGrade_CommonChest_Mut", configuration=1), mission="l33t h4X0rz"),
+    Other("Red Mutator Chest", MutatorChest("ObjectGrade_RedChest_Mut", configuration=1), mission="l33t h4X0rz"),
+    Other("Purple Mutator Chest", MutatorChest("ObjectGrade_GlitchChest_Mut", configuration=1), mission="l33t h4X0rz"),
+    Enemy("5H4D0W-TP", MutatorPawn("PawnBalance_SH4D0W-TP-Part1"), mission="l33t h4X0rz", tags=Tag.RareEnemy),
+    Enemy("Hope", MutatorPawn("PawnBalance_Hope"), mission="l33t h4X0rz", tags=Tag.RareEnemy),
+    Enemy("Self Esteem", MutatorPawn("PawnBalance_SelfEsteem"), mission="l33t h4X0rz", tags=Tag.RareEnemy),
+
+    # OptionalObjectiveCheck
+
+    Mission("Digistructed Madness: Round 1", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter01"), tags=Tag.Holodome|Tag.Slaughter|Tag.LongMission),
+    Mission("Digistructed Madness: Round 1 (Turn On Jump Pads)",
+        MissionDefinitionAlt("GD_EridianSlaughter.MissionDef.M_EridianSlaughter01"),
+        HolodomeMission(
+            objective_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter01:OBJ_30_TurnOnJumpPads",
+            compare_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter01:Behavior_CompareBool_25",
+            didntdo_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter01:Behavior_UpdateMissionObjective_91",
+            did_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter01:Behavior_UpdateMissionObjective_88",
+        ),
+    tags=Tag.Holodome|Tag.Slaughter|Tag.LongMission),
+    Enemy("Flameknuckle", Pawn("PawnBalance_DahlSergeantFlameKnuckle"), mission="Digistructed Madness: Round 1"),
+
+    Mission("Digistructed Madness: Round 2", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter02"), tags=Tag.Holodome|Tag.Slaughter|Tag.LongMission),
+    Mission("Digistructed Madness: Round 2 (Build Robot)",
+        MissionDefinitionAlt("GD_EridianSlaughter.MissionDef.M_EridianSlaughter02"),
+        HolodomeMission(
+            objective_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter02:OBJ_30_BuildRobots",
+            compare_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter02:Behavior_CompareBool_1",
+            didntdo_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter02:Behavior_UpdateMissionObjective_5",
+            did_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter02:Behavior_UpdateMissionObjective_6",
+        ),
+    tags=Tag.Holodome|Tag.Slaughter|Tag.LongMission),
+    Enemy("Powersuit Felicity", Pawn("PawnBalance_DahlCombatSuit_Felicity"), mission="Digistructed Madness: Round 2 (Build Robot)"),
+
+    Mission("Digistructed Madness: Round 3", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter03"), tags=Tag.Holodome|Tag.Slaughter|Tag.LongMission),
+    Mission("Digistructed Madness: Round 3 (Help Scientists Escape)",
+        MissionDefinitionAlt("GD_EridianSlaughter.MissionDef.M_EridianSlaughter03"),
+        HolodomeMission(
+            objective_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter03:OBJ_30_SaveSci",
+            compare_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter03:Behavior_CompareBool_13",
+            didntdo_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter03:Behavior_UpdateMissionObjective_53",
+            did_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter03:Behavior_UpdateMissionObjective_48",
+        ),
+    tags=Tag.Holodome|Tag.Slaughter|Tag.LongMission),
+    Enemy("Scientist", HolodomeScientists(), rarities=(33,)),
+
+    Mission("Digistructed Madness: Round 4", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter04"), tags=Tag.Holodome|Tag.Slaughter|Tag.VeryLongMission),
+    Mission("Digistructed Madness: Round 4 (Destroy Destroyers)",
+        MissionDefinitionAlt("GD_EridianSlaughter.MissionDef.M_EridianSlaughter04"),
+        HolodomeMission(
+            objective_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter04:OBJ_30_KillDestroyer",
+            compare_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter04:Behavior_CompareBool_1",
+            didntdo_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter04:Behavior_UpdateMissionObjective_5",
+            did_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter04:Behavior_UpdateMissionObjective_6",
+        ),
+    tags=Tag.Holodome|Tag.Slaughter|Tag.VeryLongMission),
+    Enemy("Defense Destroyer", Pawn("PawnBalance_DestroyerMini")),
+    Enemy("Guardian Pondor / Lost Legion Chosen Powersuit",
+        Pawn("PawnBalance_GuardianPondor"),
+        Pawn("PawnBalance_DahlEternalPowersuit"),
+        Pawn("PawnBalance_DahlEternalPowersuitShield"),
+    mission="Digistructed Madness: Round 4", tags=Tag.MobFarm, rarities=(7,)),
+
+    Mission("Digistructed Madness: Round 5", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter05"), tags=Tag.Holodome|Tag.Slaughter|Tag.VeryLongMission),
+    Mission("Digistructed Madness: Round 5 (Install Vault Key Pieces)",
+        MissionDefinitionAlt("GD_EridianSlaughter.MissionDef.M_EridianSlaughter05"),
+        HolodomeMission(
+            objective_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter05:OBJ_35_OpenVault",
+            compare_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter05:Behavior_CompareBool_5",
+            didntdo_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter05:Behavior_UpdateMissionObjective_25",
+            did_behavior_path = "GD_EridianSlaughter.MissionDef.M_EridianSlaughter05:Behavior_UpdateMissionObjective_24",
+        ),
+    tags=Tag.Holodome|Tag.Slaughter|Tag.VeryLongMission),
+    Other("Vault Chest",
+        PositionalChest("ObjectGrade_DahlEpic", "Eridian_slaughter_P", 15817, 3788, 680),
+        PositionalChest("ObjectGrade_DahlEpic", "Eridian_slaughter_P", 14885, 4514, 680),
+        PositionalChest("ObjectGrade_DahlEpic", "Eridian_slaughter_P", 13968, 3802, 680),
+    rarities=(33,)),
+
+    Mission("Digistructed Madness: The Badass Round", MissionDefinition("GD_EridianSlaughter.MissionDef.M_EridianSlaughter_Badass"), tags=Tag.Holodome|Tag.Slaughter|Tag.VeryLongMission|Tag.Raid),
 )
 
 """
 TODO:
-check corpse drop levels
-remove shock drop mission auto-accept
+re-rarity VeryRareEnemy's
 
-combine freezeasies?
-
-space oddessy easter egg?
-separate stanton and outlands canyon swagmen?
-nova no problem safe?
-outlands slam plate chest?
-mario easter egg?
-rocket surgery ice gun stash?
-chubby stalker?
+genericize balanceless pawn deaths
 """

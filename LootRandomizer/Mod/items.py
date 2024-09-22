@@ -75,7 +75,7 @@ class ItemPool:
     tags: Tag = Tag(0)
 
     items: Sequence[Item]
-    fallback: Optional[Item]
+    fallbacks: Sequence[Item]
     applied_items: Sequence[Item]
 
     _pool: Optional[UObject] = None  # ItemPoolDefinition
@@ -88,17 +88,17 @@ class ItemPool:
         name: str,
         vague_hint: Hint,
         *items: Item,
-        fallback: Optional[Item] = None,
+        fallbacks: Sequence[Item] = (),
     ) -> None:
         self.name = name
         self.hint = vague_hint
         self.items = items
-        self.fallback = fallback
+        self.fallbacks = fallbacks
 
         for item in items:
             self.tags |= item.content
-        if fallback:
-            self.tags |= fallback.content
+        if len(fallbacks):
+            self.tags |= fallbacks[0].content
 
     @property
     def pool(self) -> UObject:  # ItemPoolDefinition
@@ -120,8 +120,8 @@ class ItemPool:
         ]
 
         if len(self.applied_items) < len(self.items):
-            if self.fallback and self.fallback.content in tags:
-                self.applied_items.append(self.fallback)
+            if len(self.fallbacks) and self.fallbacks[0].content in tags:
+                self.applied_items += self.fallbacks
 
     def prepare(self) -> None:
         if not self._pool:
@@ -214,9 +214,10 @@ class ClassMod(Item):
 
     def prepare(self) -> None:
         super().prepare()
-        self.inventory.BaseDefinition.ClassModDefinitions = (
-            self.inventory.BaseDefinition.ClassModDefinitions[self.index],
-        )
+        base_def = self.inventory.BaseDefinition
+        com_defs = tuple(base_def.ClassModDefinitions)
+        if len(com_defs) > self.index:
+            base_def.ClassModDefinitions = (com_defs[self.index],)
 
     def revert(self) -> None:
         super().revert()
