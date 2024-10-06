@@ -1,101 +1,209 @@
 from __future__ import annotations
 
-from unrealsdk import Log, FindAll, FindObject, GetEngine, KeepAlive  #type: ignore
-from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct  #type: ignore
+from unrealsdk import Log, FindObject, GetEngine
+from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
-from . import defines, options, hints, items, seed
-from .defines import Tag, construct_object, get_pc
+from . import options, hints, items, seed
+from .defines import *
 from .items import ItemPool
 
 import random
 
-from typing import Dict, List, Optional, Sequence, Set, TypeVar
-try: from typing import Self
-except: pass
-
-
-pool_whitelist = (
-    "Pool_Ammo_All_DropAlways", "Pool_Ammo_All_Emergency", "Pool_Ammo_All_NeedOnly", "Pool_Ammo_Grenades_BoomBoom", "Pool_Health_All",
-    "Pool_Eridium_Bar", "Pool_Eridium_Stick", "Pool_Money", "Pool_Money_1_BIG", "Pool_Money_1or2",
-    "Pool_Orchid_SeraphCrystals", "Pool_Iris_SeraphCrystals", "Pool_Sage_SeraphCrystals", "Pool_Aster_SeraphCrystals",
-    "ItemPool_TorgueToken_Qty10", "ItemPool_TorgueToken_Qty100", "ItemPool_TorgueToken_Qty15", "ItemPool_TorgueToken_Qty25", "ItemPool_TorgueToken_Qty3", "ItemPool_TorgueToken_Qty5", "ItemPool_TorgueToken_Qty50", "ItemPool_TorgueToken_Qty7", "ItemPool_TorgueToken_Qty75", "ItemPool_TorgueToken_Single",
-    "ItemPool_MoxxiPicture",
-    # "Pool_EpicChest_Weapons_GunsAndGear", "Pool_ClassMod_02_Uncommon", "Pool_ClassMod_04_Rare", "Pool_ClassMod_05_VeryRare", "Pool_ClassMod_06_Legendary", "Pool_GrenadeMods_02_Uncommon", "Pool_GrenadeMods_04_Rare", "Pool_GrenadeMods_05_VeryRare", "Pool_GrenadeMods_06_Legendary", "Pool_GunsAndGear", "Pool_GunsAndGear_02_Uncommon", "Pool_GunsAndGear_02_UncommonsRaid", "Pool_GunsAndGear_04_Rare", "Pool_GunsAndGear_05_VeryRare", "Pool_GunsAndGearDropNumPlayersPlusOne", "Pool_Shields_All_02_Uncommon", "Pool_Shields_All_04_Rare", "Pool_Shields_All_05_VeryRare", "Pool_Shields_All_06_Legendary", "Pool_VehicleSkins_All", "Pool_Weapons_All", "Pool_Weapons_All_02_Uncommon", "Pool_Weapons_All_04_Rare", "Pool_Weapons_All_05_VeryRare", "Pool_Weapons_All_06_Legendary",
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Union,
+    Tuple,
+    Type,
+    TypeVar,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    # from typing import Self
+    from .missions import Mission
 
 
 def Enable() -> None:
     # RunHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer", _PostCommitMapChange)
-    RunHook("Engine.GameInfo.SetGameType", "LootRandomizer", _InitGame)
-    RunHook("WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext", "LootRandomizer", _Behavior_SpawnItems)
-    RunHook("WillowGame.WillowPlayerController.ClientSetPawnLocation", "LootRandomizer", _SetPawnLocation)
-    RunHook("Engine.Behavior_Destroy.ApplyBehaviorToContext", "LootRandomizer", _Behavior_Destroy)
+    RunHook(
+        "Engine.GameInfo.SetGameType",
+        "LootRandomizer",
+        _SetGameType,
+    )
+    RunHook(
+        "WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext",
+        "LootRandomizer",
+        _Behavior_SpawnItems,
+    )
+    RunHook(
+        "WillowGame.WillowPlayerController.ClientSetPawnLocation",
+        "LootRandomizer",
+        _SetPawnLocation,
+    )
+    RunHook(
+        "Engine.Behavior_Destroy.ApplyBehaviorToContext",
+        "LootRandomizer",
+        _Behavior_Destroy,
+    )
 
 
 def Disable() -> None:
     # RemoveHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer")
-    RemoveHook("Engine.GameInfo.SetGameType", "LootRandomizer")
-    RemoveHook("WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext", "LootRandomizer")
-    RemoveHook("WillowGame.WillowPlayerController.ClientSetPawnLocation", "LootRandomizer")
-    RemoveHook("Engine.Behavior_Destroy.ApplyBehaviorToContext", "LootRandomizer")
+    RemoveHook(
+        "Engine.GameInfo.SetGameType",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.WillowPlayerController.ClientSetPawnLocation",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "Engine.Behavior_Destroy.ApplyBehaviorToContext",
+        "LootRandomizer",
+    )
 
 
 class Location:
     name: str
     droppers: Sequence[Dropper]
     tags: Tag
+    mission_name: Optional[str]
     content: Tag
 
+    specified_tags: Tag
+    specified_rarities: Optional[Sequence[int]]
+
+    mission: Optional[Mission] = None
     item: Optional[ItemPool] = None
 
     _rarities: Sequence[int]
     _hint_pool: Optional[UObject] = None
 
+    default_rarity: int = 100
+
     def __init__(
         self,
         name: str,
         *droppers: Dropper,
-        tags: Tag,
+        tags: Tag = Tag(0),
+        mission: Optional[str] = None,
         content: Tag = Tag(0),
-        rarities: Optional[Sequence[int]] = None
+        rarities: Optional[Sequence[int]] = None,
     ) -> None:
         for dropper in droppers:
-            dropper.location = self # This is a circular reference; Location objects are static.
+            dropper.location = self  # This is a circular reference; Location objects are static.
 
-        if not (tags & defines.ContentTags):
-            tags |= Tag.BaseGame
-
-        if rarities is None:
-            rarities = (100,)
-
-        self.content = content if content else (tags & defines.ContentTags)
-
-        self.name = name; self.droppers = droppers; self.tags = tags; self._rarities = rarities
-
+        self.name = name
+        self.droppers = droppers
+        self.tags = tags
+        self.mission_name = mission
+        self.content = content if content else (tags & ContentTags)
+        self.specified_tags = tags
+        self.specified_rarities = rarities
 
     @property
     def rarities(self) -> Sequence[int]:
         return (0,) if self.item is items.DudItem else self._rarities
-    
+
     @rarities.setter
     def rarities(self, rarities: Sequence[int]) -> None:
         self._rarities = rarities
 
+    def enable(self) -> None:
+        for dropper in self.droppers:
+            dropper.enable()
+
+        self.tags = self.specified_tags
+        rarities: List[int] = (
+            list(self.specified_rarities)
+            if self.specified_rarities
+            else [self.default_rarity]
+        )
+
+        if self.mission_name:
+            self.tags |= Tag.MissionLocation
+
+            from .missions import Mission
+
+            if BL2:
+                from .bl2.locations import Locations
+            elif TPS:
+                from .tps.locations import Locations
+            else:
+                raise
+
+            for location in Locations:
+                if (
+                    isinstance(location, Mission)
+                    and location.name == self.mission_name
+                ):
+                    self.mission = location
+                    break
+            else:
+                raise ValueError(
+                    f"Failed to match mission {self.mission_name}"
+                )
+
+            self.tags |= self.mission.tags
+            self.content = self.mission.content
+
+            if not self.specified_rarities:
+                if self.tags & Tag.LongMission:
+                    rarities += (self.default_rarity,)
+                if self.tags & Tag.VeryLongMission:
+                    rarities += (self.default_rarity,) * 2
+        else:
+            self.content = self.tags & ContentTags
+
+        if not self.content:
+            self.tags |= Tag.BaseGame
+            self.content = Tag.BaseGame
+
+        self.rarities = rarities
+
+    def disable(self) -> None:
+        for dropper in self.droppers:
+            dropper.disable()
+
     @property
-    def hint_pool(self) -> UObject: #ItemPoolDefinition
+    def hint_pool(self) -> UObject:  # ItemPoolDefinition
         if not self._hint_pool:
-            hint_inventory = construct_object(hints.inventory_template, "InvBal_Hint_" + self.name)
+            hint_inventory = construct_object(
+                hints.inventory_template, "InvBal_Hint_" + self.name
+            )
 
             useitem = construct_object(hints.useitem_template, hint_inventory)
             hint_inventory.InventoryDefinition = useitem
-            defines.set_command(useitem, "ItemName", self.name)
-            
-            useitem.CustomPresentations = (construct_object(hints.custompresentation_template, useitem),)
-            useitem.Presentation = construct_object(hints.presentation_template, useitem)
+            if BL2:
+                set_command(useitem, "ItemName", f"{self.name}")
+            elif TPS:
+                set_command(useitem, "ItemName", f'"{self.name}"')
 
-            self._hint_pool = construct_object("ItemPoolDefinition", "Pool_Hint_" + self.name)
+            useitem.CustomPresentations = (
+                construct_object(hints.custompresentation_template, useitem),
+            )
+            useitem.Presentation = construct_object(
+                hints.presentation_template, useitem
+            )
+
+            self._hint_pool = construct_object(
+                "ItemPoolDefinition", "Pool_Hint_" + self.name
+            )
             self._hint_pool.bAutoReadyItems = False
-            self._hint_pool.BalancedItems = ((None, hint_inventory, (1, None, None, 1), True),)
+            self._hint_pool.BalancedItems = (
+                (None, hint_inventory, (1, None, None, 1), True),
+            )
 
             self.update_hint()
             self.toggle_hint(True)
@@ -103,8 +211,14 @@ class Location:
         return self._hint_pool
 
     @property
-    def hint_inventory(self) -> Optional[UObject]: #InventoryBalanceDefinition
-        return self.hint_pool.BalancedItems[0].InvBalanceDefinition if self._hint_pool else None
+    def hint_inventory(
+        self,
+    ) -> Optional[UObject]:  # InventoryBalanceDefinition
+        return (
+            self.hint_pool.BalancedItems[0].InvBalanceDefinition
+            if self._hint_pool
+            else None
+        )
 
     def update_hint(self) -> None:
         if not (self.hint_inventory and self.item):
@@ -117,39 +231,42 @@ class Location:
             useitem.PickupFlagIcon = hints.duditem_pickupflag
 
             hint_caption = "&nbsp;"
-            hint_text = self.item.hint.formatter(random.choice(hints.DudDescriptions))
+            hint_text = self.item.hint.formatter(
+                random.choice(hints.DudDescriptions)
+            )
         else:
             useitem.NonCompositeStaticMesh = hints.hintitem_mesh
             useitem.PickupFlagIcon = hints.hintitem_pickupflag
 
-            if options.HintDisplay.CurrentValue == "None":
-                hint_caption = "&nbsp;"
-                hint_text = "?"
             if options.HintDisplay.CurrentValue == "Vague":
                 hint_caption = "Item Hint"
                 hint_text = self.item.hint.formatter(self.item.hint)
-            if options.HintDisplay.CurrentValue == "Spoiler":
+            elif options.HintDisplay.CurrentValue == "Spoiler":
                 hint_caption = "Item Spoiler"
                 hint_text = self.item.hint.formatter(self.item.name)
+            else:
+                hint_caption = "&nbsp;"
+                hint_text = "?"
 
-        defines.set_command(useitem.Presentation, "DescriptionLocReference", hint_caption)
-        defines.set_command(useitem.CustomPresentations[0], "Description", hint_text)
-
+        set_command(
+            useitem.Presentation, "DescriptionLocReference", hint_caption
+        )
+        set_command(useitem.CustomPresentations[0], "Description", hint_text)
 
     def toggle_hint(self, set_enabled: bool):
         if self.hint_inventory:
-            self.hint_inventory.InventoryDefinition.PickupLifeSpan = 0 if set_enabled else 0.000001
+            self.hint_inventory.InventoryDefinition.PickupLifeSpan = (
+                0 if set_enabled else 0.000001
+            )
 
-    def prepare_pools(self, count: Optional[int] = None, pad: bool = True) -> Sequence[UObject]:
-        padding = hints.padding_pool if pad else None
-
+    def prepare_pools(self, count: Optional[int] = None) -> Sequence[UObject]:
         if count is None:
             count = len(self.rarities)
         if not count:
             return ()
 
         if not self.item:
-            return (padding,) * count
+            return (hints.padding_pool,) * count
 
         if self.item is items.DudItem:
             if seed.AppliedSeed:
@@ -164,8 +281,8 @@ class Location:
 
         for index in range(count):
             if index >= len(self.rarities):
-                pools.append(padding)
-            elif random.randint(1, 100) <= self.rarities[index]:
+                pools.append(hints.padding_pool)
+            elif random.randrange(100) < self.rarities[index]:
                 pools.append(self.item.pool)
                 item_seen = True
             else:
@@ -177,65 +294,165 @@ class Location:
                 seed.AppliedSeed.update_tracker(self, True)
             elif hint_seen:
                 seed.AppliedSeed.update_tracker(self, False)
-        
+
         random.shuffle(pools)
         return pools
-    
-    def enable(self) -> None:
-        for dropper in self.droppers:
-            dropper.enable()
-
-    def disable(self) -> None:
-        for dropper in self.droppers:
-            dropper.disable()
 
     def __str__(self) -> str:
         raise NotImplementedError
+
+    @property
+    def tracker_name(self) -> str:
+        return str(self)
 
 
 class Dropper:
     location: Location
 
+    _hooks: Dict[str, str]
+
+    def hook(
+        self,
+        function: str,
+        method: Callable[[UObject, UFunction, FStruct], bool],
+    ) -> None:
+        name = f"LootRandomizer.{id(self)}.{method.__name__}"
+
+        if not hasattr(self, "_hooks"):
+            self._hooks = dict()
+        self._hooks[function] = name
+
+        RunHook(function, name, lambda c, f, p: method(c, f, p))
+
+    def unhook(self, function: str) -> None:
+        if hasattr(self, "_hooks"):
+            name = self._hooks.get(function)
+            if name:
+                RemoveHook(function, name)
+                del self._hooks[function]
+
     def enable(self) -> None:
         pass
 
     def disable(self) -> None:
-        pass
+        if hasattr(self, "_hooks"):
+            for function, name in self._hooks.items():
+                RemoveHook(function, name)
+            del self._hooks
+
+
+Self = TypeVar("Self", bound="RegistrantDropper")
 
 
 class RegistrantDropper(Dropper):
-    Registries: Dict[str, Set[Self]]
+    Registries: Dict[str, List[RegistrantDropper]]
+
+    @classmethod
+    def Registrants(cls: Type[Self], *paths: Union[str, UObject]) -> Set[Self]:
+        def iterate_paths() -> Generator[Self, None, None]:
+            if len(paths):
+                for path in paths:
+                    if isinstance(path, UObject):
+                        path = str(UObject.PathName(path))
+                    for registrant in cls.Registries.get(path.casefold(), ()):
+                        yield registrant  # type: ignore
+            else:
+                for registry in cls.Registries.values():
+                    for registrant in registry:
+                        yield registrant  # type: ignore
+
+        return set(iterate_paths())
 
     paths: Sequence[str]
 
     def __init__(self, *paths: str) -> None:
-        self.paths = paths
+        if len(paths):
+            self.paths = paths
+
+        if not hasattr(self, "paths"):
+            raise Exception(
+                f"No paths specified for {self.__class__.__name__}"
+            )
+
+    def register(self) -> None:
+        for path in self.paths:
+            registry = self.Registries.setdefault(path.casefold(), [])
+            registry.append(self)
+
+    def unregister(self) -> None:
+        for path in self.paths:
+            registry = self.Registries.get(path.casefold())
+            if registry:
+                registry.remove(self)
+                if not registry:
+                    del self.Registries[path.casefold()]
 
     def enable(self) -> None:
-        for path in self.paths:
-            registry = self.Registries.setdefault(path, set())
-            registry.add(self) #type: ignore
+        super().enable()
+        self.register()
 
     def disable(self) -> None:
-        for path in self.paths:
-            registry = self.Registries.get(path)
-            if registry:
-                registry.discard(self) #type: ignore
-                if not registry:
-                    del self.Registries[path]
+        super().disable()
+        self.unregister()
 
 
 class MapDropper(RegistrantDropper):
     Registries = dict()
 
-    def __init__(self, *map_names: str) -> None:
-        super().__init__(*(map_name.casefold() for map_name in map_names))
-
     def entered_map(self) -> None:
         raise NotImplementedError
 
     def exited_map(self) -> None:
-        pass
+        super(RegistrantDropper, self).disable()
+
+
+menu_map_name: str = "menumap".casefold()
+loader_map_name: str = "loader".casefold()
+map_name: str = menu_map_name
+
+
+def MapChanged(new_map_name: str) -> None:
+    global map_name
+
+    if map_name != menu_map_name:
+        for map_dropper in MapDropper.Registrants("*", map_name):
+            map_dropper.exited_map()
+
+    map_name = new_map_name
+    if map_name != menu_map_name:
+        for map_dropper in MapDropper.Registrants("*", map_name):
+            map_dropper.entered_map()
+
+
+def _SetPawnLocation(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+    new_map_name = str(
+        GetEngine().GetCurrentWorldInfo().GetMapName()
+    ).casefold()
+    if new_map_name in (map_name, loader_map_name):
+        return True
+
+    def wait_missiontracker(new_map_name: str = new_map_name) -> bool:
+        if get_pc().WorldInfo.GRI and get_pc().WorldInfo.GRI.MissionTracker:
+            MapChanged(new_map_name)
+            return False
+        return True
+
+    tick_while(wait_missiontracker)
+
+    return True
+
+
+def _SetGameType(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+    if (
+        map_name != menu_map_name
+        and params.MapName.casefold() == menu_map_name
+    ):
+        MapChanged(menu_map_name)
+    return True
+
+
+# def _PostCommitMapChange(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+#     return True
 
 
 class Behavior(RegistrantDropper):
@@ -243,69 +460,60 @@ class Behavior(RegistrantDropper):
 
     inject: bool
 
-    def __init__(self, *paths: str, inject: bool = True) -> None:
+    offset: Optional[Tuple[int, int, int]]
+    velocity: Optional[Tuple[int, int, int]]
+    scatter: Optional[Tuple[int, int, int]]
+
+    def __init__(
+        self,
+        *paths: str,
+        inject: bool = True,
+        offset: Optional[Tuple[int, int, int]] = None,
+        velocity: Optional[Tuple[int, int, int]] = None,
+        scatter: Optional[Tuple[int, int, int]] = None,
+    ) -> None:
         self.inject = inject
+        self.offset = offset
+        self.velocity = velocity
+        self.scatter = scatter
         super().__init__(*paths)
 
 
-class PreventDestroy(RegistrantDropper):
-    Registries = dict()
-
-
-map_name: str = "menumap"
-
-def MapChanged(new_map_name: str) -> None:
-    global map_name
-
-    for map_dropper in MapDropper.Registries.get(map_name, ()):
-        map_dropper.exited_map()
-    
-    map_name = new_map_name
-    for map_dropper in MapDropper.Registries.get(map_name, ()):
-        map_dropper.entered_map()
-
-
-# def _PostCommitMapChange(caller: UObject, function: UFunction, params: FStruct) -> bool:
-#     return True
-
-def _SetPawnLocation(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    new_map_name = str(GetEngine().GetCurrentWorldInfo().GetMapName()).casefold()
-    if new_map_name == map_name:
+def _Behavior_SpawnItems(
+    caller: UObject, _f: UFunction, params: FStruct
+) -> bool:
+    registrars = Behavior.Registrants(caller)
+    if not registrars:
         return True
 
-    def wait_missiontracker() -> bool:
-        if get_pc().WorldInfo.GRI and get_pc().WorldInfo.GRI.MissionTracker:
-            MapChanged(new_map_name)
-            return False
-        return True
-    defines.tick_while(wait_missiontracker)
+    original_poollist = convert_struct(tuple(caller.ItemPoolList))
+    poollist = [
+        pool
+        for pool in original_poollist
+        if pool[0] and pool[0].Name in pool_whitelist
+    ]
 
-    return True
+    for dropper in registrars:
+        if dropper.offset is not None:
+            caller.ItemDropOffset = dropper.offset
+        if dropper.velocity is not None:
+            caller.ItemDropVelocity = dropper.velocity
+        if dropper.scatter is not None:
+            caller.ItemScatterOffset = dropper.scatter
+            caller.bCircularScatter = True
 
-
-def _InitGame(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    if params.MapName == "MenuMap":
-        MapChanged("menumap")
-    return True
-
-
-def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    registry = Behavior.Registries.get(UObject.PathName(caller))
-    if not registry:
-        return True
-    
-    original_poollist = defines.convert_struct(tuple(caller.ItemPoolList))
-    poollist = [pool for pool in original_poollist if pool[0] and pool[0].Name in pool_whitelist]
-
-    for dropper in registry:
         if dropper.inject:
-            poollist += [(pool, (1, None, None, 1)) for pool in dropper.location.prepare_pools()]
+            poollist += [
+                (pool, (1, None, None, 1))
+                for pool in dropper.location.prepare_pools()
+            ]
             break
 
     caller.ItemPoolList = poollist
 
-    cleaned_poollistdefs = dict()
-    def clean_poollistdef(poollistdef: UObject) -> None:
+    cleaned_poollistdefs: Dict[UObject, Any] = dict()
+
+    def clean_poollistdef(poollistdef: Optional[UObject]) -> None:
         if not poollistdef:
             return
 
@@ -313,24 +521,32 @@ def _Behavior_SpawnItems(caller: UObject, function: UFunction, params: FStruct) 
             clean_poollistdef(nested_itempoollistdef)
 
         if poollistdef not in cleaned_poollistdefs:
-            pools = defines.convert_struct(tuple(poollistdef.ItemPools))
+            pools = convert_struct(tuple(poollistdef.ItemPools))
             cleaned_poollistdefs[poollistdef] = pools
             poollistdef.ItemPools = [
-                pool for pool in pools
+                pool
+                for pool in pools
                 if pool[0] and pool[0].Name in pool_whitelist
             ]
 
     for poollistdef in caller.ItemPoolIncludedLists:
         clean_poollistdef(poollistdef)
 
-    def revert_pools(original_poollist=original_poollist, cleaned_poollistdefs=cleaned_poollistdefs) -> None:
+    def revert_pools(
+        original_poollist: Any = original_poollist,
+        cleaned_poollistdefs: Dict[UObject, Any] = cleaned_poollistdefs,
+    ) -> None:
         caller.ItemPoolList = original_poollist
         for itempoollistdef, pools in cleaned_poollistdefs.items():
             itempoollistdef.ItemPools = pools
 
-    defines.do_next_tick(revert_pools)
+    do_next_tick(revert_pools)
     return True
 
 
-def _Behavior_Destroy(caller: UObject, function: UFunction, params: FStruct) -> bool:
-    return UObject.PathName(caller) not in PreventDestroy.Registries
+class PreventDestroy(RegistrantDropper):
+    Registries = dict()
+
+
+def _Behavior_Destroy(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+    return len(PreventDestroy.Registrants(caller)) == 0

@@ -1,54 +1,74 @@
-from unrealsdk import Log, GetEngine, UObject  #type: ignore
+from unrealsdk import UObject
 
-from Mods import ModMenu #type: ignore
-
-from typing import Optional
+from Mods import ModMenu
 
 
 if __name__ == "__main__":
     for mod in ModMenu.Mods:
-        if mod.Name != "Loot Randomizer":
-            continue
+        if mod.Name == "Loot Randomizer":
+            ModMenu.Mods.remove(mod)
+            _this_module = mod.__class__.__module__
+            if mod.IsEnabled:
+                mod.Disable()
+            break
 
-        if mod.IsEnabled:
-            mod.Disable()
-        ModMenu.Mods.remove(mod)
-        _this_module = mod.__class__.__module__
-        break
+    if ModMenu.Game.GetCurrent() == ModMenu.Game.BL2:
+        game_module_name = "bl2"
+    elif ModMenu.Game.GetCurrent() == ModMenu.Game.TPS:
+        game_module_name = "tps"
+    else:
+        raise
 
-    from Mods.LootRandomizer.Mod import options, items, hints #type: ignore
-    from Mods.LootRandomizer.Mod import locations, enemies, missions, other, catalog, seed #type: ignore
+    submodule_names = (
+        "defines",
+        "options",
+        "hints",
+        "items",
+        "locations",
+        "missions",
+        "enemies",
+        "other",
+        game_module_name,
+        game_module_name + ".items",
+        game_module_name + ".locations",
+        *(f"{game_module_name}.v{version}" for version in range(1, 32)),
+        "seed",
+    )
 
     import sys, importlib
-    for submodule_name in (
-        "defines", "seed", "options", "hints", "items", "locations", "missions", "enemies", "other",
-        "catalog", "seedversions.v1", "seedversions.v2", "seedversions.v3", "seedversions.v4",
-        "seedversions.v5",
-    ):
+
+    for submodule_name in submodule_names:
         module = sys.modules.get("Mods.LootRandomizer.Mod." + submodule_name)
         if module:
             importlib.reload(module)
-else:
-    from .Mod import options, items, hints
-    from .Mod import locations, enemies, missions, other, catalog, seed
 
-from typing import Sequence
+
+from Mods.LootRandomizer.Mod import (
+    options,
+    hints,
+    items,
+    locations,
+    enemies,
+    missions,
+    other,
+    seed,
+)
+
+from typing import Optional
 
 
 class LootRandomizer(ModMenu.SDKMod):
-    Name: str = "Loot Randomizer"
-    Version: str = "1.2"
-    Description: str = "Create seeds to shuffle items into new farm locations."
-    Author: str = "mopioid"
-    Types: ModMenu.ModTypes = ModMenu.ModTypes.Gameplay
-    SaveEnabledState: ModMenu.EnabledSaveType = ModMenu.EnabledSaveType.LoadOnMainMenu
+    Name = "Loot Randomizer"
+    Version = "1.5"
+    Description = "Create seeds to shuffle items into new farm locations."
+    Author = "mopioid"
+    SupportedGames = ModMenu.Game.BL2 | ModMenu.Game.TPS
+    Types = ModMenu.ModTypes.Gameplay
+    SaveEnabledState = ModMenu.EnabledSaveType.LoadOnMainMenu
 
-    Options: Sequence[ModMenu.Options.Base] = options.Options
-
+    Options = options.Options
 
     def Enable(self):
-        for location in catalog.Locations:
-            location.enable()
         hints.Enable()
         items.Enable()
         locations.Enable()
@@ -66,10 +86,7 @@ class LootRandomizer(ModMenu.SDKMod):
         locations.Disable()
         items.Disable()
         hints.Disable()
-        for location in catalog.Locations:
-            location.disable()
         super().Disable()
-
 
     @ModMenu.ClientMethod
     def SendSeed(self, seed_string: str, PC: Optional[UObject] = None) -> None:
@@ -89,8 +106,7 @@ class LootRandomizer(ModMenu.SDKMod):
 options.mod_instance = LootRandomizer()
 
 if __name__ == "__main__":
-    try: options.mod_instance.__class__.__module__ = _this_module
-    except: pass
+    options.mod_instance.__class__.__module__ = _this_module  # type: ignore
     ModMenu.RegisterMod(options.mod_instance)
     options.mod_instance.Enable()
 else:
