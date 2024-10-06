@@ -4,7 +4,7 @@
 
 ![Face McTwisty](https://i.imgur.com/OIZ9Ab4.jpeg)
 
-Loot Randomizer is a mod for Borderlands 2 that provides repeated new playthrough experiences, by means of shuffling every item in the game into new drop locations.
+Loot Randomizer is a mod for Borderlands 2 and The Pre-Squel that provides repeated new playthrough experiences, by means of shuffling every item in the game into new drop locations.
 
 When playing Loot Randomizer, you create a seed, and your game's loot sources are assigned all new drops based on that seed. Your Knuckle Dragger may drop the Norfleet, while your Hyperius drops The Cradle.
 
