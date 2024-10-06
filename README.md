@@ -1,4 +1,4 @@
-# Borderlands 2 Loot Randomizer
+# Borderlands Loot Randomizer
 
 [Discord](https://discord.gg/C37HvmvBbS)&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;[Donate](https://streamlabs.com/mopioid/tip)
 
