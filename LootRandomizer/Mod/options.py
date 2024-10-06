@@ -346,7 +346,7 @@ class SeedListSpinner(ModMenu.Options.Spinner):
         if _CurrentSeed.CurrentValue in self.Choices:
             return _CurrentSeed.CurrentValue
         else:
-            return self.Choices[0]
+            return _LoadSeeds()[0]
 
     @CurrentValue.setter
     def CurrentValue(self, value: str) -> None:
