@@ -17,9 +17,11 @@ from typing import List, Optional, Sequence
 from types import ModuleType
 
 if BL2:
+    module_name = "bl2"
     from .bl2.items import Items
     from .bl2.locations import Locations
 elif TPS:
+    module_name = "tps"
     from .tps.items import Items
     from .tps.locations import Locations
 else:
@@ -115,9 +117,10 @@ class Seed:
 
         if self.version not in SupportedVersions:
             raise ValueError(
-                f"Seed {self.string} is the incorrect version for this release of Loot Randomizer. "
-                "If you would like to play it, please install a version of Loot Randomizer that "
-                f"specifies a seed version of {self.version}."
+                f"Seed {self.string} is the incorrect version for this release"
+                " of Loot Randomizer. If you would like to play it, please "
+                "install a version of Loot Randomizer that supports a seed "
+                f"version of {self.version}."
             )
 
         missing_dlcs = ""
@@ -143,11 +146,6 @@ class Seed:
 
         if not is_client():
             options.mod_instance.SendSeed(self.string)
-
-        if BL2:
-            module_name = "bl2"
-        else:
-            module_name = "tps"
 
         self.version_module = importlib.import_module(
             f".{module_name}.v{self.version}", __package__
@@ -193,10 +191,11 @@ class Seed:
 
         for location, item in zip(self.locations, self.items):
             location.item = item
-
-        for location in self.locations:
             location.update_hint()
             location.toggle_hint(True)
+
+        for location in Locations:
+            location.enable()
 
         self.generate_tracker()
 
@@ -205,9 +204,9 @@ class Seed:
         AppliedSeed = None
         AppliedTags = Tag(0)
 
-        if self.locations:
-            for location in self.locations:
-                location.item = None
+        for location in Locations:
+            location.disable()
+            location.item = None
 
     def generate_tracker(self) -> str:
         path = os.path.join(seeds_dir, f"{self.string}.txt")
@@ -244,8 +243,8 @@ class Seed:
 
                 locations = tuple(
                     location
-                    for location in self.locations
-                    if tag in location.content
+                    for location in Locations
+                    if tag in location.content and location in self.locations
                 )
                 if not len(locations):
                     continue
@@ -332,24 +331,23 @@ class Seed:
         self.populate_tracker(True)
 
 
-def generate_wikis(version: int) -> None:
+def generate_wikis(version: int = CurrentVersion) -> None:
     from html import escape
+
+    locations_path = os.path.join(mod_dir, "Mod", module_name, "locations.md")
+    items_path = os.path.join(mod_dir, "Mod", module_name, "items.md")
 
     dummy_tags = Tag(0)
     for tag in Tag:
         if tag < Tag.Excluded:
             dummy_tags |= tag
 
-    dummy_seed = Seed.Generate(dummy_tags)
-    dummy_seed.apply()
-    version_items: Sequence[SeedEntry] = dummy_seed.version_module.Items
-    version_locations: Sequence[SeedEntry] = (
-        dummy_seed.version_module.Locations
-    )
+    dummy = Seed.Generate(dummy_tags, version)
+    dummy.apply()
+    version_items: Sequence[SeedEntry] = dummy.version_module.Items
+    version_locations: Sequence[SeedEntry] = dummy.version_module.Locations
 
-    with open(
-        os.path.join(mod_dir, "locations wiki.txt"), "w", encoding="utf-8"
-    ) as file:
+    with open(locations_path, "w", encoding="utf-8") as file:
         for content_tag in Tag:
             content_title = getattr(content_tag, "content_title", None)
             if not content_title:
@@ -407,9 +405,7 @@ def generate_wikis(version: int) -> None:
                     f"| {category} | {escape(location.name)} | {rolls_string} | {settings_string} |\n"
                 )
 
-    with open(
-        os.path.join(mod_dir, "items wiki.txt"), "w", encoding="utf-8"
-    ) as file:
+    with open(items_path, "w", encoding="utf-8") as file:
         for hint in Hint:
             if hint is Hint.Dud:
                 continue
@@ -435,12 +431,15 @@ def generate_wikis(version: int) -> None:
 
 
 def generate_seedversion() -> None:
-    if BL2:
-        module_name = "bl2"
-    else:
-        module_name = "tps"
-
     path = os.path.join(mod_dir, "Mod", module_name, f"v{CurrentVersion}.py")
+
+    dummy_tags = Tag(0)
+    for tag in Tag:
+        if tag < Tag.Excluded:
+            dummy_tags |= tag
+
+    dummy = Seed.Generate(dummy_tags)
+    dummy.apply()
 
     with open(path, "w", encoding="utf-8") as file:
         file.write(
@@ -460,6 +459,8 @@ def generate_seedversion() -> None:
         file.write(f"Items = (\n")
 
         for item in Items:
+            if Tag.Excluded in item.tags:
+                continue
             tag_string = "|".join(
                 f"Tag.{tag.name}" for tag in Tag if (tag & item.tags)
             )
@@ -469,6 +470,8 @@ def generate_seedversion() -> None:
         file.write(f"Locations = (\n")
 
         for location in Locations:
+            if Tag.Excluded in location.tags:
+                continue
             tag_string = "|".join(
                 f"Tag.{tag.name}" for tag in Tag if tag in location.tags
             )
@@ -479,6 +482,8 @@ def generate_seedversion() -> None:
 
 """
 TODO:
+- add option under Configure Tracker to fill in items missing from seed
+
 - Add easter egg seeds?
     Allegiance? (exclude uncompletable checks such as Commercial Appeal, X-Com, Rock Paper, Wand, trailer trashing)
 """

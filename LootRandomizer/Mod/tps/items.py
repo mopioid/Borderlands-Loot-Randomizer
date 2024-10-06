@@ -227,6 +227,7 @@ Items = (
     ItemPool("Jack-o'-Cannon", Hint.UniqueShotgun, Item("GD_Cork_Weap_Shotgun.A_Weapons_Unique.SG_Torgue_3_JackOCannon")),
     ItemPool("Torguemada", Hint.UniqueShotgun, Item("GD_Cork_Weap_Shotgun.A_Weapons_Unique.SG_Torgue_3_Torguemada")),
     ItemPool("Wombat", Hint.UniqueShotgun, Item("GD_Cork_Weap_Shotgun.A_Weapons_Unique.SG_Torgue_3_Wombat")),
+    ItemPool("Heart Breaker", Hint.UniqueShotgun, Item("GD_Cork_Weap_Shotgun.A_Weapons_Unique.SG_Hyperion_3_HeartBreaker")),
 
     ItemPool("Torrent", Hint.LegendarySMG, Item("GD_Cork_Weap_SMG.A_Weapons_Legendary.SMG_Dahl_5_Torrent")),
     ItemPool("Fatale", Hint.LegendarySMG, Item("GD_Cork_Weap_SMG.A_Weapons_Legendary.SMG_Hyperion_5_Bitch")),
@@ -555,7 +556,6 @@ Items = (
     ItemPool("Cathartic Oz Kit", Hint.UniqueOz, Item("GD_MoonItems.A_Item_Unique.A_Poopdeck")),
     ItemPool("Freedom Oz Kit", Hint.UniqueOz, Item("GD_MoonItems.A_Item_Unique.A_Freedom")),
     ItemPool("Invigoration Oz Kit", Hint.UniqueOz, Item("GD_MoonItems.A_Item_Unique.A_Invigoration")),
-    ItemPool("Perdy Lights", Hint.UniqueOz, Item("GD_Pet_MoonItems.A_Item_Unique.A_AntiAir_PerdyLights")),
     ItemPool("Springs' Oz Kit", Hint.UniqueOz, Item("GD_MoonItems.A_Item_Unique.A_Springs")),
     ItemPool("Systems Purge", Hint.UniqueOz, Item("GD_MoonItems.A_Item_Unique.A_SystemsPurge")),
 

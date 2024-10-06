@@ -1,7 +1,11 @@
 LootRandomizer/**/__pycache__
-LootRandomizer/Seeds
 LootRandomizer/settings.json
+LootRandomizer/Seeds
 LootRandomizer/Seeds/**
+LootRandomizer/BL2 Seeds
+LootRandomizer/BL2 Seeds/**
+LootRandomizer/TPS Seeds
+LootRandomizer/TPS Seeds/**
 LootRandomizer.zip
 Changelog.txt
 LootRandomizer/locations wiki.txt

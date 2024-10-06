@@ -137,6 +137,9 @@ class ItemPool:
             for item in self.applied_items:
                 item.revert()
 
+    def __str__(self) -> str:
+        return f"Item: {self.name}"
+
 
 class Item:
     path: str

@@ -44,6 +44,7 @@ class Tag(enum.IntFlag):
     Holodome = enum.auto()
     ClaptasticVoyage = enum.auto()
     ShockDrop = enum.auto()
+    Holiday = enum.auto()
 
     ShortMission = enum.auto()
     LongMission = enum.auto()
@@ -81,15 +82,17 @@ for tag, content_title, dlc_path in (
     ( Tag.Holodome, "The Holodome Onslaught", "GD_PetuniaPackageDef.CustomItemSetDef_Petunia"),
     ( Tag.ClaptasticVoyage, "Claptastic Voyage and Ultimate Vault Hunter Upgrade Pack 2", "GD_MarigoldPackageDef.CustomItemSetDef_Marigold"),
     ( Tag.ShockDrop, "Shock Drop Slaughter Pit", "GD_FreesiaPackageDef.ItemSet_Freesia"),
+    ( Tag.Holiday, "Holiday Events", None),
     # ( Tag.TalesLoyalty, "Tales Loyalty", "GD_MarigoldPackageDef.CustomItemSetDef_Cypress"),
 ):
     tag.content_title = content_title; tag.dlc_path = dlc_path
 
 for tag, category, default, caption, description in (
     (Tag.BaseGame,           Category.Content,  True,  "Base Game",          f"Include items and locations from Borderlands: The Pre-Sequel's base game."),
-    (Tag.Holodome,           Category.Content,  True,  "Holodome",           f"Include items and locations from {Tag.Holodome.content_title}."),
-    (Tag.ClaptasticVoyage,   Category.Content,  True,  "Claptastic Voyage",  f"Include items and locations from {Tag.ClaptasticVoyage.content_title}."),
     (Tag.ShockDrop,          Category.Content,  True,  "Shock Drop",         f"Include items and locations from {Tag.ShockDrop.content_title}."),
+    (Tag.ClaptasticVoyage,   Category.Content,  True,  "Claptastic Voyage",  f"Include items and locations from {Tag.ClaptasticVoyage.content_title}."),
+    (Tag.Holodome,           Category.Content,  True,  "Holodome",           f"Include items and locations from {Tag.Holodome.content_title}."),
+    (Tag.Holiday,            Category.Content,  True,  "Holiday Events",     f"Include items and locations from holiday events. Holiday events can be toggled at any time from the Fast Travel menu."),
     # (Tag.TalesLoyalty,       Category.Content,  True,  "Tales Loyalty",      f"Include items and locations from owning the Tales From The Borderlands Season Pass."),
 
     (Tag.ShortMission,       Category.Missions, True,  "Short Missions",     "Assign items to short side missions."),
@@ -262,5 +265,4 @@ pool_whitelist = (
     "Pool_Moonstone_Cluster",
     "Pool_Oxygen_Instant",
     "IP_NovaNoProblemEcho",
-    # "Pool_EpicChest_Weapons_GunsAndGear", "Pool_ClassMod_02_Uncommon", "Pool_ClassMod_04_Rare", "Pool_ClassMod_05_VeryRare", "Pool_ClassMod_06_Legendary", "Pool_GrenadeMods_02_Uncommon", "Pool_GrenadeMods_04_Rare", "Pool_GrenadeMods_05_VeryRare", "Pool_GrenadeMods_06_Legendary", "Pool_GunsAndGear", "Pool_GunsAndGear_02_Uncommon", "Pool_GunsAndGear_02_UncommonsRaid", "Pool_GunsAndGear_04_Rare", "Pool_GunsAndGear_05_VeryRare", "Pool_GunsAndGearDropNumPlayersPlusOne", "Pool_Shields_All_02_Uncommon", "Pool_Shields_All_04_Rare", "Pool_Shields_All_05_VeryRare", "Pool_Shields_All_06_Legendary", "Pool_VehicleSkins_All", "Pool_Weapons_All", "Pool_Weapons_All_02_Uncommon", "Pool_Weapons_All_04_Rare", "Pool_Weapons_All_05_VeryRare", "Pool_Weapons_All_06_Legendary",
 )

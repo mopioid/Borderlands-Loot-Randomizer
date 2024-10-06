@@ -17,13 +17,12 @@ def Enable() -> None:
 def Disable() -> None:
     RemoveHook("WillowGame.WillowAIPawn.Died", "LootRandomizer")
 
+
 class Enemy(Location):
     default_rarity: int = 15
 
     def enable(self) -> None:
         super().enable()
-
-        # TODO: fix rarity assignments by tag
 
         if not (self.tags & EnemyTags):
             self.tags |= Tag.UniqueEnemy
@@ -31,32 +30,30 @@ class Enemy(Location):
         if self.specified_rarities:
             return
 
-        rarities = list(self.rarities)
-
-        if self.mission_name:
-            rarities = [50] * len(rarities)
+        self.rarities = []
 
         if self.tags & Tag.SlowEnemy:
-            rarities += (33,)
+            self.rarities += (33,)
         if self.tags & Tag.MobFarm:
-            rarities = (3,)
+            self.rarities += (3,)
         if self.tags & Tag.RareEnemy:
-            rarities = (33,)
-            if self.mission_name:
-                rarities *= 2
+            self.rarities += (33,)
         if self.tags & Tag.VeryRareEnemy:
-            rarities = (100, 50, 50)
-            if self.mission_name:
-                rarities *= 3
-        vendor_tag = getattr(Tag, "Vendor", Tag.Excluded)
-        if self.tags & vendor_tag:
-            rarities = (50, 50)
-            if self.mission_name:
-                rarities *= 2
+            self.rarities += (100, 50, 50)
         if self.tags & Tag.Raid:
-            rarities += (100, 100, 100, 50, 50, 50)
+            self.rarities += (100, 100, 100, 50, 50, 50)
+        if self.tags & getattr(Tag, "EvolvedEnemy", Tag.Excluded):
+            self.rarities += (50, 50)
 
-        self.rarities = rarities
+        if self.tags & Tag.MissionLocation:
+            self.rarities += (50,)
+        if self.tags & Tag.LongMission:
+            self.rarities += (50,)
+        if self.tags & Tag.VeryLongMission:
+            self.rarities += (100, 50)
+
+        if not len(self.rarities):
+            self.rarities += (15,)
 
     def __str__(self) -> str:
         return f"Enemy: {self.name}"
@@ -85,8 +82,8 @@ class Pawn(RegistrantDropper):
 
         # TODO test in BL2
         if self.evolved == pawn.TransformType:
-            vendor_tag = getattr(Tag, "Vendor", Tag.Excluded)
-            return not (seed.AppliedTags & vendor_tag)
+            evolved_tag = getattr(Tag, "EvolvedEnemy", Tag.Excluded)
+            return not (seed.AppliedTags & evolved_tag)
 
         return True
 
@@ -98,9 +95,8 @@ class Pawn(RegistrantDropper):
 
 
 def _pawn_died(caller: UObject, _f: UFunction, params: FStruct) -> bool:
-    balance: Optional[UObject] = (
-        caller.BalanceDefinitionState.BalanceDefinition
-    )
+    balance: Optional[UObject]
+    balance = caller.BalanceDefinitionState.BalanceDefinition
     if not balance:
         return True
 
@@ -108,8 +104,6 @@ def _pawn_died(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     registry = Pawn.Registrants(balance_name)
     if not registry:
         return True
-
-    caller.DoesVehicleAllowMeToDropLoot = True
 
     pools = [
         convert_struct(pool)
@@ -120,6 +114,7 @@ def _pawn_died(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     for dropper in registry:
         if dropper.should_inject(caller):
             dropper.inject(pools)
+            caller.DoesVehicleAllowMeToDropLoot = True
             break
 
     caller.ItemPoolList = pools

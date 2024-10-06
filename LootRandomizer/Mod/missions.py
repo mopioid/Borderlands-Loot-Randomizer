@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import enum
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, TYPE_CHECKING
 
 from unrealsdk import (
     FindAll,
@@ -16,7 +16,7 @@ from unrealsdk import (
     UObject,
 )
 
-from . import items, options
+from . import items, options, seed
 from .defines import *
 from .locations import Dropper, Location, MapDropper, RegistrantDropper
 
@@ -35,22 +35,13 @@ class PlaythroughDelegate(MapDropper):
         if new_playthrough == self.playthrough:
             return
 
-        if BL2:
-            from .bl2.locations import Locations
-        elif TPS:
-            from .tps.locations import Locations
-        else:
-            raise
-
-        for location in Locations:
-            if (
-                isinstance(location, Mission)
-                and Tag.Excluded not in location.tags
-            ):
-                if new_playthrough == 2:
-                    location.mission_definition.restore_xp()
-                else:
-                    location.mission_definition.remove_xp()
+        if seed.AppliedSeed:
+            for location in seed.AppliedSeed.locations:
+                if isinstance(location, Mission):
+                    if new_playthrough == 2:
+                        location.mission_definition.restore_xp()
+                    else:
+                        location.mission_definition.remove_xp()
 
         self.playthrough = new_playthrough
 
@@ -142,7 +133,10 @@ def _AcceptMission(caller: UObject, _f: UFunction, params: FStruct) -> bool:
             if isinstance(dropper, MissionStatusDelegate):
                 delegates.append(dropper.accepted)
 
-    if get_missiontracker().GetMissionStatus(missiondef) == Mission.Status.NotStarted:
+    if (
+        get_missiontracker().GetMissionStatus(missiondef)
+        == Mission.Status.NotStarted
+    ):
         do_next_tick(*delegates)
         return True
 
@@ -166,10 +160,6 @@ def _CompleteMission(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     mission_index = pc.NativeGetMissionIndex(missiondef)
     mission_list = pc.MissionPlaythroughs[playthrough].MissionList
     mission_data = mission_list[mission_index]
-    mission_level = mission_data.GameStage
-    alt_reward, _ = missiondef.ShouldGrantAlternateReward(
-        tuple(mission_data.ObjectivesProgress)
-    )
 
     mission_definition: Optional[MissionDefinition] = None
 
@@ -180,68 +170,14 @@ def _CompleteMission(caller: UObject, _f: UFunction, params: FStruct) -> bool:
             if isinstance(dropper, MissionStatusDelegate):
                 delegates.append(dropper.completed)
 
-        if isinstance(mission_dropper, MissionDefinitionAlt) == alt_reward:
+        if mission_dropper.should_inject(mission_data):
             mission_definition = mission_dropper
 
-    if not (mission_definition and mission_definition.location.item):
-        return True
-
-    def revert():
-        mission_definition.reward.RewardItemPools = ()
-
-    do_next_tick(*delegates, revert)
-
-    pool = mission_definition.location.prepare_pools(1)[0]
-    mission_definition.reward.RewardItemPools = (pool,)
-
-    if mission_definition.location.item == items.DudItem:
-        return True
-
-    for pri in GetEngine().GetCurrentWorldInfo().GRI.PRIArray:
-        pc = pri.Owner
-
-        bonuses = len(mission_definition.location.rarities)
-        if pc is get_pc():
-            bonuses -= 1
-        if not bonuses:
-            continue
-
-        if pc is get_pc() and (not options.RewardsTrainingSeen.CurrentValue):
-
-            def training() -> None:
-                show_dialog(
-                    "Multiple Rewards",
-                    (
-                        "The mission you just completed takes longer than average to complete. "
-                        "As a reward, a bonus instance of its loot item has been added to your "
-                        "backpack."
-                    ),
-                    5,
-                )
-                options.RewardsTrainingSeen.CurrentValue = True
-                options.SaveSettings()
-
-            do_next_tick(training)
-
-        def loot_callback(item: UObject, pc: UObject = pc) -> None:
-            definition_data = item.DefinitionData
-            definition_data.ManufacturerGradeIndex = mission_level
-            definition_data.GameStage = mission_level
-            definition_data = convert_struct(definition_data)
-
-            if definition_data[0].Class.Name == "WeaponTypeDefinition":
-                pc.GetPawnInventoryManager().ClientAddWeaponToBackpack(
-                    definition_data, 1
-                )
-            else:
-                pc.GetPawnInventoryManager().ClientAddItemToBackpack(
-                    definition_data, 1, 1
-                )
-
-        for _ in range(bonuses):
-            spawn_item(
-                mission_definition.location.item.pool, pc, loot_callback
-            )
+    if mission_definition:
+        mission_definition.inject(mission_data)
+        do_next_tick(*delegates, mission_definition.revert)
+    else:
+        do_next_tick(*delegates)
 
     return True
 
@@ -255,7 +191,7 @@ def _itemdef_make_repeatable(itemdef: UObject) -> bool:
         return False
 
     for mission_dropper in registry:
-        if not Tag.Excluded in mission_dropper.location.tags:
+        if mission_dropper.location.item:
             break
     else:
         return False
@@ -272,10 +208,6 @@ def _MissionDenyPickup(
     itemdef = caller.GetInventoryDefinition()
     if not _itemdef_make_repeatable(itemdef):
         return True
-
-    # TODO: remove
-    # if get_missiontracker().GetMissionStatus(itemdef.MissionDirective) not in (0, 4):
-    #     return True
 
     # Don't judge me; this is literally how the game does it.
     for pickup in FindAll("WillowPickup"):
@@ -311,22 +243,24 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
 
     uobject: UObject
 
+    block_weapon: bool
+    unlink_next: bool
+
     reward_items: Sequence[UObject]
     reward_pools: Sequence[UObject]
     reward_xp_scale: int
 
-    block_weapon: bool
-    unlink_next: bool
+    mission_weapon: Optional[UObject] = None
+    give_weapon_set: Optional[UObject] = None
+    take_weapon_set: Optional[UObject] = None
 
-    mission_weapon: UObject
-    next_link: UObject
     repeatable: bool
-    give_weapon_set: UObject
-    take_weapon_set: UObject
+    next_link: Optional[UObject]
 
     def __init__(
         self,
         path: str,
+        *,
         block_weapon: bool = True,
         unlink_next: bool = False,
     ) -> None:
@@ -374,8 +308,8 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
     def prepare_attributes(self) -> None:
         self.repeatable = self.uobject.bRepeatable
 
-        if self.block_weapon:
-            self.mission_weapon = self.uobject.MissionWeapon
+        self.mission_weapon = self.uobject.MissionWeapon
+        if self.mission_weapon and self.block_weapon:
             KeepAlive(self.mission_weapon)
             self.uobject.MissionWeapon = None
 
@@ -391,14 +325,15 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
 
         if self.unlink_next:
             self.next_link = self.uobject.NextMissionInChain
-            KeepAlive(self.next_link)
-            self.uobject.NextMissionInChain = None
+            if self.next_link:
+                KeepAlive(self.next_link)
+                self.uobject.NextMissionInChain = None
 
     def revert_attributes(self) -> None:
-        if not Tag.Excluded in self.location.tags:
+        if seed.AppliedSeed and self.location in seed.AppliedSeed.locations:
             self.uobject.bRepeatable = self.repeatable
 
-        if self.block_weapon:
+        if self.mission_weapon and self.block_weapon:
             self.uobject.MissionWeapon = self.mission_weapon
             if self.give_weapon_set:
                 self.uobject.GiveWeaponSet = self.give_weapon_set
@@ -422,14 +357,87 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
     def revert_repeatable(self) -> None:
         self.uobject.bRepeatable = self.repeatable
 
+    def should_inject(self, mission_data: FStruct) -> bool:
+        if not self.location.item:
+            return False
+        progress = tuple(mission_data.ObjectivesProgress)
+        alt_reward, _ = self.uobject.ShouldGrantAlternateReward(progress)
+        return not alt_reward
 
-class MissionDefinitionAlt(MissionDefinition):
+    def inject(self, mission_data: FStruct) -> None:
+        if not self.location.item:
+            return
+
+        pool = self.location.prepare_pools(1)[0]
+        self.reward.RewardItemPools = (pool,)
+
+        if self.location.item == items.DudItem:
+            return
+
+        for pri in GetEngine().GetCurrentWorldInfo().GRI.PRIArray:
+            pc = pri.Owner
+
+            bonuses = len(self.location.rarities)
+            if pc is get_pc():
+                bonuses -= 1
+            if not bonuses:
+                continue
+
+            if pc is get_pc() and not options.RewardsTrainingSeen.CurrentValue:
+
+                def training() -> None:
+                    show_dialog(
+                        "Multiple Rewards",
+                        (
+                            "The mission you just completed takes longer than "
+                            "average to complete. As a reward, a bonus "
+                            "instance of its reward has been added to your "
+                            "backpack."
+                        ),
+                        5,
+                    )
+                    options.RewardsTrainingSeen.CurrentValue = True
+                    options.SaveSettings()
+
+                do_next_tick(training)
+
+            def loot_callback(item: UObject, pc: UObject = pc) -> None:
+                definition_data = item.DefinitionData
+                definition_data.ManufacturerGradeIndex = mission_data.GameStage
+                definition_data.GameStage = mission_data.GameStage
+                definition_data = convert_struct(definition_data)
+
+                if definition_data[0].Class.Name == "WeaponTypeDefinition":
+                    pc.GetPawnInventoryManager().ClientAddWeaponToBackpack(
+                        definition_data, 1
+                    )
+                else:
+                    pc.GetPawnInventoryManager().ClientAddItemToBackpack(
+                        definition_data, 1, 1
+                    )
+
+            for _ in range(bonuses):
+                spawn_item(self.location.item.pool, pc, loot_callback)
+
+    def revert(self) -> None:
+        self.reward.RewardItemPools = ()
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, self.__class__):
+            return (
+                self.__class__ == value.__class__ and self.paths == value.paths
+            )
+        return False
+
+    def __hash__(self) -> int:
+        return id(self)
+
+
+class MissionTurnIn(MissionDefinition):
+    alt: bool
+
     def __init__(self, path: str) -> None:
         super(MissionDefinition, self).__init__(path)
-
-    @property
-    def reward(self) -> FStruct:
-        return self.uobject.AlternativeReward
 
     def prepare_attributes(self) -> None:
         pass
@@ -442,6 +450,15 @@ class MissionDefinitionAlt(MissionDefinition):
 
     def revert_repeatable(self) -> None:
         pass
+
+
+class MissionTurnInAlt(MissionDefinition):
+    @property
+    def reward(self) -> FStruct:
+        return self.uobject.AlternativeReward
+
+    def should_inject(self, mission_data: FStruct) -> bool:
+        return not super().should_inject(mission_data)
 
 
 class MissionStatusDelegate(MissionDropper):
@@ -486,7 +503,6 @@ class MissionPickup(MissionObject):
 
     def apply(self) -> Optional[UObject]:
         spawner = FindObject("WillowMissionPickupSpawner", self.path)
-        # TODO: tick until successful when client
         if spawner:
             spawner.SetPickupStatus(True)
             if spawner.MissionPickup:
@@ -533,7 +549,8 @@ class MissionGiver(MissionObject):
                 get_missiontracker().RegisterMissionDirector(giver)
         else:
             directives = tuple(
-                convert_struct(directive) for directive in giver.MissionDirectives
+                convert_struct(directive)
+                for directive in giver.MissionDirectives
                 if directive.MissionDefinition != missiondef
             )
             giver.MissionDirectives = directives
@@ -543,62 +560,8 @@ class MissionGiver(MissionObject):
         return giver
 
 
-class ObjectiveKillInfo(MissionDropper):
-    damage_type: Optional[int]
-    damage_causer: Optional[int]
-
-    original_mission_weapon: bool
-    original_damage_type: int
-    original_damage_causer: int
-
-    def __init__(
-        self,
-        path: str,
-        damage_type: Optional[int] = None,
-        damage_causer: Optional[int] = None,
-    ) -> None:
-        self.path = path
-        self.damage_type = damage_type
-        self.damage_causer = damage_causer
-        super().__init__()
-
-    def enable(self) -> None:
-        super().enable()
-
-        killinfo = FindObject("MissionObjectiveKillInfo", self.path)
-        if not killinfo:
-            raise Exception("Could not locate objective kill info")
-
-        if self.damage_type:
-            self.original_damage_type = killinfo.DamageType
-            killinfo.DamageType = self.damage_type
-
-        if self.damage_causer:
-            self.original_damage_causer = killinfo.DamageCauserType
-            killinfo.DamageCauserType = self.damage_causer
-
-        self.original_mission_weapon = killinfo.bMissionWeapon
-        killinfo.bMissionWeapon = False
-
-    def disable(self) -> None:
-        super().disable()
-
-        killinfo = FindObject("MissionObjectiveKillInfo", self.path)
-        if not killinfo:
-            raise Exception("Could not locate objective kill info")
-
-        if self.damage_type:
-            killinfo.DamageType = self.original_damage_type
-
-        if self.damage_causer:
-            killinfo.DamageCauserType = self.original_damage_causer
-
-        killinfo.bMissionWeapon = self.original_mission_weapon
-
-
 class Mission(Location):
     mission_definition: MissionDefinition
-    mission_definitions: Sequence[MissionDefinition]
 
     class Status(enum.IntEnum):
         NotStarted = 0
@@ -612,49 +575,63 @@ class Mission(Location):
     def enable(self) -> None:
         super().enable()
 
+        self.select_mission_definition()
+        if self.item:
+            if not hasattr(self, "mission_definition"):
+                raise Exception(f"No MissionDefinition for {self.name}")
+            self.mission_definition.make_repeatable()
+
         if not (self.tags & MissionTags):
             self.tags |= Tag.ShortMission
         if not (self.tags & ContentTags):
             self.tags |= Tag.BaseGame
 
-        if not self.rarities:
-            self.rarities = [100]
-            if self.tags & Tag.LongMission:
-                self.rarities += (100,)
-            if self.tags & Tag.VeryLongMission:
-                self.rarities += (100, 100, 100)
-            if self.tags & Tag.Raid:
-                self.rarities += (100, 100, 100)
-
-        # TODO: Removes
-        # self.mission_definition = None
-        # self.mission_definitions = []
-        # for dropper in self.droppers:
-        #     superclasses = tuple(cls.__name__ for cls in dropper.__class__.mro())
-        #     if "MissionDefinition" in superclasses:
-        #         if not self.mission_definition:
-        #             self.mission_definition = dropper
-        #         else:
-        #             self.mission_definitions.append(dropper)
-
-        self.mission_definition, *_ = self.mission_definitions = tuple(
-            dropper for dropper in self.droppers
-            if isinstance(dropper, MissionDefinition)
-        )
-
-        if Tag.Excluded not in self.tags:
-            self.mission_definition.make_repeatable()
+        self.rarities = [100]
+        if self.tags & Tag.LongMission:
+            self.rarities += (100,)
+        if self.tags & Tag.VeryLongMission:
+            self.rarities += (100, 100, 100)
+        if self.tags & Tag.Raid:
+            self.rarities += (100, 100, 100)
 
     def disable(self) -> None:
         super().disable()
-        if Tag.Excluded not in self.tags:
+        if hasattr(self, "mission_definition"):
             self.mission_definition.revert_repeatable()
+            del self.mission_definition
+
+    def handles_mission_definition(self, other: MissionDefinition) -> bool:
+        for dropper in self.droppers:
+            if isinstance(dropper, MissionDefinition):
+                if dropper == other:
+                    return True
+        return False
+
+    def select_mission_definition(self) -> None:
+        if not seed.AppliedSeed:
+            raise Exception("Enabling mission with no seed applied.")
+
+        for dropper in self.droppers:
+            if not isinstance(dropper, MissionDefinition):
+                continue
+
+            for other_location in reversed(seed.AppliedSeed.locations):
+                if other_location is self:
+                    self.mission_definition = dropper
+                    return
+
+                if isinstance(other_location, Mission):
+                    if other_location.handles_mission_definition(dropper):
+                        dropper.disable()
+                        break
+            else:
+                self.mission_definition = dropper
+                return
 
     @property
     def current_status(self) -> Status:
-        status = get_missiontracker().GetMissionStatus(
-            self.mission_definition.uobject
-        )
+        uobject = self.mission_definition.uobject
+        status = get_missiontracker().GetMissionStatus(uobject)
         return Mission.Status(status)
 
     def __str__(self) -> str:

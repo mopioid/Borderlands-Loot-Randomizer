@@ -24,11 +24,6 @@ def Enable() -> None:
         "LootRandomizer",
         _PopulationFactoryVendingMachine,
     )
-    RunHook(
-        "WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses",
-        "LootRandomizer",
-        _GrantNewMarketingCodeBonuses,
-    )
 
 
 def Disable() -> None:
@@ -42,10 +37,6 @@ def Disable() -> None:
     )
     RemoveHook(
         "WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor",
-        "LootRandomizer",
-    )
-    RemoveHook(
-        "WillowGame.WillowPlayerController.GrantNewMarketingCodeBonuses",
         "LootRandomizer",
     )
 
@@ -119,8 +110,8 @@ class Attachment(RegistrantDropper):
         return True
 
     def inject(self, obj: UObject) -> None:
-        for index, loot_configuration in enumerate(obj.Loot):
-            if index != self.configuration:
+        for attachment_index, loot_configuration in enumerate(obj.Loot):
+            if attachment_index != self.configuration:
                 loot_configuration.Weight = (0, None, None, 0)
 
         obj_attachments = tuple(obj.Loot[self.configuration].ItemAttachments)
@@ -131,11 +122,13 @@ class Attachment(RegistrantDropper):
         )
         pools = self.location.prepare_pools(len(attachments))
 
-        for index, obj_attachment in enumerate(obj_attachments):
-            obj_attachment.InvBalanceDefinition = None
+        for attachment_index, obj_attachment in enumerate(obj_attachments):
+            if obj_attachment.InvBalanceDefinition:
+                obj_attachment.InvBalanceDefinition = None
             try:
-                pool = pools[attachments.index(index)]
-                obj_attachment.ItemPool = pool
+                pool_index = attachments.index(attachment_index)
+                obj_attachment.ItemPool = pools[pool_index]
+                obj_attachment.PoolProbability = (1, None, None, 1)
             except ValueError:
                 original_pool = obj_attachment.ItemPool
                 if original_pool and original_pool.Name not in pool_whitelist:
@@ -187,80 +180,3 @@ def _PopulationFactoryVendingMachine(
         if vendors:
             next(iter(vendors)).inject(balance)
     return True
-
-
-def _GrantNewMarketingCodeBonuses(
-    caller: UObject, _f: UFunction, params: FStruct
-) -> bool:
-    premier = FindObject(
-        "MarketingUnlockInventoryDefinition",
-        "GD_Globals.Unlocks.MarketingUnlock_PremierClub",
-    )
-    if premier:
-        premier_items = tuple(premier.UnlockItems[0].UnlockItems)
-        premier.UnlockItems[0].UnlockItems = ()
-
-        def revert_premier(premier_items: Sequence[UObject] = premier_items):
-            premier.UnlockItems[0].UnlockItems = premier_items
-
-        do_next_tick(revert_premier)
-
-    collectors = FindObject(
-        "MarketingUnlockInventoryDefinition",
-        "GD_Globals.Unlocks.MarketingUnlock_Collectors",
-    )
-    if collectors:
-        collectors_items = tuple(collectors.UnlockItems[0].UnlockItems)
-        collectors.UnlockItems[0].UnlockItems = ()
-
-        def revert_collectors(
-            collectors_items: Sequence[UObject] = collectors_items,
-        ):
-            collectors.UnlockItems[0].UnlockItems = collectors_items
-
-        do_next_tick(revert_collectors)
-
-    return True
-
-
-"""
-LOGIC:
-    buttstallion w/ amulet requires amulet
-    pot o' gold requires pot o' gold
-    peak enemies past OP 0 requires moxxi's endowment
-    haderax launcher chest requires toothpick + retainer
-
-- pot of gold "boosters"
-
-- haderax launcher chest
-    # logic would require toothpick and retainer
-- loot goon chests
-- loot loader chests
-- slot machines
-- tina slot machines
-- roland's armory
-- Gobbler slag pistol
-- digi peak chests
-- Wam Bam loot injectors
-    GD_Nasturtium_Lootables.InteractiveObjects.ObjectGrade_NastChest_Epic
-    ^ Same as all Wam Bam red chests
-- chest being stolen by yeti
-- Caravan
-    GD_Orchid_PlotDataMission04.Mission04.Balance_Orchid_CaravanChest
-- halloween gun sacrifice
-- dragon keep altar
-- marcus statue suicide
-- Scarlet Caravan
-- Wedding balloon
-    GD_Nasturtium_Lootables.IOs.IO_BossBalloons:BehaviorProviderDefinition_1.Behavior_SpawnItems_0
-    GD_Nasturtium_Lootables.IOs.IO_BossBalloons:BehaviorProviderDefinition_1.Behavior_SpawnItems_2
-    GD_Nasturtium_Lootables.IOs.IO_BossBalloons:BehaviorProviderDefinition_1.Behavior_SpawnItems_1
-- Rotgut Fishing Chest
-- Enemy("Mr. Miz",
-    # GD_Aster_AmuletDoNothingData.VendingMachineGrades.ObjectGrade_VendingMachine_Pendant
-    # note that logic requires amulet for buttstallion
-tags=Tag.DragonKeep|Tag.LongMission),
-- Butt Stallion Legendary Fart
-    Behavior("GD_ButtStallion_Proto.Character.AIDef_ButtStallion_Proto:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_66"),
-
-"""

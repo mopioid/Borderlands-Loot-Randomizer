@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from unrealsdk import (
     ConstructObject,
     FindObject,
@@ -38,6 +40,12 @@ elif TPS:
 else:
     raise
 
+
+mod_dir = os.path.dirname(os.path.dirname(__file__))
+seeds_dir = os.path.join(mod_dir, "Seeds")
+seeds_file = os.path.join(seeds_dir, "Seed List.txt")
+
+
 __all__ = (
     "BL2",
     "TPS",
@@ -61,6 +69,7 @@ __all__ = (
     "get_missiontracker",
     "get_behaviorkernel",
     "get_pawns",
+    "get_pawn",
     "is_client",
     "set_command",
     "convert_struct",
@@ -72,16 +81,12 @@ __all__ = (
     "construct_behaviorsequence_behavior",
     "show_dialog",
     "show_confirmation",
+    "BPD",
 )
 
 
 Package: UObject = ConstructObject("Package", None, "LootRandomizer")
 KeepAlive(Package)
-
-
-mod_dir = os.path.dirname(os.path.dirname(__file__))
-seeds_dir = os.path.join(mod_dir, "Seeds")
-seeds_file = os.path.join(seeds_dir, "Seed List.txt")
 
 
 def get_pc() -> UObject:
@@ -101,6 +106,13 @@ def get_pawns() -> Generator[UObject, None, None]:
     while pawn:
         yield pawn
         pawn = pawn.NextPawn
+
+
+def get_pawn(aiclass: str) -> Union[UObject, None]:
+    for pawn in get_pawns():
+        if pawn.AIClass and pawn.AIClass.Name == aiclass:
+            return pawn
+    return None
 
 
 def is_client() -> UObject:
@@ -179,6 +191,9 @@ def construct_object(
 
 
 def do_next_tick(*routines: Callable[[], None]) -> None:
+    if not routines:
+        return
+
     def hook(caller: UObject, _f: UFunction, params: FStruct) -> bool:
         RemoveHook("Engine.Interaction.Tick", f"LootRandomizer.{id(routines)}")
         for routine in routines:
@@ -256,6 +271,36 @@ def spawn_item(
     spawner.ApplyBehaviorToContext(context, (), None, None, None, ())
 
 
+def show_confirmation(
+    title: str, message: str, on_confirm: Callable[[], None]
+) -> None:
+    dialog = get_pc().GFxUIManager.ShowDialog()
+    dialog.SetText(title, message)
+    dialog.bNoCancel = False
+    dialog.AppendButton("Confirm", "Confirm", "")
+    dialog.AppendButton("Cancel", "Cancel", "")
+    dialog.SetDefaultButton("Cancel", True)
+    dialog.ApplyLayout()
+
+    def unhook(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        RemoveHook("WillowGame.WillowGFxDialogBox.Cancelled", "LootRandomizer")
+        RemoveHook("WillowGame.WillowGFxDialogBox.Accepted", "LootRandomizer")
+        return True
+
+    def confirm(caller: UObject, function: UFunction, params: FStruct) -> bool:
+        unhook(caller, function, params)
+        if caller.CurrentSelection == 0:
+            on_confirm()
+        return True
+
+    RunHook(
+        "WillowGame.WillowGFxDialogBox.Cancelled", "LootRandomizer", unhook
+    )
+    RunHook(
+        "WillowGame.WillowGFxDialogBox.Accepted", "LootRandomizer", confirm
+    )
+
+
 def construct_behaviorsequence_behavior(
     *path_components: str,
     sequence: str,
@@ -288,31 +333,103 @@ def show_dialog(title: str, message: str, duration: float = 0) -> None:
     )
 
 
-def show_confirmation(
-    title: str, message: str, on_confirm: Callable[[], None]
-) -> None:
-    dialog = get_pc().GFxUIManager.ShowDialog()
-    dialog.SetText(title, message)
-    dialog.bNoCancel = False
-    dialog.AppendButton("Confirm", "Confirm", "")
-    dialog.AppendButton("Cancel", "Cancel", "")
-    dialog.SetDefaultButton("Cancel", True)
-    dialog.ApplyLayout()
+class BPD:
+    uobject: UObject
+    consumer: Optional[UObject]
 
-    def unhook(caller: UObject, function: UFunction, params: FStruct) -> bool:
-        RemoveHook("WillowGame.WillowGFxDialogBox.Cancelled", "LootRandomizer")
-        RemoveHook("WillowGame.WillowGFxDialogBox.Accepted", "LootRandomizer")
-        return True
+    def __init__(
+        self, uobject: UObject, consumer: Optional[UObject] = None
+    ) -> None:
+        self.consumer = consumer
+        self.uobject = uobject
 
-    def confirm(caller: UObject, function: UFunction, params: FStruct) -> bool:
-        unhook(caller, function, params)
-        if caller.CurrentSelection == 0:
-            on_confirm()
-        return True
+    @staticmethod
+    def Path(path: str) -> BPD:
+        uobject = FindObject("BehaviorProviderDefinition", path)
+        if not uobject:
+            raise Exception(f"Could not locate BPD {path}")
+        return BPD(uobject)
 
-    RunHook(
-        "WillowGame.WillowGFxDialogBox.Cancelled", "LootRandomizer", unhook
-    )
-    RunHook(
-        "WillowGame.WillowGFxDialogBox.Accepted", "LootRandomizer", confirm
-    )
+    @staticmethod
+    def Pawn(consumer: UObject) -> BPD:
+        uobject = consumer.AIClass.BehaviorProviderDefinition
+        if not uobject:
+            raise Exception(
+                f"Could not locate BPD for {consumer.AIClass.Name}"
+            )
+        return BPD(uobject, consumer)
+
+    @staticmethod
+    def PawnAI(consumer: UObject) -> BPD:
+        try:
+            uobject = consumer.AIClass.AIDef.BehaviorProviderDefinition
+            assert uobject
+        except:
+            raise Exception(f"Could not locate BPD for {consumer.AIClass}")
+        return BPD(uobject, consumer)
+
+    @staticmethod
+    def IO(consumer: UObject) -> BPD:
+        return BPD(
+            consumer.InteractiveObjectDefinition.BehaviorProviderDefinition,
+            consumer,
+        )
+
+    def enable_sequence(self, sequence: str) -> None:
+        if not self.consumer:
+            raise Exception(
+                f"No consumer for {UObject.PathName(self.uobject)}"
+            )
+        get_behaviorkernel().ChangeBehaviorSequenceActivationStatus(
+            (self.consumer.ConsumerHandle.PID,), self.uobject, sequence, 1
+        )
+
+    def disable_sequence(self, sequence: str) -> None:
+        if not self.consumer:
+            raise Exception(
+                f"No consumer for {UObject.PathName(self.uobject)}"
+            )
+        get_behaviorkernel().ChangeBehaviorSequenceActivationStatus(
+            (self.consumer.ConsumerHandle.PID,), self.uobject, sequence, 2
+        )
+
+    def get_sequence(self, name: str) -> FStruct:
+        for sequence in self.uobject.BehaviorSequences:
+            if sequence.BehaviorSequenceName == name:
+                return sequence
+        raise Exception(
+            f"Could not locate sequence '{name}' in BPD {UObject.PathName(self.uobject)}"
+        )
+
+    def construct_sequence_behavior(
+        self,
+        outer: UObject,
+        sequence: str,
+        enables: bool = True,
+    ) -> UObject:
+        behavior = construct_object(
+            "Behavior_ChangeRemoteBehaviorSequenceState", outer
+        )
+        behavior.Action = 1 if enables else 2
+        set_command(behavior, "SequenceName", sequence)
+
+        path_components: List[str] = []
+        for component in UObject.PathName(self.uobject).split("."):
+            for component in component.split(":"):
+                path_components.append(component)
+        path_components = [""] * (6 - len(path_components)) + path_components
+
+        set_command(
+            behavior,
+            "ProviderDefinitionPathName",
+            (
+                "("
+                + "".join(
+                    f"PathComponentNames[{index}]={path_component},"
+                    for index, path_component in enumerate(path_components)
+                )
+                + "IsSubobjectMask=16)"
+            ),
+        )
+
+        return behavior

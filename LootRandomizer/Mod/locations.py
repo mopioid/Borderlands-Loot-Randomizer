@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unrealsdk import Log, GetEngine
+from unrealsdk import Log, FindObject, GetEngine
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from . import options, hints, items, seed
@@ -11,6 +11,7 @@ import random
 
 from typing import (
     Any,
+    Callable,
     Dict,
     Generator,
     List,
@@ -18,6 +19,7 @@ from typing import (
     Sequence,
     Set,
     Union,
+    Tuple,
     Type,
     TypeVar,
     TYPE_CHECKING,
@@ -124,7 +126,8 @@ class Location:
 
         self.tags = self.specified_tags
         rarities: List[int] = (
-            list(self.specified_rarities) if self.specified_rarities
+            list(self.specified_rarities)
+            if self.specified_rarities
             else [self.default_rarity]
         )
 
@@ -182,7 +185,10 @@ class Location:
 
             useitem = construct_object(hints.useitem_template, hint_inventory)
             hint_inventory.InventoryDefinition = useitem
-            set_command(useitem, "ItemName", f'"{self.name}"')
+            if BL2:
+                set_command(useitem, "ItemName", f"{self.name}")
+            elif TPS:
+                set_command(useitem, "ItemName", f'"{self.name}"')
 
             useitem.CustomPresentations = (
                 construct_object(hints.custompresentation_template, useitem),
@@ -303,18 +309,43 @@ class Location:
 class Dropper:
     location: Location
 
+    _hooks: Dict[str, str]
+
+    def hook(
+        self,
+        function: str,
+        method: Callable[[UObject, UFunction, FStruct], bool],
+    ) -> None:
+        name = f"LootRandomizer.{id(self)}.{method.__name__}"
+
+        if not hasattr(self, "_hooks"):
+            self._hooks = dict()
+        self._hooks[function] = name
+
+        RunHook(function, name, lambda c, f, p: method(c, f, p))
+
+    def unhook(self, function: str) -> None:
+        if hasattr(self, "_hooks"):
+            name = self._hooks.get(function)
+            if name:
+                RemoveHook(function, name)
+                del self._hooks[function]
+
     def enable(self) -> None:
         pass
 
     def disable(self) -> None:
-        pass
+        if hasattr(self, "_hooks"):
+            for function, name in self._hooks.items():
+                RemoveHook(function, name)
+            del self._hooks
 
 
 Self = TypeVar("Self", bound="RegistrantDropper")
 
 
 class RegistrantDropper(Dropper):
-    Registries: Dict[str, Set[RegistrantDropper]]
+    Registries: Dict[str, List[RegistrantDropper]]
 
     @classmethod
     def Registrants(cls: Type[Self], *paths: Union[str, UObject]) -> Set[Self]:
@@ -343,18 +374,26 @@ class RegistrantDropper(Dropper):
                 f"No paths specified for {self.__class__.__name__}"
             )
 
-    def enable(self) -> None:
+    def register(self) -> None:
         for path in self.paths:
-            registry = self.Registries.setdefault(path.casefold(), set())
-            registry.add(self)
+            registry = self.Registries.setdefault(path.casefold(), [])
+            registry.append(self)
 
-    def disable(self) -> None:
+    def unregister(self) -> None:
         for path in self.paths:
             registry = self.Registries.get(path.casefold())
             if registry:
-                registry.discard(self)
+                registry.remove(self)
                 if not registry:
                     del self.Registries[path.casefold()]
+
+    def enable(self) -> None:
+        super().enable()
+        self.register()
+
+    def disable(self) -> None:
+        super().disable()
+        self.unregister()
 
 
 class MapDropper(RegistrantDropper):
@@ -364,30 +403,32 @@ class MapDropper(RegistrantDropper):
         raise NotImplementedError
 
     def exited_map(self) -> None:
-        pass
+        super(RegistrantDropper, self).disable()
 
 
-_menu_name: str = "menumap".casefold()
-_loader_name: str = "loader".casefold()
-map_name: str = _menu_name
+menu_map_name: str = "menumap".casefold()
+loader_map_name: str = "loader".casefold()
+map_name: str = menu_map_name
 
 
 def MapChanged(new_map_name: str) -> None:
     global map_name
 
-    for map_dropper in MapDropper.Registrants("*", map_name):
-        map_dropper.exited_map()
+    if map_name != menu_map_name:
+        for map_dropper in MapDropper.Registrants("*", map_name):
+            map_dropper.exited_map()
 
     map_name = new_map_name
-    for map_dropper in MapDropper.Registrants("*", map_name):
-        map_dropper.entered_map()
+    if map_name != menu_map_name:
+        for map_dropper in MapDropper.Registrants("*", map_name):
+            map_dropper.entered_map()
 
 
 def _SetPawnLocation(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     new_map_name = str(
         GetEngine().GetCurrentWorldInfo().GetMapName()
     ).casefold()
-    if new_map_name in (map_name, _loader_name):
+    if new_map_name in (map_name, loader_map_name):
         return True
 
     def wait_missiontracker(new_map_name: str = new_map_name) -> bool:
@@ -402,8 +443,11 @@ def _SetPawnLocation(caller: UObject, _f: UFunction, params: FStruct) -> bool:
 
 
 def _SetGameType(caller: UObject, _f: UFunction, params: FStruct) -> bool:
-    if map_name != _menu_name and params.MapName.casefold() == _menu_name:
-        MapChanged(_menu_name)
+    if (
+        map_name != menu_map_name
+        and params.MapName.casefold() == menu_map_name
+    ):
+        MapChanged(menu_map_name)
     return True
 
 
@@ -416,8 +460,22 @@ class Behavior(RegistrantDropper):
 
     inject: bool
 
-    def __init__(self, *paths: str, inject: bool = True) -> None:
+    offset: Optional[Tuple[int, int, int]]
+    velocity: Optional[Tuple[int, int, int]]
+    scatter: Optional[Tuple[int, int, int]]
+
+    def __init__(
+        self,
+        *paths: str,
+        inject: bool = True,
+        offset: Optional[Tuple[int, int, int]] = None,
+        velocity: Optional[Tuple[int, int, int]] = None,
+        scatter: Optional[Tuple[int, int, int]] = None,
+    ) -> None:
         self.inject = inject
+        self.offset = offset
+        self.velocity = velocity
+        self.scatter = scatter
         super().__init__(*paths)
 
 
@@ -436,6 +494,14 @@ def _Behavior_SpawnItems(
     ]
 
     for dropper in registrars:
+        if dropper.offset is not None:
+            caller.ItemDropOffset = dropper.offset
+        if dropper.velocity is not None:
+            caller.ItemDropVelocity = dropper.velocity
+        if dropper.scatter is not None:
+            caller.ItemScatterOffset = dropper.scatter
+            caller.bCircularScatter = True
+
         if dropper.inject:
             poollist += [
                 (pool, (1, None, None, 1))

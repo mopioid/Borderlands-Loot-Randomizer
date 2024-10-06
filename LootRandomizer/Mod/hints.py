@@ -1,4 +1,4 @@
-from unrealsdk import FindObject, KeepAlive
+from unrealsdk import FindObject, KeepAlive, LoadPackage
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from . import seed, options
@@ -18,7 +18,7 @@ DudDescriptions = (
     "Don't know what's in it, but who cares?",
     "Error 404: Loot not found.",
     "The sip, dude!",
-    "0% Loot By Volume",
+    "0\x25 Loot By Volume",
     "It contains a small ship.",
     "You fell for one of the classic blunders.",
     "Sending out an SOS.",
@@ -41,6 +41,7 @@ DudDescriptions = (
     "GOOD. BUT WHERE IS GUN PILE?",
     "Have you seen my gun?",
     "Reduce, Reuse, Recycle!",
+    "Hey did you know there's a laser blowing up the moon?",
 )
 
 
@@ -137,7 +138,17 @@ def Enable() -> None:
     hintitem_mesh = FindObject(
         "StaticMesh", "prop_interactive.Meshes.DataRecorder_01_Active"
     )
-    duditem_mesh = FindObject("StaticMesh", "Prop_Details.Meshes.BeerBottle")
+    if BL2:
+        duditem_mesh = FindObject(
+            "StaticMesh", "Prop_Details.Meshes.BeerBottle"
+        )
+    elif TPS:
+        LoadPackage("Spaceport_P")
+        duditem_mesh = FindObject("StaticMesh", "Prop_Details.BeerBottle")
+        if not duditem_mesh:
+            raise Exception("Could not locate beer bottle for dud items")
+        KeepAlive(duditem_mesh)
+
     hintitem_pickupflag = FindObject(
         "Texture2D", "fx_shared_items.Textures.ItemCards.sdu"
     )

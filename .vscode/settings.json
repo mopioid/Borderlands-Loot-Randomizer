@@ -9,5 +9,5 @@
         "reportIncompatibleVariableOverride": false,
         "reportUnusedImport": false,
     },
-    "editor.rulers": [80]
+    "editor.rulers": [79]
 }
