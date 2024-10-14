@@ -438,7 +438,7 @@ def generate_seedversion() -> None:
         if tag < Tag.Excluded:
             dummy_tags |= tag
 
-    dummy = Seed.Generate(dummy_tags)
+    dummy = Seed.Generate(dummy_tags, 1)
     dummy.apply()
 
     with open(path, "w", encoding="utf-8") as file:

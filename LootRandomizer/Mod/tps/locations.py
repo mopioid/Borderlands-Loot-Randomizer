@@ -82,6 +82,29 @@ class WorldUniques(MapDropper):
             )
 
 
+class PopulationDefinition:
+    uobject: UObject
+    original_weights: Sequence[float]
+
+    def __init__(self, path: str) -> None:
+        uobject = FindObject("PopulationDefinition", path)
+        if not uobject:
+            raise RuntimeError(f"Could not locate PopulationDefinition {path}")
+
+        self.uobject = uobject
+
+        self.original_weights = tuple(
+            archetype.Probability.BaseValueConstant
+            for archetype in uobject.ActorArchetypeList
+        )
+
+    def reset_archetypes(self) -> None:
+        for original_weight, archetype in zip(
+            self.original_weights, self.uobject.ActorArchetypeList
+        ):
+            archetype.Probability.BaseValueConstant = original_weight
+
+
 class HolidayEvents(MapDropper):
     paths = ("*",)
 
@@ -91,6 +114,22 @@ class HolidayEvents(MapDropper):
         "Mercenary Day",
     )
     holiday: Optional[str] = None
+
+    populations: Sequence[PopulationDefinition] = ()
+
+    def enable_holiday(self) -> None:
+        self.populations = ()
+        if self.holiday == "Bloody Harvest":
+            self.bloody_harvest()
+        elif self.holiday == "Celebration":
+            self.celebration()
+        elif self.holiday == "Mercenary Day":
+            self.mercenary_day()
+
+    def disable_holiday(self) -> None:
+        for population in self.populations:
+            population.reset_archetypes()
+        self.populations = ()
 
     def enable(self) -> None:
         super().enable()
@@ -145,17 +184,14 @@ class HolidayEvents(MapDropper):
         if holiday_index < 0:
             return True
 
+        self.disable_holiday()
+
         selected_holiday = self.holidays[holiday_index]
         if self.holiday == selected_holiday:
             self.holiday = None
         else:
             self.holiday = selected_holiday
-
-        current_station = caller.ContextObject.TravelDefinition
-        if current_station.Name != "Airstrip":
-            gameinfo = GetEngine().GetCurrentWorldInfo().Game
-            gameinfo.TravelToFastTravelStation("Airstrip")
-            return False
+            self.enable_holiday()
 
         if caller.CurrentWaypointStationDef:
             stations = tuple(caller.LocationStationDefinitions)
@@ -165,6 +201,7 @@ class HolidayEvents(MapDropper):
             waypoint_index = -1
 
         travels = self.append_holiday_travels(caller.LocationDisplayNames)
+
         caller.FastTravelClip.SendLocationData(
             travels,
             caller.LocationStationStrings,
@@ -181,12 +218,7 @@ class HolidayEvents(MapDropper):
         return False
 
     def entered_map(self) -> None:
-        if self.holiday == "Bloody Harvest":
-            self.bloody_harvest()
-        elif self.holiday == "Celebration":
-            self.celebration()
-        elif self.holiday == "Mercenary Day":
-            self.mercenary_day()
+        self.enable_holiday()
 
     def exited_map(self) -> None:
         pass
@@ -195,38 +227,49 @@ class HolidayEvents(MapDropper):
         if locations.map_name != "Deadsurface_P".casefold():
             return
 
-        barrels = FindObject(
-            "PopulationDefinition",
+        barrels = PopulationDefinition(
             "GD_Explosives.Populations.Pop_BarrelMixture",
         )
-        pumpkins = FindObject(
-            "WillowPopulationDefinition",
+        scavs = PopulationDefinition(
+            "GD_Population_Scavengers.MapMixes.PopDef_ScavMix_SerentitysWaste",
+        )
+        pumpkins = PopulationDefinition(
             "GD_Population_Scavengers.HolidayMixes.Pumpkin.PopDef_ScavMix_Pumpkin",
         )
-        deadlift = FindObject(
-            "WillowPopulationDefinition",
+        deadlift = PopulationDefinition(
             "GD_SpacemanDeadlift.Population.PopDef_SpacemanDeadlift",
         )
-        if not (barrels and pumpkins and deadlift):
-            raise Exception("Could not locate objects for Bloody Harvest")
 
-        for actor in barrels.ActorArchetypeList:
-            balance = actor.SpawnFactory.ObjectBalanceDefinition
+        self.populations = (barrels, scavs, pumpkins, deadlift)
+
+        for archetype in barrels.uobject.ActorArchetypeList:
+            balance = archetype.SpawnFactory.ObjectBalanceDefinition
             if balance and balance.Name == "BD_Barrel_Shift_Harvest":
-                actor.Probability.BaseValueConstant = 1
+                archetype.Probability.BaseValueConstant = 1
             else:
-                actor.Probability.BaseValueConstant = 0
+                archetype.Probability.BaseValueConstant = 0
 
-        for actor in pumpkins.ActorArchetypeList:
-            actor.Probability.BaseValueConstant = 1
-        for den in FindAll("PopulationOpportunityDen"):
-            if (
-                den.PopulationDef
-                and den.PopulationDef.Name == "PopDef_ScavMix_SerentitysWaste"
-            ):
-                den.PopulationDef = pumpkins
+        for archetype in scavs.uobject.ActorArchetypeList:
+            balance = archetype.SpawnFactory.PopulationDef
+            if balance and balance.Name == "PopDef_ScavMix_Pumpkin":
+                archetype.Probability.BaseValueConstant = 1
+            else:
+                archetype.Probability.BaseValueConstant = 0
 
-        for actor in deadlift.ActorArchetypeList:
+        for archetype in pumpkins.uobject.ActorArchetypeList:
+            balance = archetype.SpawnFactory.PawnBalanceDefinition
+            if not balance:
+                continue
+            if balance.Name == "PawnBalance_ScavengerBandit_Pumpkin":
+                archetype.Probability.BaseValueConstant = 2
+            if balance.Name == "PawnBalance_ScavengerPsycho_Pumpkin":
+                archetype.Probability.BaseValueConstant = 1
+            if balance.Name == "PawnBalance_ScavMidget_Pumpkin":
+                archetype.Probability.BaseValueConstant = 0.66
+            if balance.Name == "PawnBalance_ScavengerBandit_Jetpack_Pumpkin":
+                archetype.Probability.BaseValueConstant = 1
+
+        for actor in deadlift.uobject.ActorArchetypeList:
             balance = actor.SpawnFactory.PawnBalanceDefinition
             if (
                 balance
@@ -237,92 +280,97 @@ class HolidayEvents(MapDropper):
                 actor.Probability.BaseValueConstant = 0
 
     def celebration(self) -> None:
-        barrels = FindObject(
-            "PopulationDefinition",
-            "GD_Explosives.Populations.Pop_BarrelMixture",
-        )
-        if not barrels:
-            return
-
-        for actor in barrels.ActorArchetypeList:
-            balance = actor.SpawnFactory.ObjectBalanceDefinition
-            if balance and balance.Name == "BD_Barrel_Shift_Celebrate":
-                actor.Probability.BaseValueConstant = 0.5
+        try:
+            barrels = PopulationDefinition(
+                "GD_Explosives.Populations.Pop_BarrelMixture",
+            )
+            self.populations = (barrels,)
+            for archetype in barrels.uobject.ActorArchetypeList:
+                balance = archetype.SpawnFactory.ObjectBalanceDefinition
+                if balance and balance.Name == "BD_Barrel_Shift_Celebrate":
+                    archetype.Probability.BaseValueConstant = 1
+        except RuntimeError:
+            pass
 
     def mercenary_day(self) -> None:
-        barrels = FindObject(
-            "PopulationDefinition",
-            "GD_Explosives.Populations.Pop_BarrelMixture",
-        )
-        if barrels:
-            for actor in barrels.ActorArchetypeList:
-                balance = actor.SpawnFactory.ObjectBalanceDefinition
+        try:
+            barrels = PopulationDefinition(
+                "GD_Explosives.Populations.Pop_BarrelMixture",
+            )
+            self.populations = (barrels,)
+            for archetype in barrels.uobject.ActorArchetypeList:
+                balance = archetype.SpawnFactory.ObjectBalanceDefinition
                 if balance and balance.Name == "BD_Barrel_Shift_Mercenary":
-                    actor.Probability.BaseValueConstant = 0.5
+                    archetype.Probability.BaseValueConstant = 1
+        except RuntimeError:
+            pass
 
         if locations.map_name == "Moonsurface_P".casefold():
-            zilla = FindObject(
-                "WillowPopulationDefinition",
+            zilla = PopulationDefinition(
                 "GD_Cork_Population_EleBeast.Mix.PopDef_GiantBeasts_Mix",
             )
-            if not zilla:
-                raise Exception("Could not locate population for Odjurymir")
+            self.populations = (*self.populations, zilla)
 
-            for actor in zilla.ActorArchetypeList:
-                population = actor.SpawnFactory.PopulationDef
+            for archetype in zilla.uobject.ActorArchetypeList:
+                population = archetype.SpawnFactory.PopulationDef
                 if population and population.Name == "PopDef_Frostzilla":
-                    actor.Probability.BaseValueConstant = 1
+                    archetype.Probability.BaseValueConstant = 1
                 else:
-                    actor.Probability.BaseValueConstant = 0
+                    archetype.Probability.BaseValueConstant = 0
 
         if locations.map_name == "RandDFacility_P".casefold():
-            Log("In RND")
-
-            merry_dahl = FindObject(
-                "WillowPopulationDefinition",
+            dahl = PopulationDefinition(
+                "GD_Population_Dahl.MapMixes.PopDef_DahlMix_RnD",
+            )
+            merry_dahl = PopulationDefinition(
                 "GD_Population_Dahl.MapMixes.PopDef_DahlMix_RnD_MercDay",
             )
-            if not (merry_dahl):
-                raise Exception(
-                    "Could not locate Lost Legion for Mercenary Day"
-                )
+            self.populations = (*self.populations, dahl, merry_dahl)
 
-            for actor in merry_dahl.ActorArchetypeList:
-                population = actor.SpawnFactory.PopulationDef
+            for archetype in dahl.uobject.ActorArchetypeList:
+                balance = archetype.SpawnFactory.PopulationDef
+                if balance and balance.Name == "PopDef_DahlMix_RnD_MercDay":
+                    archetype.Probability.BaseValueConstant = 1
+                else:
+                    archetype.Probability.BaseValueConstant = 0
+
+            for archetype in merry_dahl.uobject.ActorArchetypeList:
+                population = archetype.SpawnFactory.PopulationDef
                 if (
                     population
                     and population.Name
                     == "PopMix_Dahl_Elemental_Marines_MercDay"
                 ):
-                    actor.Probability.BaseValueConstant = 0
-
-            for den in FindAll("PopulationOpportunityDen"):
-                if (
-                    den.PopulationDef
-                    and den.PopulationDef.Name == "PopDef_DahlMix_RnD"
-                ):
-                    den.PopulationDef = merry_dahl
+                    archetype.Probability.BaseValueConstant = 0
 
         if locations.map_name == "Wreck_P".casefold():
-            scavs = FindObject(
-                "WillowPopulationDefinition",
+            scavs = PopulationDefinition(
                 "GD_Population_Scavengers.MapMixes.PopDef_ScavMix_PitysFall",
             )
-            if not (scavs):
-                raise Exception("Could not locate Scavs for Mercenary Day")
+            merry_scavs = PopulationDefinition(
+                "GD_Population_Scavengers.HolidayMixes.MercDay.PopDef_ScavMix_MercDay",
+            )
+            self.populations = (*self.populations, scavs, merry_scavs)
 
-            for actor in scavs.ActorArchetypeList:
-                population = actor.SpawnFactory.PopulationDef
-                if population and population.Name == "PopDef_ScavMix_MercDay":
-                    actor.Probability.BaseValueConstant = 1
-                    for merc_actor in population.ActorArchetypeList:
-                        balance = merc_actor.SpawnFactory.PawnBalanceDefinition
-                        if (
-                            balance
-                            and balance.Name
-                            == "PawnBalance_ScavengerBandit_Jetpack_MercDay"
-                        ):
-                            merc_actor.Probability.BaseValueConstant = 1
+            for archetype in scavs.uobject.ActorArchetypeList:
+                balance = archetype.SpawnFactory.PawnBalanceDefinition
+                if balance:
+                    if balance.Name == "PawnBalance_ScavengerBandit_Jetpack":
+                        archetype.Probability.BaseValueConstant = 0
+                else:
+                    population = archetype.SpawnFactory.PopulationDef
+                    if population:
+                        if population.Name == "PopDef_ScavMix_MercDay":
+                            archetype.Probability.BaseValueConstant = 1
+
+            for archetype in merry_scavs.uobject.ActorArchetypeList:
+                balance = archetype.SpawnFactory.PawnBalanceDefinition
+                if (
+                    balance
+                    and balance.Name
+                    == "PawnBalance_ScavengerBandit_Jetpack_MercDay"
+                ):
+                    archetype.Probability.BaseValueConstant = 1
 
 
 class PumpkinBarrel(MapDropper):
@@ -491,12 +539,30 @@ class Dick(MapDropper):
         )
 
 
-class TorgueO(MapDropper):
+class TorgueO(MissionStatusDelegate, MapDropper):
     paths = ("Moonsurface_P",)
 
-    def damaged(self, caller: UObject, _f: UFunction, params: FStruct) -> bool:
-        # TODO: restrict to correct mission objective
+    kraggon_objective: UObject
+    probe_behavior: UObject
 
+    def enable(self) -> None:
+        super().enable()
+
+        kraggon_objective = FindObject(
+            "MissionObjectiveDefinition",
+            "GD_Co_ToroToro.M_ToroToro:FindKraggonDen",
+        )
+        probe_behavior = FindObject(
+            "Behavior_RemoteCustomEvent",
+            "GD_Cork_Weap_Pistol.FiringModes.Bullet_Pistol_Maliwan_MoxxisProbe:Behavior_RemoteCustomEvent_3",
+        )
+        if not (kraggon_objective and probe_behavior):
+            raise Exception("Could not locate objects for Torgue-O")
+
+        self.kraggon_objective = kraggon_objective
+        self.probe_behavior = probe_behavior
+
+    def damaged(self, caller: UObject, _f: UFunction, params: FStruct) -> bool:
         if not (
             caller.AIClass
             and caller.AIClass.Name == "CharClass_UniqueCharger"
@@ -505,20 +571,32 @@ class TorgueO(MapDropper):
         ):
             return True
 
-        behavior = FindObject(
-            "Behavior_RemoteCustomEvent",
-            "GD_Cork_Weap_Pistol.FiringModes.Bullet_Pistol_Maliwan_MoxxisProbe:Behavior_RemoteCustomEvent_3",
-        )
-        if not behavior:
-            raise Exception("Could not find Probe behavior")
-
-        behavior.ApplyBehaviorToContext(
+        self.probe_behavior.ApplyBehaviorToContext(
             caller, (), None, params.InstigatedBy, None, ()
         )
         return True
 
+    def objective(self, _c: UObject, _f: UFunction, params: FStruct) -> bool:
+        if params.MissionObjective is self.kraggon_objective:
+            self.hook("WillowGame.WillowAIPawn.TakeDamage", self.damaged)
+            self.unhook(
+                "WillowGame.WillowPlayerController.UpdateMissionObjective"
+            )
+        return True
+
     def entered_map(self) -> None:
-        self.hook("WillowGame.WillowAIPawn.TakeDamage", self.damaged)
+        if get_missiontracker().IsMissionObjectiveComplete(
+            self.kraggon_objective
+        ):
+            self.hook("WillowGame.WillowAIPawn.TakeDamage", self.damaged)
+        else:
+            self.hook(
+                "WillowGame.WillowPlayerController.UpdateMissionObjective",
+                self.objective,
+            )
+
+    def completed(self) -> None:
+        self.unhook("WillowGame.WillowAIPawn.TakeDamage")
 
 
 class SwordInStone(MapDropper):
@@ -529,11 +607,20 @@ class SwordInStone(MapDropper):
             "BehaviorProviderDefinition",
             "GD_Co_EasterEggs.Excalibastard.InteractiveObject_Excalibastard:BehaviorProviderDefinition_0",
         )
-        if not bpd:
-            raise Exception("Could not find BPD for Sword In The Stone")
+        condition = FindObject(
+            "AttributeExpressionEvaluator",
+            "GD_Co_EasterEggs.Excalibastard.InteractiveObject_Excalibastard:BehaviorProviderDefinition_0.Behavior_Conditional_22.AttributeExpressionEvaluator_0",
+        )
 
-        event_data = bpd.BehaviorSequences[0].EventData2[0]
-        event_data.OutputLinks.ArrayIndexAndLength = 327681
+        if not (bpd and condition):
+            raise Exception(
+                "Could not find objects for ART THOU BADASS ENOUGH"
+            )
+
+        previously_taken = bpd.BehaviorSequences[0].EventData2[0]
+        previously_taken.OutputLinks.ArrayIndexAndLength = 327681
+
+        condition.Expression.ConstantOperand2 = 0
 
 
 class Swagman(Pawn):
@@ -1536,12 +1623,12 @@ class DataMining(MissionStatusDelegate, MapDropper):
         kill_event.OutputLinks[0].Links = ()
 
     def completed(self) -> None:
-        pawn = get_pawn("CharClass_Ma_MiniTrojan_Shame")
-        if not pawn:
-            raise Exception("Could not locate Shame for Chip's Data Mining")
+        shame = get_pawn("CharClass_Ma_MiniTrojan_Shame")
+        if not shame:
+            return
 
-        bpd = pawn.AIClass.AIDef.BehaviorProviderDefinition
-        handle = (pawn.ConsumerHandle.PID,)
+        bpd = shame.AIClass.AIDef.BehaviorProviderDefinition
+        handle = (shame.ConsumerHandle.PID,)
         kernel = get_behaviorkernel()
 
         kernel.ChangeBehaviorSequenceActivationStatus(
@@ -1648,7 +1735,6 @@ class EgoTrap(MissionStatusDelegate, MapDropper):
             self.apply()
 
     def completed(self) -> None:
-        Log("EgoTrap completed")
         self.apply()
 
 
@@ -1841,8 +1927,6 @@ class MutatorMissionDefinition(MissionDefinition):
             rarities.pop()
         else:
             rarities[-1] = 100
-
-        Log(f"--- quest rewards: {rarities} ---")
 
         self.location.rarities = rarities
         super().inject(mission_data)
@@ -2041,7 +2125,7 @@ Locations: Sequence[locations.Location] = (
     Other("Janey's Chest", Attachment("BD_DahlShockChest", 0), mission="Nova? No Problem!"),
     Other("Janey's Safe", Attachment("BD_ElectronicObjectThree", 0), mission="Nova? No Problem!"),
     Mission("Torgue-o! Torgue-o! (Turn in Janey)", MissionDefinition("GD_Co_ToroToro.M_ToroToro"), TorgueO()),
-    Mission("Torgue-o! Torgue-o! (Turn in Lava)", MissionTurnInAlt("GD_Co_ToroToro.M_ToroToro"), TorgueO()),
+    Mission("Torgue-o! Torgue-o! (Turn in Lava)", MissionTurnInAlt("GD_Co_ToroToro.M_ToroToro")),
     Enemy("Antagonized Kraggon", Pawn("PawnBalance_UniqueCharger"), mission="Torgue-o! Torgue-o! (Turn in Janey)", rarities=(5,)),
     Other("Isaiah's Loot", Attachment("ObjectGrade_StrongBox_Isaiah")),
     Enemy("Oscar", Pawn("PawnBalance_ScavSuicidePsycho_Oscar")),
@@ -2139,6 +2223,7 @@ Locations: Sequence[locations.Location] = (
     Mission("Sub-Level 13: Part 2 (Turn in Pickle)", SubLevel13(), MissionDefinition("GD_Co_SubLevel13.M_Co_SubLevel13Part2")),
     Mission("Sub-Level 13: Part 2 (Turn in Schmidt)", MissionTurnInAlt("GD_Co_SubLevel13.M_Co_SubLevel13Part2")),
     Mission("The Voyage of Captain Chef", ChefVoyage(), MissionDefinition("GD_Co_VoyageOfCaptainChef.M_VoyageOfCaptainChef")),
+    Other("Playing Chicken Chest", PositionalChest("ObjectGrade_HyperionChest", "centralterminal_p", 16985, 2962, 2009)),
     Enemy("Merry Lost Legion",
         Pawn("PawnBalance_DahlScout_MercDay"),
         Pawn("PawnBalance_DahlFlameMarine_MercDay"),
@@ -2246,7 +2331,7 @@ Locations: Sequence[locations.Location] = (
     Mission("Things That Go Boom", MissionDefinition("GD_Co_Side_Exploders.M_Exploders")),
     Enemy("Lost Legion Courier", Pawn("PawnBalance_DahlRedShirt"), mission="Red, Then Dead"),
     Enemy("Lost Legion Powersuit Noob", Pawn("PawnBalance_DahlRedShirtPowersuit")),
-    Mission("To the Moon", MissionDefinition("GD_Co_Side_EngineerMoonShot.M_EngineerMoonShot")),
+    Mission("To the Moon", MissionDefinition("GD_Co_Side_EngineerMoonShot.M_EngineerMoonShot"), tags=Tag.LongMission),
     Enemy("Lost Legion Defector", Defector(), mission="To the Moon"),
     Mission("Lock and Load", MissionDefinition("GD_Co_Side_LockAndLoad.M_LockAndLoad")),
     Enemy("Tungsteena Zarpedon",
@@ -2411,12 +2496,12 @@ Locations: Sequence[locations.Location] = (
     Other("Popup Ad", PopupAd(), tags=Tag.ClaptasticVoyage, rarities=(33,)),
     Enemy("Loot Bug", Pawn("PawnBalance_LootBug"), tags=Tag.ClaptasticVoyage|Tag.RareEnemy),
     Other("File Search Glitch Chest", Attachment("ObjectGrade_HypWeaponChest_FileSearch_Glitched"), tags=Tag.Excluded),
-    Other("Advanced Search Chest", PositionalChest("ObjectGrade_HyperionChest_Glitched", "Ma_Motherboard_P", -133482, 55869, 2782), tags=Tag.ClaptasticVoyage),
     Mission("Spyware Who Came in from the Cold",
         MissionDefinition("GD_Ma_Side_SpywareInFromCold.M_Ma_Side_SpywareInFromCold"),
         SpywareChest("Balance_SpywareChest"),
         SpywareBug(),
     tags=Tag.ClaptasticVoyage|Tag.VeryLongMission),
+    Other("Advanced Search Chest", PositionalChest("ObjectGrade_HyperionChest_Glitched", "Ma_Motherboard_P", -133482, 55869, 2782), tags=Tag.ClaptasticVoyage),
     Mission("Rose Tinting",
         MissionDefinition("GD_Ma_Side_MINAC.M_Ma_Side_MINAC"),
         RoseTinting(),
@@ -2452,7 +2537,7 @@ Locations: Sequence[locations.Location] = (
         MissionDefinition("GD_Ma_Side_StopTheMusic.M_Ma_Side_StopTheMusic"),
         StopTheMusic(),
     tags=Tag.ClaptasticVoyage),
-    Enemy("Teh Earworm", Pawn("PawnBalance_EarWorm"), tags=Tag.ClaptasticVoyage),
+    Enemy("Teh Earworm", Pawn("PawnBalance_EarWorm"), tags=Tag.ClaptasticVoyage|Tag.SlowEnemy),
     Enemy("Catchy Hook!", Pawn("PawnBalance_EarWormTentacle", transform=0), tags=Tag.ClaptasticVoyage),
     Enemy("Most Requested!", Pawn("PawnBalance_EarWormTentacle", transform=1), tags=Tag.ClaptasticVoyage),
     Enemy("Key Change!", Pawn("PawnBalance_EarWormTentacle", transform=2), tags=Tag.ClaptasticVoyage),

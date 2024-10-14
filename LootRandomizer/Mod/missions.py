@@ -452,7 +452,7 @@ class MissionTurnIn(MissionDefinition):
         pass
 
 
-class MissionTurnInAlt(MissionDefinition):
+class MissionTurnInAlt(MissionTurnIn):
     @property
     def reward(self) -> FStruct:
         return self.uobject.AlternativeReward

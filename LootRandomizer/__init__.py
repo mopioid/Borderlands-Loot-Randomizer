@@ -59,7 +59,7 @@ from typing import Optional
 
 class LootRandomizer(ModMenu.SDKMod):
     Name = "Loot Randomizer"
-    Version = "1.5"
+    Version = "1.5.2"
     Description = "Create seeds to shuffle items into new farm locations."
     Author = "mopioid"
     SupportedGames = ModMenu.Game.BL2 | ModMenu.Game.TPS
@@ -92,8 +92,7 @@ class LootRandomizer(ModMenu.SDKMod):
     def SendSeed(self, seed_string: str, PC: Optional[UObject] = None) -> None:
         host_seed = seed.Seed.FromString(seed_string)
         host_seed.apply()
-        options.NewSeedOptions.IsHidden = True
-        options.SelectSeedOptions.IsHidden = True
+        options.HideSeedOptions()
         options.SaveSeedString(seed_string)
 
     @ModMenu.ClientMethod

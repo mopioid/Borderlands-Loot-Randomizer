@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from unrealsdk import Log, FindObject, GetEngine
+from unrealsdk import Log, FindObject
 from unrealsdk import RunHook, RemoveHook, UObject, UFunction, FStruct
 
 from Mods import ModMenu
 
-from . import hints, seed
+from . import options, hints, seed
 from .defines import *
 from .seed import Seed
 
@@ -83,6 +83,18 @@ def _SeedApplied() -> None:
         HintDisplay.CurrentValue = HintDisplay.Choices[0]
 
 
+def HideSeedOptions() -> None:
+    _NewSeedOptions.IsHidden = True
+    _SelectSeedOptions.IsHidden = True
+    _EditSeedFileButton.IsHidden = True
+
+
+def ShowSeedOptions() -> None:
+    _NewSeedOptions.IsHidden = False
+    _SelectSeedOptions.IsHidden = False
+    _EditSeedFileButton.IsHidden = False
+
+
 def SaveSeedString(seed_string: str) -> None:
     with open(seeds_file, "a+") as file:
         file.seek(0, 0)
@@ -99,7 +111,7 @@ def _NewSeedGenerateClicked() -> None:
     # TODO: not saving new seed selection to settings
     tags = Tag(0)
 
-    for option in NewSeedOptions.Children:
+    for option in _NewSeedOptions.Children:
         if isinstance(option, SeedOption) and option.CurrentValue == "On":
             tags |= option.tag
 
@@ -256,8 +268,7 @@ def _PostLogin(caller: UObject, _f: UFunction, params: FStruct) -> bool:
 
 
 def _PostBeginPlay(caller: UObject, _f: UFunction, params: FStruct) -> bool:
-    NewSeedOptions.IsHidden = False
-    SelectSeedOptions.IsHidden = False
+    ShowSeedOptions()
     return True
 
 
@@ -367,7 +378,7 @@ elif TPS:
 else:
     raise
 
-NewSeedOptions = ModMenu.Options.Nested(
+_NewSeedOptions = ModMenu.Options.Nested(
     Caption="New Seed",
     Description=(
         "Create a new seed. Each seed defines a shuffling of loot sources that "
@@ -385,7 +396,7 @@ _EditSeedFileButton = CallbackField(
     Callback=lambda: os.startfile(seeds_file),
 )
 
-SelectSeedOptions = CallbackNested(
+_SelectSeedOptions = CallbackNested(
     Caption="Select Seed",
     Description=(
         "Select a seed from your list of saved seeds. Each seed defines a "
@@ -440,9 +451,9 @@ RewardsTrainingSeen = ModMenu.Options.Hidden(
 
 
 Options: Sequence[ModMenu.Options.Base] = (
-    NewSeedOptions,
+    _NewSeedOptions,
+    _SelectSeedOptions,
     _EditSeedFileButton,
-    SelectSeedOptions,
     CallbackField(
         Caption="Open Seed Tracker",
         Description=(
@@ -542,14 +553,14 @@ def Enable():
             tag_list = categories.setdefault(tag.category, [])
             tag_list.append(tag)
 
-    NewSeedOptions.Children = []
+    _NewSeedOptions.Children = []
 
     for category, tags in categories.items():
-        NewSeedOptions.Children.append(SeedHeader(category))
+        _NewSeedOptions.Children.append(SeedHeader(category))
         for tag in tags:
-            NewSeedOptions.Children.append(SeedOption(tag))
+            _NewSeedOptions.Children.append(SeedOption(tag))
 
-    NewSeedOptions.Children.append(
+    _NewSeedOptions.Children.append(
         CallbackField(
             "GENERATE SEED",
             "Confirm selections and and generate the new seed.",

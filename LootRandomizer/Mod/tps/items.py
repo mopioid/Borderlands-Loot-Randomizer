@@ -1,9 +1,11 @@
 from ..defines import *
 from ..items import ItemPool, Item, ClassMod, MultiBarrelWeapon
 
+from typing import Sequence
+
 # fmt: off
 
-Items = (
+Items: Sequence[ItemPool] = (
     ItemPool("Bloodthirster / Blaster / Cowgirl / Brotrap / CEO / Big Game Hunter", Hint.ClassMod,
         ClassMod("GD_Cork_ItemGrades.ClassMods.BalDef_ClassMod_Gladiator_03_Rare", 0, Character.Gladiator),
         ClassMod("GD_Cork_ItemGrades.ClassMods.BalDef_ClassMod_Gladiator_04_VeryRare", 0, Character.Gladiator),
@@ -572,7 +574,7 @@ Items = (
     ItemPool("Flayer", Hint.LegendaryShotgun, Item("GD_Ma_Weapons.A_Weapons_Legendary.SG_Jakobs_5_Flayer", content=Tag.ClaptasticVoyage)),
     ItemPool("Cheat Code", Hint.LegendarySMG, Item("GD_Ma_Weapons.A_Weapons_Legendary.SMG_Hyperion_5_CheatCode", content=Tag.ClaptasticVoyage)),
     ItemPool("Omni-Cannon", Hint.LegendarySniper, Item("GD_Ma_Weapons.A_Weapons_Legendary.Sniper_Old_Hyperion_5_OmniCannon", content=Tag.ClaptasticVoyage)),
-    ItemPool("/He4rtf;ull Spl0Dge..r", Hint.UniqueSMG, Item("GD_Ma_Weapons.A_Weapons_Unique.Laser_Dahl_6_Glitch_HeartfullSplodger", content=Tag.ClaptasticVoyage)),
+    ItemPool("/He4rtf;ull Spl0Dge..r", Hint.UniqueLaser, Item("GD_Ma_Weapons.A_Weapons_Unique.Laser_Dahl_6_Glitch_HeartfullSplodger", content=Tag.ClaptasticVoyage)),
     ItemPool("Party Popper", Hint.UniquePistol, Item("GD_Ma_Weapons.A_Weapons_Unique.Pistol_Bandit_3_PartyPopper", content=Tag.ClaptasticVoyage)),
     ItemPool("Hard Reboot", Hint.UniquePistol, Item("GD_Ma_Weapons.A_Weapons_Unique.Pistol_Maliwan_3_HardReboot", content=Tag.ClaptasticVoyage)),
     ItemPool("%Cu+ie^_^ki||er", Hint.UniqueSMG, Item("GD_Ma_Weapons.A_Weapons_Unique.SMG_Bandit_6_Glitch_CutieKiller", content=Tag.ClaptasticVoyage)),

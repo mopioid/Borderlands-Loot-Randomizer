@@ -5,8 +5,8 @@ from typing import Callable, List, Optional
 from unrealsdk import UObject
 
 
-CurrentVersion = 1
-SupportedVersions = (1,)
+CurrentVersion = 2
+SupportedVersions = (1, 2)
 
 
 class Character(enum.Enum):
@@ -83,7 +83,6 @@ for tag, content_title, dlc_path in (
     ( Tag.ClaptasticVoyage, "Claptastic Voyage and Ultimate Vault Hunter Upgrade Pack 2", "GD_MarigoldPackageDef.CustomItemSetDef_Marigold"),
     ( Tag.ShockDrop, "Shock Drop Slaughter Pit", "GD_FreesiaPackageDef.ItemSet_Freesia"),
     ( Tag.Holiday, "Holiday Events", None),
-    # ( Tag.TalesLoyalty, "Tales Loyalty", "GD_MarigoldPackageDef.CustomItemSetDef_Cypress"),
 ):
     tag.content_title = content_title; tag.dlc_path = dlc_path
 
@@ -93,7 +92,6 @@ for tag, category, default, caption, description in (
     (Tag.ClaptasticVoyage,   Category.Content,  True,  "Claptastic Voyage",  f"Include items and locations from {Tag.ClaptasticVoyage.content_title}."),
     (Tag.Holodome,           Category.Content,  True,  "Holodome",           f"Include items and locations from {Tag.Holodome.content_title}."),
     (Tag.Holiday,            Category.Content,  True,  "Holiday Events",     f"Include items and locations from holiday events. Holiday events can be toggled at any time from the Fast Travel menu."),
-    # (Tag.TalesLoyalty,       Category.Content,  True,  "Tales Loyalty",      f"Include items and locations from owning the Tales From The Borderlands Season Pass."),
 
     (Tag.ShortMission,       Category.Missions, True,  "Short Missions",     "Assign items to short side missions."),
     (Tag.LongMission,        Category.Missions, True,  "Long Missions",      "Assign items to longer side missions. Longer mission turn-ins provide bonus loot options."),

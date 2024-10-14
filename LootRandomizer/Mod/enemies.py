@@ -7,7 +7,7 @@ from .defines import *
 from . import locations, seed
 from .locations import Location, RegistrantDropper
 
-from typing import Any, Optional, List
+from typing import Any, Optional, List, Set
 
 
 def Enable() -> None:
@@ -94,7 +94,10 @@ class Pawn(RegistrantDropper):
         ]
 
 
-def _pawn_died(caller: UObject, _f: UFunction, params: FStruct) -> bool:
+_dead_pawns: Set[UObject] = set()
+
+
+def _pawn_died(caller: UObject, _f: UFunction, _p: FStruct) -> bool:
     balance: Optional[UObject]
     balance = caller.BalanceDefinitionState.BalanceDefinition
     if not balance:
@@ -104,6 +107,12 @@ def _pawn_died(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     registry = Pawn.Registrants(balance_name)
     if not registry:
         return True
+
+    if caller in _dead_pawns:
+        return False
+
+    _dead_pawns.add(caller)
+    do_next_tick(lambda: _dead_pawns.remove(caller))
 
     pools = [
         convert_struct(pool)

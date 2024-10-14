@@ -112,7 +112,7 @@ class PurpleRelic(Item):
 
 # fmt: off
 
-Items = (
+Items: Sequence[ItemPool] = (
     ItemPool("Blue Infiltrator / Beast / Banshee / Engineer / Slab / Roboteer", Hint.BlueClassMod,
         ClassMod("GD_ItemGrades.ClassMods.BalDef_ClassMod_Assassin_03_Rare", 0, Character.Assassin),
         ClassMod("GD_ItemGrades.ClassMods.BalDef_ClassMod_Mercenary_03_Rare", 0, Character.Mercenary),

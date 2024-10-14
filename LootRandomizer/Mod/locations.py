@@ -26,12 +26,10 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    # from typing import Self
     from .missions import Mission
 
 
 def Enable() -> None:
-    # RunHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer", _PostCommitMapChange)
     RunHook(
         "Engine.GameInfo.SetGameType",
         "LootRandomizer",
@@ -41,6 +39,11 @@ def Enable() -> None:
         "WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext",
         "LootRandomizer",
         _Behavior_SpawnItems,
+    )
+    RunHook(
+        "WillowGame.WillowPlayerController.TeleportPlayerToStation",
+        "LootRandomizer",
+        _TeleportPlayer,
     )
     RunHook(
         "WillowGame.WillowPlayerController.ClientSetPawnLocation",
@@ -55,13 +58,16 @@ def Enable() -> None:
 
 
 def Disable() -> None:
-    # RemoveHook("Engine.GameInfo.PostCommitMapChange", "LootRandomizer")
     RemoveHook(
         "Engine.GameInfo.SetGameType",
         "LootRandomizer",
     )
     RemoveHook(
         "WillowGame.Behavior_SpawnItems.ApplyBehaviorToContext",
+        "LootRandomizer",
+    )
+    RemoveHook(
+        "WillowGame.WillowPlayerController.TeleportPlayerToStation",
         "LootRandomizer",
     )
     RemoveHook(
@@ -408,37 +414,49 @@ class MapDropper(RegistrantDropper):
 
 menu_map_name: str = "menumap".casefold()
 loader_map_name: str = "loader".casefold()
+fake_map_name: str = "fakeentry".casefold()
 map_name: str = menu_map_name
 
 
-def MapChanged(new_map_name: str) -> None:
-    global map_name
-
-    if map_name != menu_map_name:
-        for map_dropper in MapDropper.Registrants("*", map_name):
-            map_dropper.exited_map()
-
-    map_name = new_map_name
-    if map_name != menu_map_name:
-        for map_dropper in MapDropper.Registrants("*", map_name):
-            map_dropper.entered_map()
-
-
-def _SetPawnLocation(caller: UObject, _f: UFunction, params: FStruct) -> bool:
-    new_map_name = str(
-        GetEngine().GetCurrentWorldInfo().GetMapName()
-    ).casefold()
-    if new_map_name in (map_name, loader_map_name):
-        return True
+def _TryNewMap() -> None:
+    new_map_name = str(GetEngine().GetCurrentWorldInfo().GetMapName())
+    new_map_name = new_map_name.casefold()
+    if new_map_name in (map_name, loader_map_name, fake_map_name):
+        return
 
     def wait_missiontracker(new_map_name: str = new_map_name) -> bool:
-        if get_pc().WorldInfo.GRI and get_pc().WorldInfo.GRI.MissionTracker:
+        gri = get_pc().WorldInfo.GRI
+        if gri and gri.MissionTracker:
             MapChanged(new_map_name)
             return False
         return True
 
     tick_while(wait_missiontracker)
 
+
+def MapChanged(new_map_name: str) -> None:
+    global map_name
+    if map_name != menu_map_name:
+        for map_dropper in MapDropper.Registrants("*", map_name):
+            map_dropper.exited_map()
+
+    map_name = new_map_name
+    if map_name == menu_map_name:
+        options.ShowSeedOptions()
+    else:
+        options.HideSeedOptions()
+        for map_dropper in MapDropper.Registrants("*", map_name):
+            map_dropper.entered_map()
+
+
+def _TeleportPlayer(_c: UObject, _f: UFunction, _p: FStruct) -> bool:
+    _TryNewMap()
+    return True
+
+
+def _SetPawnLocation(_c: UObject, _f: UFunction, _p: FStruct) -> bool:
+    if is_client():
+        _TryNewMap()
     return True
 
 
@@ -449,10 +467,6 @@ def _SetGameType(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     ):
         MapChanged(menu_map_name)
     return True
-
-
-# def _PostCommitMapChange(caller: UObject, _f: UFunction, params: FStruct) -> bool:
-#     return True
 
 
 class Behavior(RegistrantDropper):
