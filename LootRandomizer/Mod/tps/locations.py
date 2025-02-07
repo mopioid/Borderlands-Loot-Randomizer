@@ -2095,7 +2095,7 @@ Locations: Sequence[locations.Location] = (
     Enemy("Grandson of Flamey", Pawn("PawnBalance_GrandsonFlamey")),
     Enemy("Badass Kraggon", Pawn("PawnBalance_ElementalSpitterBadass"), tags=Tag.VeryRareEnemy),
     Enemy("Phonic Kraggon", Pawn("PawnBalance_ElementalPhonic"), tags=Tag.RareEnemy),
-    Mission("Land Among the Stars", MissionDefinition("GD_Co_Motivation.M_Motivation")),
+    Mission("Land Among the Stars", MissionDefinition("GD_Co_Motivation.M_Motivation"), tags=Tag.Freebie),
     Mission("Follow Your Heart", MissionDefinition("GD_Co_FollowYourHeart.M_FollowYourHeart"), tags=Tag.LongMission),
     Enemy("Delivery Confirmationist", Pawn("PawnBalance_ScavAccepterDude"), mission="Follow Your Heart"),
     Enemy("Pumpkin Scav",

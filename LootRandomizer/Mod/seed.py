@@ -141,6 +141,8 @@ class Seed:
         if AppliedSeed:
             AppliedSeed.unapply()
 
+        missions.playthrough_delegate.playthrough = 2
+
         AppliedSeed = self
         AppliedTags = self.tags
 
@@ -194,7 +196,7 @@ class Seed:
             location.update_hint()
             location.toggle_hint(True)
 
-        for location in Locations:
+        for location in self.locations:
             location.enable()
 
         self.generate_tracker()

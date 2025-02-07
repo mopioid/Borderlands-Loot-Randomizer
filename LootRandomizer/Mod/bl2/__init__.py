@@ -5,8 +5,8 @@ from typing import Callable, List, Optional
 from unrealsdk import UObject
 
 
-CurrentVersion = 6
-SupportedVersions = (1, 2, 3, 4, 5, 6)
+CurrentVersion = 7
+SupportedVersions = (1, 2, 3, 4, 5, 6, 7)
 
 
 class Character(enum.Enum):
@@ -76,6 +76,7 @@ class Tag(enum.IntFlag):
     EnableHints = enum.auto()
 
     VehicleMission = enum.auto()
+    Freebie = enum.auto()
 
     Excluded = 0x1 << 36
 
@@ -139,6 +140,7 @@ for tag, category, default, caption, description in (
     (Tag.Raid,               Category.Other,    False, "Raids",                "Assign items to locations that are a part of raids. Raid locations drop many loot instances guaranteed."),
     (Tag.MissionLocation,    Category.Other,    False, "Mission Locations",    "Assign items to locations that are only available while doing (or re-doing) a mission."),
     (Tag.Vendor,             Category.Other,    False, "Special Vendors",      "Assign items to unique vendors to be purchasable with Seraph Crystals or Torgue Tokens."),
+    (Tag.Freebie,            Category.Other,    True,  "Freebies",             "Assign items to locations that require zero combat."),
     (Tag.Miscellaneous,      Category.Other,    True,  "Miscellaneous",        "Assign items to miscellaneous loot locations (boxes that give unique items, etcetera)."),
 
     (Tag.DuplicateItems,     Category.Settings, False, "Duplicate Items",      "For seeds with more locations than items, random items can have multiple locations."),

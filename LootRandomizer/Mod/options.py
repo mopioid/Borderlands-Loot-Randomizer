@@ -40,7 +40,8 @@ def _LoadSeeds() -> Sequence[str]:
             Log(f"Could not open seeds file at {seeds_file}")
             return ("",)
     else:
-        open(seeds_file, "w")
+        with open(seeds_file, "w"):
+            pass
 
     listed_seeds: List[str] = []
     with open(seeds_file) as file:

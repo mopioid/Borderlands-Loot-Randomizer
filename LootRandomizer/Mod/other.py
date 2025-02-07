@@ -20,10 +20,15 @@ def Enable() -> None:
         _Behavior_AttachItems,
     )
     RunHook(
-        "WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor",
+        "WillowGame.Behavior_GFxMoviePlay.ApplyBehaviorToContext",
         "LootRandomizer",
-        _PopulationFactoryVendingMachine,
+        _Behavior_GFxMoviePlay,
     )
+    # RunHook(
+    #     "WillowGame.PopulationFactoryVendingMachine.CreatePopulationActor",
+    #     "LootRandomizer",
+    #     _PopulationFactoryVendingMachine,
+    # )
 
 
 def Disable() -> None:
@@ -72,13 +77,15 @@ class VendingMachine(RegistrantDropper):
         self.conditional = conditional
         super().__init__(path)
 
-    def inject(self, balance: UObject) -> None:
-        if self.conditional:
-            conditional = FindObject(
-                "AttributeExpressionEvaluator", self.conditional
-            )
-            if conditional:
-                conditional.Expression.ConstantOperand2 = -1
+    def inject(self, machine: UObject) -> None:
+        item = self.location.item
+
+        if not item:
+            return  # TODO
+
+        current_loot = tuple(machine.Loot[0].ItemAttachments)
+        if len(current_loot) > 1 and current_loot[0].ItemPool == item.pool:
+            return
 
         pool = self.location.prepare_pools(1)[0]
 
@@ -89,8 +96,11 @@ class VendingMachine(RegistrantDropper):
 
         do_next_tick(revert)
 
-        balance.DefaultLoot[0].ItemAttachments[0].ItemPool = pool
-        balance.DefaultLoot[1].ItemAttachments[0].ItemPool = pool
+        machine.Loot[0].ItemAttachments[0].ItemPool = pool
+        machine.Loot[1].ItemAttachments[0].ItemPool = pool
+
+        machine.ClearInventory()
+        machine.GenerateInventory()
 
 
 class Attachment(RegistrantDropper):
@@ -117,7 +127,8 @@ class Attachment(RegistrantDropper):
         obj_attachments = tuple(obj.Loot[self.configuration].ItemAttachments)
 
         attachments = (
-            self.attachments if len(self.attachments)
+            self.attachments
+            if len(self.attachments)
             else tuple(range(len(obj_attachments)))
         )
         pools = self.location.prepare_pools(len(attachments))
@@ -139,14 +150,22 @@ class PositionalChest(Attachment):
     map_name: str
     position: Tuple[int, int, int]
 
-    def __init__(self, path: str, map_name: str, x: int, y: int, z: int) -> None:
+    def __init__(
+        self, path: str, map_name: str, x: int, y: int, z: int
+    ) -> None:
         self.map_name = map_name.casefold()
         self.position = x, y, z
         super().__init__(path, configuration=0)
 
     def should_inject(self, obj: UObject) -> bool:
-        position = int(obj.Location.X), int(obj.Location.Y), int(obj.Location.Z)
-        return position == self.position and locations.map_name == self.map_name
+        position = (
+            int(obj.Location.X),
+            int(obj.Location.Y),
+            int(obj.Location.Z),
+        )
+        return (
+            position == self.position and locations.map_name == self.map_name
+        )
 
 
 def _Behavior_AttachItems(
@@ -169,14 +188,32 @@ def _Behavior_AttachItems(
     return True
 
 
-def _PopulationFactoryVendingMachine(
+def _Behavior_GFxMoviePlay(
     caller: UObject, _f: UFunction, params: FStruct
 ) -> bool:
-    balance = params.Opportunity.PopulationDef.ActorArchetypeList[
-        0
-    ].SpawnFactory.ObjectBalanceDefinition
-    if balance:
-        vendors = VendingMachine.Registrants(balance)
-        if vendors:
-            next(iter(vendors)).inject(balance)
+    machine = params.SelfObject
+    if not (machine and machine.Class.Name == "WillowVendingMachine"):
+        return True
+
+    balance = machine.BalanceDefinitionState.BalanceDefinition
+    if not balance:
+        return True
+
+    vendors = VendingMachine.Registrants(balance)
+    if vendors:
+        next(iter(vendors)).inject(machine)
+
     return True
+
+
+# def _PopulationFactoryVendingMachine(
+#     caller: UObject, _f: UFunction, params: FStruct
+# ) -> bool:
+#     balance = params.Opportunity.PopulationDef.ActorArchetypeList[
+#         0
+#     ].SpawnFactory.ObjectBalanceDefinition
+#     if balance:
+#         vendors = VendingMachine.Registrants(balance)
+#         if vendors:
+#             next(iter(vendors)).inject(balance)
+#     return True

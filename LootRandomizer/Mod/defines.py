@@ -32,7 +32,7 @@ BL2 = Game.GetCurrent() is Game.BL2
 TPS = Game.GetCurrent() is Game.TPS
 
 if TYPE_CHECKING:
-    from .tps import *
+    from .bl2 import *
 elif BL2:
     from .bl2 import *
 elif TPS:
