@@ -116,11 +116,16 @@ class Seed:
 
     @classmethod
     def Default(cls) -> Seed:
-        player_save_dir = (
+        player_save_dir = os.path.basename(
             get_pc().OnlineSub.PlayerInterface.ObjectPointer.ProfileDataDirectory
         )
-        player_id = int(os.path.basename(player_save_dir)) & (2**30 - 1)
-        return cls.Generate(Tag(2**36 - 1), value=player_id)
+
+        try:
+            player_id = int(player_save_dir)
+        except:
+            player_id = int(player_save_dir, 16)
+
+        return cls.Generate(Tag(2**36 - 1), value=player_id & (2**30 - 1))
 
     def apply(self) -> None:
         global AppliedSeed, AppliedTags

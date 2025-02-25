@@ -7,8 +7,7 @@ LootRandomizer/BL2 Seeds/**
 LootRandomizer/TPS Seeds
 LootRandomizer/TPS Seeds/**
 LootRandomizer.zip
-Changelog.txt
-LootRandomizer/locations wiki.txt
-LootRandomizer/items wiki.txt
 Changelog.md
+LootRandomizer/Mod/*/locations.md
+LootRandomizer/Mod/*/items.md
 .vscode

@@ -52,7 +52,7 @@ class Other(Location):
 
         if not (self.tags & ContentTags):
             self.tags |= Tag.BaseGame
-        if not (self.tags & OtherTags):
+        if not (self.tags & (OtherTags ^ Tag.Freebie)):
             self.tags |= Tag.Miscellaneous
 
         if not self.specified_rarities:
