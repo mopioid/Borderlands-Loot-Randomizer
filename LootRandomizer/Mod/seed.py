@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unrealsdk import Log
 
-from Mods import ModMenu
-
 from .defines import *
 
 from . import options, items, hints, enemies, missions
@@ -84,13 +82,17 @@ class Seed:
         self.string = string
 
     @classmethod
-    def Generate(cls, tags: Tag, version: int = CurrentVersion) -> Seed:
-        value = random.getrandbits(30) << 42
-        value |= tags.value << 6
-        value |= version
+    def Generate(
+        cls,
+        tags: Tag,
+        version: int = CurrentVersion,
+        value: Optional[int] = None,
+    ) -> Seed:
+        if not value:
+            value = random.getrandbits(30)
 
+        value = (value << 42) | (tags.value << 6) | version
         data = value.to_bytes(length=9, byteorder="big")
-
         return cls(data, version, tags, _stringify(data))
 
     @classmethod
@@ -111,6 +113,14 @@ class Seed:
         tags = (2**36 - 1) & (value >> 6)
 
         return cls(data, version, Tag(tags), _stringify(data))
+
+    @classmethod
+    def Default(cls) -> Seed:
+        player_save_dir = (
+            get_pc().OnlineSub.PlayerInterface.ObjectPointer.ProfileDataDirectory
+        )
+        player_id = int(os.path.basename(player_save_dir)) & (2**30 - 1)
+        return cls.Generate(Tag(2**36 - 1), value=player_id)
 
     def apply(self) -> None:
         global AppliedSeed, AppliedTags

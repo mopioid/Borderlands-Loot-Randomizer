@@ -29,25 +29,28 @@ OwnedContent = Tag.BaseGame
 
 
 def _LoadSeeds() -> Sequence[str]:
+    listed_seeds: List[str] = ["Default"]
+
     if not os.path.exists(seeds_dir):
         os.mkdir(seeds_dir)
     elif not os.path.isdir(seeds_dir):
         Log(f"Could not open seeds directory at {seeds_dir}")
-        return ("",)
+        return listed_seeds
 
     if os.path.exists(seeds_file):
         if not os.path.isfile(seeds_file):
             Log(f"Could not open seeds file at {seeds_file}")
-            return ("",)
+            return listed_seeds
     else:
         with open(seeds_file, "w"):
             pass
 
-    listed_seeds: List[str] = []
+    default_seed_string = Seed.Default().string
+
     with open(seeds_file) as file:
         for line in file:
             line = line.strip()
-            if line == "":
+            if line == "" or line == default_seed_string:
                 continue
 
             try:
@@ -59,7 +62,7 @@ def _LoadSeeds() -> Sequence[str]:
             if listed_seed.string not in listed_seeds:
                 listed_seeds.append(listed_seed.string)
 
-    return listed_seeds if listed_seeds else ("",)
+    return listed_seeds
 
 
 def _PrepareSelectSeed() -> None:
@@ -71,7 +74,7 @@ def _PrepareSelectSeed() -> None:
     if seed.AppliedSeed:
         seed.AppliedSeed.unapply()
 
-    _SeedsList.CurrentValue = _SeedsList.Choices[0]
+    _SeedsList.CurrentValue = _SeedsList.StartingValue
 
 
 def _SeedApplied() -> None:
@@ -138,7 +141,10 @@ def _NewSeedGenerateClicked() -> None:
 
 
 def _SelectSeedApplyClicked() -> None:
-    seed = Seed.FromString(_SeedsList.LootRandomizer_staged)
+    if _SeedsList.LootRandomizer_staged == _SeedsList.StartingValue:
+        seed = Seed.Default()
+    else:
+        seed = Seed.FromString(_SeedsList.LootRandomizer_staged)
 
     try:
         seed.apply()
@@ -347,17 +353,17 @@ class SeedListSpinner(ModMenu.Options.Spinner):
         super().__init__(
             Caption="Seed",
             Description="",
-            StartingValue=choices[0],
+            StartingValue="Default",
             Choices=choices,
         )
-        self.LootRandomizer_staged = choices[0]
+        self.LootRandomizer_staged = self.StartingValue
 
     @property
     def CurrentValue(self) -> str:
         if _CurrentSeed.CurrentValue in self.Choices:
             return _CurrentSeed.CurrentValue
         else:
-            return _LoadSeeds()[0]
+            return self.StartingValue
 
     @CurrentValue.setter
     def CurrentValue(self, value: str) -> None:
@@ -522,6 +528,10 @@ class SeedOption(ModMenu.Options.Spinner):
 
 
 def Enable():
+    default_seed = seed.Seed.Default()
+    if default_seed.string not in _SeedsList.Choices:
+        SaveSeedString(default_seed.string)
+
     global OwnedContent
     for tag in Tag:
         if not tag in ContentTags:
@@ -536,16 +546,20 @@ def Enable():
             if dlc_path and bool(dlc.CanUse()):
                 OwnedContent |= tag
 
-    if _CurrentSeed.CurrentValue not in _SeedsList.Choices:
-        _CurrentSeed.CurrentValue = ""
-
-    if _CurrentSeed.CurrentValue != "":
+    if (
+        _CurrentSeed.CurrentValue in _SeedsList.Choices
+        and _CurrentSeed.CurrentValue != _SeedsList.StartingValue
+    ):
         selected_seed = Seed.FromString(_SeedsList.CurrentValue)
-        try:
-            selected_seed.apply()
-            _SeedApplied()
-        except ValueError as error:
-            Log(error)
+    else:
+        _CurrentSeed.CurrentValue = _SeedsList.StartingValue
+        selected_seed = default_seed
+
+    try:
+        selected_seed.apply()
+        _SeedApplied()
+    except ValueError as error:
+        Log(error)
 
     categories: Dict[str, List[Tag]] = dict()
     for tag in TagList:
