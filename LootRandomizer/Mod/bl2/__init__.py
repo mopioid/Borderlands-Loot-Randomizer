@@ -140,7 +140,7 @@ for tag, category, default, caption, description in (
     (Tag.Raid,               Category.Other,    False, "Raids",                "Assign items to locations that are a part of raids. Raid locations drop many loot instances guaranteed."),
     (Tag.MissionLocation,    Category.Other,    False, "Mission Locations",    "Assign items to locations that are only available while doing (or re-doing) a mission."),
     (Tag.Vendor,             Category.Other,    False, "Special Vendors",      "Assign items to unique vendors to be purchasable with Seraph Crystals or Torgue Tokens."),
-    (Tag.Freebie,            Category.Other,    True,  "Freebies",             "Assign items to locations that require zero combat."),
+    (Tag.Freebie,            Category.Other,    True,  "Freebies",             "Assign items to locations that don't involve any enemies."),
     (Tag.Miscellaneous,      Category.Other,    True,  "Miscellaneous",        "Assign items to miscellaneous loot locations (boxes that give unique items, etcetera)."),
 
     (Tag.DuplicateItems,     Category.Settings, False, "Duplicate Items",      "For seeds with more locations than items, random items can have multiple locations."),
@@ -168,6 +168,9 @@ for tag, category, default, caption, description in (
 
 class Hint(str, enum.Enum):
     formatter: Callable[[str], str]
+
+    def __str__(self) -> str:
+        return self.value
 
     Dud = "Nothing"
 

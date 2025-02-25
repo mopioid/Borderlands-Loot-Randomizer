@@ -109,7 +109,6 @@ def SaveSeedString(seed_string: str) -> None:
 
 
 def _NewSeedGenerateClicked() -> None:
-    # TODO: not saving new seed selection to settings
     tags = Tag(0)
 
     for option in _NewSeedOptions.Children:

@@ -8,6 +8,7 @@ from .. import locations
 from ..locations import Behavior, Dropper, MapDropper
 from ..enemies import Enemy, Pawn
 from ..missions import (
+    PlaythroughDelegate,
     Mission,
     MissionDefinition,
     MissionTurnIn,
@@ -204,7 +205,7 @@ class HolidayEvents(MapDropper):
 
         caller.FastTravelClip.SendLocationData(
             travels,
-            caller.LocationStationStrings,
+            list(caller.LocationStationStrings),
             caller.InitialSelectionIndex,
             waypoint_index,
         )
@@ -389,6 +390,7 @@ class PumpkinBarrel(MapDropper):
 
 
 class LastRequests(MissionDropper, MapDropper):
+    # TODO: reward door not opening on repeat
     paths = ("Deadsurface_P",)
 
     def entered_map(self) -> None:
@@ -1922,6 +1924,7 @@ def _mutate_rarities(original_rarities: Sequence[int]) -> List[int]:
 class MutatorMissionDefinition(MissionDefinition):
     def inject(self, mission_data: FStruct) -> None:
         original_rarities = self.location.rarities
+        Log(original_rarities)
         rarities = _mutate_rarities(original_rarities)
         if rarities[-1] < 50:
             rarities.pop()
@@ -1935,6 +1938,7 @@ class MutatorMissionDefinition(MissionDefinition):
 
 class MutatorChest(Attachment):
     def inject(self, obj: UObject) -> None:
+        Log("Injecting MutatorChest")
         original_rarities = self.location.rarities
         rarities = _mutate_rarities(original_rarities)
 
@@ -2085,12 +2089,13 @@ class HolodomeScientists(MapDropper):
 # fmt: off
 
 Locations: Sequence[locations.Location] = (
+    Other("Playthrough Delegate", PlaythroughDelegate(), tags=Tag.Excluded),
     Other("Loyalty Rewards", LoyaltyRewards(), tags=Tag.Excluded),
     Other("Holiday Events", HolidayEvents(), tags=Tag.Excluded),
     Other("World Uniques", WorldUniques(), tags=Tag.Excluded),
 
     Mission("Lost Legion Invasion", MissionTurnIn("GD_Co_Chapter01.M_CH01b_MoonShot"), tags=Tag.Excluded),
-    Mission("Tales from Elpis", MissionDefinition("GD_Co_TalesFromElpis.M_TalesFromElpis")),
+    Mission("Tales from Elpis", MissionDefinition("GD_Co_TalesFromElpis.M_TalesFromElpis"), tags=Tag.Freebie),
     Enemy("Son of Flamey", Pawn("PawnBalance_SonFlamey")),
     Enemy("Grandson of Flamey", Pawn("PawnBalance_GrandsonFlamey")),
     Enemy("Badass Kraggon", Pawn("PawnBalance_ElementalSpitterBadass"), tags=Tag.VeryRareEnemy),

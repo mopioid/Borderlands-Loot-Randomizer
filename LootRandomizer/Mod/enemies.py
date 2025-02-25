@@ -80,7 +80,6 @@ class Pawn(RegistrantDropper):
         if self.transform is not None:
             return self.transform == pawn.TransformType
 
-        # TODO test in BL2
         if self.evolved == pawn.TransformType:
             evolved_tag = getattr(Tag, "EvolvedEnemy", Tag.Excluded)
             return not (seed.AppliedTags & evolved_tag)

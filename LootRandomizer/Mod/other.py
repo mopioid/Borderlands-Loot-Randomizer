@@ -81,7 +81,8 @@ class VendingMachine(RegistrantDropper):
         item = self.location.item
 
         if not item:
-            return  # TODO
+            machine.ClearInventory()
+            return
 
         current_loot = tuple(machine.Loot[0].ItemAttachments)
         if len(current_loot) > 1 and current_loot[0].ItemPool == item.pool:
@@ -179,7 +180,8 @@ def _Behavior_AttachItems(
     if not balance:
         return True
 
-    attachments = Attachment.Registrants(balance.Name)
+    balance_name = UObject.PathName(balance).split(".")[-1]
+    attachments = Attachment.Registrants(balance_name)
     for attachment in attachments:
         if attachment.should_inject(obj):
             attachment.inject(obj)

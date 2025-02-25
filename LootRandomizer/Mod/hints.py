@@ -80,13 +80,16 @@ def Enable() -> None:
     inventory_template = construct_object(original, "Hint_Inventory_Default")
     padding = construct_object(original, padding_pool)
 
-    manufacturer = (
-        FindObject(
-            "ManufacturerDefinition",
-            "GD_Currency.Manufacturers.Cash_Manufacturer",
-        ),
+    manufacturer = FindObject(
+        "ManufacturerDefinition",
+        "GD_Currency.Manufacturers.Cash_Manufacturer",
     )
-    inventory_template.Manufacturers = ((manufacturer),)
+    inventory_template.Manufacturers = [(manufacturer, [()])]
+    grade = inventory_template.Manufacturers[0].Grades[0]  # type: ignore
+    grade.GradeModifiers = (1, None)
+    grade.GameStageRequirement = (1, 100)
+    grade.MinSpawnProbabilityModifier = (0.5, None, None, 1)
+    grade.MaxSpawnProbabilityModifier = (1, None, None, 1)
 
     original = FindObject(
         "UsableItemDefinition", "GD_BuffDrinks.A_Item.BuffDrink_Toughness"

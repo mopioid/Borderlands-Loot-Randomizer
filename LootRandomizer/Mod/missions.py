@@ -50,12 +50,7 @@ class PlaythroughDelegate(MapDropper):
         self.playthrough = 2
 
 
-playthrough_delegate = PlaythroughDelegate()
-
-
 def Enable() -> None:
-    playthrough_delegate.enable()
-
     RunHook(
         "WillowGame.WillowPlayerController.AcceptMission",
         "LootRandomizer",
@@ -91,8 +86,6 @@ def Enable() -> None:
 
 
 def Disable() -> None:
-    playthrough_delegate.disable()
-
     RemoveHook(
         "WillowGame.WillowPlayerController.AcceptMission",
         "LootRandomizer",
@@ -289,6 +282,8 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
             self.reward.ExperienceRewardPercentage.BaseValueScaleConstant
         )
 
+        self.repeatable = self.uobject.bRepeatable
+
         self.prepare_attributes()
 
     def disable(self) -> None:
@@ -301,8 +296,6 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
         self.revert_attributes()
 
     def prepare_attributes(self) -> None:
-        self.repeatable = self.uobject.bRepeatable
-
         self.mission_weapon = self.uobject.MissionWeapon
         if self.mission_weapon and self.block_weapon:
             KeepAlive(self.mission_weapon)
@@ -325,8 +318,7 @@ class MissionDefinition(MissionDropper, RegistrantDropper):
                 self.uobject.NextMissionInChain = None
 
     def revert_attributes(self) -> None:
-        if seed.AppliedSeed and self.location in seed.AppliedSeed.locations:
-            self.uobject.bRepeatable = self.repeatable
+        self.uobject.bRepeatable = self.repeatable
 
         if self.mission_weapon and self.block_weapon:
             self.uobject.MissionWeapon = self.mission_weapon
@@ -543,9 +535,6 @@ class MissionGiver(MissionObject):
                 directives = convert_struct(giver.MissionDirectives)
                 directives.append((missiondef, self.begins, self.ends, 0))
                 giver.MissionDirectives = directives
-
-            if not is_client():
-                get_missiontracker().RegisterMissionDirector(giver)
         else:
             directives = tuple(
                 convert_struct(directive)
@@ -553,8 +542,6 @@ class MissionGiver(MissionObject):
                 if directive.MissionDefinition != missiondef
             )
             giver.MissionDirectives = directives
-            if not is_client() and not len(directives):
-                get_missiontracker().UnregisterMissionDirector(giver)
 
         return giver
 

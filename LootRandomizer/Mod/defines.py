@@ -126,11 +126,15 @@ def set_command(uobject: UObject, attribute: str, value: str):
 
 
 def convert_struct(fstruct: Any) -> Any:
-    iterator: Optional[Iterator[UObject]] = None
+    iterator: Optional[Iterator[Any]] = None
     try:
         iterator = iter(fstruct)
+        int(fstruct)
     except:
         pass
+    else:
+        iterator = None
+
     if iterator:
         return [convert_struct(value) for value in iterator]
 

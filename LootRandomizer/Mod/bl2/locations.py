@@ -18,6 +18,7 @@ from ..enemies import Enemy, Pawn
 from ..items import ItemPool
 from ..locations import Behavior, Dropper, MapDropper, PreventDestroy
 from ..missions import (
+    PlaythroughDelegate,
     Mission,
     MissionDropper,
     MissionDefinition,
@@ -32,7 +33,6 @@ from ..other import Attachment, Other, VendingMachine
 
 
 class MarketingBonuses(Dropper):
-    # TODO broken!
     def enable(self) -> None:
         super().enable()
 
@@ -255,21 +255,18 @@ class Leviathan(MapDropper):
 
 class MonsterTruckDriver(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
-        if (
-            UObject.PathName(pawn.MySpawnPoint)
-            != "Iris_Hub2_Combat.TheWorld:PersistentLevel.WillowPopulationPoint_52"
-        ):
-            return False
-        pawn.DoesVehicleAllowMeToDropLoot = True
-        return True
+        return (
+            pawn.MySpawnPoint
+            and UObject.PathName(pawn.MySpawnPoint)
+            == "Iris_Hub2_Combat.TheWorld:PersistentLevel.WillowPopulationPoint_52"
+        )
 
 
 class PetesBurner(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
-        # TODO: more accurate burner designation
         return (
             pawn.Allegiance.Name == "Iris_Allegiance_DragonGang"
-            and locations.map_name == "Iris_DL2_P".casefold()
+            and locations.map_name != "Iris_DL2_Interior_P".casefold()
         )
 
 
@@ -287,9 +284,10 @@ def _spawn_midget(caller: UObject, _f: UFunction, params: FStruct) -> bool:
 
 class Midget(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
-        return (UObject.PathName(pawn) not in _doctorsorders_midgets) and (
-            UObject.PathName(pawn.MySpawnPoint)
-            != "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
+        return UObject.PathName(pawn) not in _doctorsorders_midgets and not (
+            pawn.MySpawnPoint
+            and UObject.PathName(pawn.MySpawnPoint)
+            == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
         )
 
 
@@ -301,7 +299,8 @@ class DoctorsOrdersMidget(Pawn):
 class SpaceCowboyMidget(Pawn):
     def should_inject(self, pawn: UObject) -> bool:
         return (
-            UObject.PathName(pawn.MySpawnPoint)
+            pawn.MySpawnPoint
+            and UObject.PathName(pawn.MySpawnPoint)
             == "OldDust_Mission_Side.TheWorld:PersistentLevel.WillowPopulationPoint_26"
         )
 
@@ -401,22 +400,6 @@ class DigiEnemy(Enemy):
         )
 
 
-class DocMercy(MissionGiver):
-    def __init__(self) -> None:
-        super().__init__(
-            "Frost_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_413.MissionDirectivesDefinition_0",
-            False,
-            False,
-            "Frost_P",
-        )
-
-    def apply(self) -> Optional[UObject]:
-        giver = super().apply()
-        if not is_client():
-            get_missiontracker().UnregisterMissionDirector(giver)
-        return giver
-
-
 class Loader1340(MissionDropper, MapDropper):
     paths = ("dam_p",)
 
@@ -484,8 +467,8 @@ class McShooty(MissionStatusDelegate, MapDropper):
                 and pawn.AIClass
                 and pawn.AIClass.Name == "CharClass_Shootyface"
             ):
-                pawn.bHidden = True
-                pawn.CollisionType = 1
+                pawn.SetHidden(True)
+                pawn.SetCollisionType(1)
 
     def entered_map(self) -> None:
         destroyreal = FindObject(
@@ -633,6 +616,7 @@ class WrittenByTheVictor(MapDropper):
 
 
 class ARealBoy(MapDropper):
+    # TODO: fix mal not spawning during/after talon of god + real boy
     paths = ("Ash_P",)
 
     def entered_map(self) -> None:
@@ -715,7 +699,8 @@ class MessageInABottle(MissionStatusDelegate, MapDropper):
     def accepted(self) -> None:
         for chest in FindAll("WillowInteractiveObject"):
             if (
-                UObject.PathName(chest.InteractiveObjectDefinition)
+                chest.InteractiveObjectDefinition
+                and UObject.PathName(chest.InteractiveObjectDefinition)
                 == "GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot"
             ):
                 missiondef = self.location.mission_definition.uobject
@@ -980,8 +965,6 @@ class Sirentology(MapDropper):
                 ai_bpd = pawn.AIClass.AIDef.BehaviorProviderDefinition
                 kernel = get_behaviorkernel()
 
-                sequence = ai_bpd.BehaviorSequences[23]
-                sequence.CustomEnableCondition.bComplete = True
                 kernel.ChangeBehaviorSequenceActivationStatus(
                     handle, ai_bpd, "S050_GiveMission", 1
                 )
@@ -1023,26 +1006,40 @@ class MichaelMamaril(MapDropper):
     paths = ("Sanctuary_P",)
 
     def entered_map(self) -> None:
-        switch = FindObject(
-            "SeqAct_RandomSwitch",
-            "Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
+        # switch = FindObject(
+        #     "SeqAct_RandomSwitch",
+        #     "Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
+        # )
+        # if not switch:
+        #     raise Exception("Could not locate switch for Michael Mamaril")
+        # switch.LinkCount = 1
+        # TODO: test
+        get_pc().ConsoleCommand(
+            "set"
+            " Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0"
+            " LinkCount"
+            " 2"
         )
-        if not switch:
-            raise Exception("Could not locate switch for Michael Mamaril")
-        switch.LinkCount = 2
 
 
 class MichaelMAirmaril(MapDropper):
     paths = ("SanctuaryAir_P",)
 
     def entered_map(self) -> None:
-        switch = FindObject(
-            "SeqAct_RandomSwitch",
-            "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
+        # switch = FindObject(
+        #     "SeqAct_RandomSwitch",
+        #     "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
+        # )
+        # if not switch:
+        #     raise Exception("Could not locate switch for Michael Mamaril")
+        # switch.LinkCount = 1
+
+        get_pc().ConsoleCommand(
+            "set "
+            "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0"
+            "LinkCount "
+            "2"
         )
-        if not switch:
-            raise Exception("Could not locate switch for Michael Mamaril")
-        switch.LinkCount = 2
 
 
 class DahlAbandonGrave(MapDropper):
@@ -1081,6 +1078,7 @@ class ButtstallionWithAmulet(MapDropper):
 # fmt: off
 
 Locations: Sequence[locations.Location] = (
+    Other("Playthrough Delegate", PlaythroughDelegate(), tags=Tag.Excluded),
     Other("Marketing Bonuses", MarketingBonuses(), tags=Tag.Excluded),
 
     Enemy("Knuckle Dragger", Pawn("PawnBalance_PrimalBeast_KnuckleDragger")),
@@ -1118,12 +1116,12 @@ Locations: Sequence[locations.Location] = (
     Enemy("Assassin Rouf", Pawn("PawnBalance_Assassin4"), tags=Tag.SlowEnemy),
     Mission("Medical Mystery", MissionDefinition("GD_Z3_MedicalMystery.M_MedicalMystery")),
     Enemy("Doc Mercy", Pawn("PawnBalance_MrMercy")),
-    Mission("Medical Mystery: X-Com-municate",
-        MissionDefinition("GD_Z3_MedicalMystery2.M_MedicalMystery2"),
+    Mission("Medical Mystery: X-Com-municate", MissionDefinition("GD_Z3_MedicalMystery2.M_MedicalMystery2"),
         MissionGiver("GD_Zed.Character.Pawn_Zed:MissionDirectivesDefinition_1", True, True, "Sanctuary_P", "SanctuaryAir_P"),
+        MissionGiver("Frost_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_413.MissionDirectivesDefinition_0", False, False, "Frost_P"),
         XCom(),
-        DocMercy(),
     tags=Tag.LongMission),
+    # TODO: Fix residual "!" above Mercy corpse
     Mission("No Vacancy", MissionDefinition("GD_Z1_NoVacancy.BalanceDefs.M_NoVacancy"),
         MissionGiver("Frost_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_32.MissionDirectivesDefinition_0", True, True, "Frost_P")
     ),
@@ -1250,7 +1248,7 @@ Locations: Sequence[locations.Location] = (
     Mission("Slap-Happy", MissionDefinition("GD_Z2_SlapHappy.M_SlapHappy")),
     Enemy("Old Slappy", Pawn("PawnBalance_Slappy")),
     Mission("Hidden Journals", MissionDefinition("GD_Z3_HiddenJournals.M_HiddenJournals")),
-    Mission("Torture Chairs", MissionDefinition("GD_Z1_HiddenJournalsFurniture.M_HiddenJournalsFurniture")),
+    Mission("Torture Chairs", MissionDefinition("GD_Z1_HiddenJournalsFurniture.M_HiddenJournalsFurniture"), tags=Tag.Freebie),
     Mission("Arms Dealing", MissionDefinition("GD_Z2_ArmsDealer.M_ArmsDealer"), tags=Tag.VehicleMission),
     Mission("Stalker of Stalkers", MissionDefinition("GD_Z2_TaggartBiography.M_TaggartBiography")),
     Mission("Best Mother's Day Ever", MissionDefinition("GD_Z2_MothersDayGift.BalanceDefs.M_MothersDayGift")),
@@ -1261,7 +1259,7 @@ Locations: Sequence[locations.Location] = (
     Mission("The Overlooked: This Is Only a Test", MissionDefinition("GD_Z2_Overlooked3.M_Overlooked3"),
         MissionObject("Grass_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_48", "Grass_P"),
     ),
-    Mission("Clan War: Starting the War", MissionDefinition("GD_Z2_MeetWithEllie.M_MeetWithEllie"), tags=Tag.Freebie),
+    Mission("Clan War: Starting the War", MissionDefinition("GD_Z2_MeetWithEllie.M_MeetWithEllie")),
     Mission("Clan War: First Place", MissionDefinition("GD_Z2_RiggedRace.M_RiggedRace")),
     Mission("Clan War: Reach the Dead Drop", MissionDefinition("GD_Z2_LuckysDirtyMoney.M_FamFeudDeadDrop"), tags=Tag.Freebie),
     Mission("Clan War: End of the Rainbow", MissionDefinition("GD_Z2_LuckysDirtyMoney.M_LuckysDirtyMoney"),
@@ -1354,6 +1352,7 @@ Locations: Sequence[locations.Location] = (
     Mission("Animal Rescue: Food", MissionDefinition("GD_Z2_Skagzilla2.M_Skagzilla2_Adult")),
         # On repeat, cannot place food
     Mission("Animal Rescue: Shelter", MissionDefinition("GD_Z2_Skagzilla2.M_Skagzilla2_Den")),
+    # TODO: After completion, make grownup Dukino spawn outside doghouse + interactible + visible
         # On repeat, Dukino sotflocks already in shelter until savequit
     Mission("Hell Hath No Fury", MissionDefinition("GD_Z2_HellHathNo.M_FloodingHyperionCity")),
         # On repeat, foreman doesnt respawn
@@ -1362,7 +1361,10 @@ Locations: Sequence[locations.Location] = (
         # On repeat, third statue softlocks, not progressing to "here's your prize" enemy wave
     Enemy("Hacked Overseer", Pawn("PawnBalance_ConstructorLaserStatue"), mission="Statuesque"),
     Mission("Home Movies", MissionDefinition("GD_Z2_HomeMovies.M_HomeMovies")),
-    Mission("Written by the Victor", MissionDefinition("GD_Z2_WrittenByVictor.M_WrittenByVictor"), WrittenByTheVictor()), 
+    Mission("Written by the Victor",
+        MissionDefinition("GD_Z2_WrittenByVictor.M_WrittenByVictor"),
+        WrittenByTheVictor()
+    ),
         # On repeat, history buttons are disabled
         # After all dialog plays after first turn-in, button becomes disabled
     Enemy("BNK-3R",
@@ -1414,7 +1416,10 @@ Locations: Sequence[locations.Location] = (
         # On repeat, Mal unable to accept so many clothes
     Mission("A Real Boy: Face Time", MissionDefinition("GD_Z2_ARealBoy.M_ARealBoy_ArmLeg")),
         # On repeat, topmost two limbs (legs) do not respawn
-    Mission("A Real Boy: Human", MissionDefinition("GD_Z2_ARealBoy.M_ARealBoy_Human"), ARealBoy()),
+    Mission("A Real Boy: Human",
+        MissionDefinition("GD_Z2_ARealBoy.M_ARealBoy_Human"),
+        ARealBoy()
+    ),
         # On repeat, mal unprepared for combat
     Mission("Hyperion Slaughter: Round 1", MissionDefinition("GD_Z3_RobotSlaughter.M_RobotSlaughter_1"), tags=Tag.Slaughter),
     Mission("Hyperion Slaughter: Round 2", MissionDefinition("GD_Z3_RobotSlaughter.M_RobotSlaughter_2"), tags=Tag.Slaughter),
@@ -1424,7 +1429,10 @@ Locations: Sequence[locations.Location] = (
     Mission("The Lost Treasure", MissionDefinition("GD_Z3_LostTreasure.M_LostTreasure"),
         MissionObject("CraterLake_Dynamic.TheWorld:PersistentLevel.WillowInteractiveObject_38", "CraterLake_P"),
     tags=Tag.VeryLongMission), 
-    Mission("The Great Escape", MissionDefinition("GD_Z3_GreatEscape.M_GreatEscape"), GreatEscape()), 
+    Mission("The Great Escape",
+        MissionDefinition("GD_Z3_GreatEscape.M_GreatEscape"),
+        GreatEscape()
+    ),
         # Beacon doesnt spawn on repeat
         # Ulysses stays dead after save quit
     Mission("The Chosen One", MissionDefinition("GD_Z3_ChosenOne.M_ChosenOne")),
@@ -1442,7 +1450,7 @@ Locations: Sequence[locations.Location] = (
         # ECHO rakk doesnt respawn on repeat
     Mission("Hungry Like the Skag", MissionDefinition("GD_Z3_HungryLikeSkag.M_HungryLikeSkag")), 
     Enemy("Bone Head 2.0", Pawn("PawnBalance_BoneHead2")),
-    Enemy("Saturn", Pawn("PawnBalance_LoaderGiant")),
+    Enemy("Saturn", Pawn("PawnBalance_LoaderGiant"), tags=Tag.SlowEnemy),
     Enemy("The Warrior",
         Behavior(
             "Boss_Volcano_Combat_Monster.TheWorld:PersistentLevel.Main_Sequence.SeqAct_ApplyBehavior_16.Behavior_SpawnItems_6",
@@ -1479,7 +1487,8 @@ Locations: Sequence[locations.Location] = (
     Other("Oasis Seraph Vendor",
         VendingMachine("GD_Orchid_SeraphCrystalVendor.Balance.Balance_SeraphCrystalVendor", "GD_Orchid_SeraphCrystalVendor.VendingMachine.VendingMachine_SeraphCrystal:BehaviorProviderDefinition_0.Behavior_Conditional_1.AttributeExpressionEvaluator_20"),
     tags=Tag.PiratesBooty|Tag.Vendor),
-    Mission("Message in a Bottle (Oasis)", MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle1"),
+    Mission("Message in a Bottle (Oasis)",
+        MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle1"),
         MessageInABottle(None, "Orchid_OasisTown_P"),
     tags=Tag.PiratesBooty|Tag.Freebie), 
         # On repeat, bottle uninteractable without savequit
@@ -1495,13 +1504,15 @@ Locations: Sequence[locations.Location] = (
         # Not enough union vehicles spawn unless savequit
     Mission("Ye Scurvy Dogs", MissionDefinition("GD_Orchid_SM_Scurvy.M_Orchid_ScurvyDogs"), tags=Tag.PiratesBooty),
         # Fruits unshootable unless savequit
-    Mission("Message in a Bottle (Wurmwater)", MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle2"),
+    Mission("Message in a Bottle (Wurmwater)",
+        MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle2"),
         MessageInABottle("GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot:BehaviorProviderDefinition_2.BehaviorSequenceEnableByMission_13", "Orchid_SaltFlats_P"),
     tags=Tag.PiratesBooty), 
     Mission("Grendel", MissionDefinition("GD_Orchid_SM_Grendel.M_Orchid_Grendel"), tags=Tag.PiratesBooty),
         # Grendel doesnt respawn without savequit
     Enemy("Grendel", Pawn("PawnBalance_Orchid_Grendel"), tags=Tag.PiratesBooty),
-    Mission("Message in a Bottle (Hayter's Folly)", MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle3"),
+    Mission("Message in a Bottle (Hayter's Folly)",
+        MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle3"),
         MessageInABottle("GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot:BehaviorProviderDefinition_2.BehaviorSequenceEnableByMission_23", "Orchid_Caves_P"),
     tags=Tag.PiratesBooty), 
     Enemy("The Big Sleep", Pawn("PawnBalance_Orchid_BigSleep"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
@@ -1511,7 +1522,8 @@ Locations: Sequence[locations.Location] = (
     Enemy("Benny the Booster", Pawn("PawnBalance_Orchid_Deserter1"), tags=Tag.PiratesBooty),
     Enemy("Deckhand", Pawn("PawnBalance_Orchid_Deserter2"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
     Enemy("Toothless Terry", Pawn("PawnBalance_Orchid_Deserter3"), mission="Just Desserts for Desert Deserters"),
-    Mission("Message in a Bottle (The Rustyards)", MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle4"),
+    Mission("Message in a Bottle (The Rustyards)",
+        MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle4"),
         MessageInABottle("GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot:BehaviorProviderDefinition_2.BehaviorSequenceEnableByMission_16", "Orchid_ShipGraveyard_P"),
     tags=Tag.PiratesBooty), 
     Mission("I Know It When I See It", MissionDefinition("GD_Orchid_SM_KnowIt.M_Orchid_KnowItWhenSeeIt"), tags=Tag.PiratesBooty),
@@ -1527,7 +1539,8 @@ Locations: Sequence[locations.Location] = (
     Enemy("DJ Tanner", Pawn("PawnBalance_Orchid_PirateRadioGuy"), tags=Tag.PiratesBooty|Tag.SlowEnemy),
     Enemy("Mr. Bubbles", Pawn("PawnBalance_Orchid_Bubbles"), tags=Tag.PiratesBooty|Tag.VeryRareEnemy),
     Enemy("Lil' Sis", Behavior("GD_Orchid_LittleSis.Character.AIDef_Orchid_LittleSis:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_85"), tags=Tag.PiratesBooty|Tag.VeryRareEnemy),
-    Mission("Message In A Bottle (Magnys Lighthouse)", MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle6"),
+    Mission("Message In A Bottle (Magnys Lighthouse)",
+        MissionDefinition("GD_Orchid_SM_Message.M_Orchid_MessageInABottle6"),
         MessageInABottle("GD_Orchid_SM_Message_Data.MO_Orchid_XMarksTheSpot:BehaviorProviderDefinition_2.BehaviorSequenceEnableByMission_7", "Orchid_Spire_P"),
     tags=Tag.PiratesBooty),
     Mission("Treasure of the Sands",
@@ -1538,7 +1551,9 @@ Locations: Sequence[locations.Location] = (
     Enemy("Lieutenant White", Pawn("PawnBalance_Orchid_PirateHenchman"), mission="Treasure of the Sands"),
     Enemy("Lieutenant Hoffman", Pawn("PawnBalance_Orchid_PirateHenchman2"), mission="Treasure of the Sands"),
     Enemy("Captain Scarlett", Behavior("GD_Orchid_PirateQueen_Combat.Animation.Anim_Farewell:BehaviorProviderDefinition_0.Behavior_SpawnItems_10"), mission="Treasure of the Sands"),
-    Enemy("Leviathan", Leviathan(), mission="Treasure of the Sands"),
+    Enemy("Leviathan",
+        Leviathan(),
+    mission="Treasure of the Sands"),
     Mission("Hyperius the Invincible", MissionDefinition("GD_Orchid_Raid.M_Orchid_Raid1"), tags=Tag.PiratesBooty|Tag.Raid),
     Enemy("Hyperius the Invincible",
         Pawn("PawnBalance_Orchid_RaidEngineer"),
@@ -1566,7 +1581,6 @@ Locations: Sequence[locations.Location] = (
     Other("Torgue Vendor",
         VendingMachine("GD_Iris_TorgueTokenVendor.Balance.Balance_TorgueTokenVendor"),
     tags=Tag.CampaignOfCarnage|Tag.Vendor),
-    #TODO: Spawned in to beatdown, went to the bar, failed a mission (no badass spawns, fun), left bar and then the beatdown vendor had vanilla items
     Other("Torgue Arena Provided Loot",
         Attachment("ObjectGrade_Iris_HyperionChest", 0),
     tags=Tag.CampaignOfCarnage|Tag.Freebie),
@@ -1642,7 +1656,10 @@ Locations: Sequence[locations.Location] = (
         # Skags dont respawn without savequit
     Mission("Say That To My Face", MissionDefinition("GD_IrisDL3_PSYouSuck.M_IrisDL3_PSYouSuck"), tags=Tag.CampaignOfCarnage),
     Enemy("Anonymous Troll Face", Pawn("Iris_PawnBalance_SayFaceTroll"), mission="Say That To My Face"),
-    Mission("Commercial Appeal", CommercialAppeal(), MissionDefinition("GD_IrisDL3_CommAppeal.M_IrisDL3_CommAppeal"), tags=Tag.CampaignOfCarnage|Tag.LongMission),
+    Mission("Commercial Appeal",
+        MissionDefinition("GD_IrisDL3_CommAppeal.M_IrisDL3_CommAppeal"),
+        CommercialAppeal(),
+    tags=Tag.CampaignOfCarnage|Tag.LongMission),        
     Enemy("Piston/Badassasarus Rex",
         Pawn(
             "Iris_PawnBalance_Truckasaurus",
@@ -1755,11 +1772,15 @@ Locations: Sequence[locations.Location] = (
     Enemy("Duke of Ork",
         Pawn("PawnBalance_Orc_WarlordGrug", "PawnBalance_Orc_WarlordTurge", transform=4),
     tags=Tag.DragonKeep|Tag.EvolvedEnemy),
-    Mission("Tree Hugger", MissionDefinition("GD_Aster_TreeHugger.M_TreeHugger"), TreeHugger(), tags=Tag.DragonKeep|Tag.LongMission),
+    Mission("Tree Hugger",
+        MissionDefinition("GD_Aster_TreeHugger.M_TreeHugger"),
+        TreeHugger(),
+    tags=Tag.DragonKeep|Tag.LongMission),
     Mission("Critical Fail", MissionDefinition("GD_Aster_CriticalFail.M_CriticalFail"), tags=Tag.DragonKeep),
         # Huts dont respawn without savequit
     Enemy("Arguk the Butcher", Pawn("PawnBalance_Orc_Butcher"), mission="Critical Fail"),
-    Mission("Lost Souls", MissionDefinition("GD_Aster_DemonicSouls.M_DemonicSouls"),
+    Mission("Lost Souls",
+        MissionDefinition("GD_Aster_DemonicSouls.M_DemonicSouls"),
         LostSouls("GD_Knight_LostSoulsNPC_Proto2.Character.Pawn_Knight_LostSoulsNPC_Proto2:MissionDirectivesDefinition_1", True, True, "Dead_Forest_P"),
     tags=Tag.DragonKeep), 
         # Dark Souls guy stays revived  after completion, and also until savequit with purge
@@ -1778,6 +1799,7 @@ Locations: Sequence[locations.Location] = (
     Enemy("Unmotivated Golem", Pawn("PawnBalance_Golem_SwordInStone"), mission="The Sword in The Stoner"),
     Enemy("Warlord Turge", Pawn("PawnBalance_Orc_WarlordTurge", evolved=4), tags=Tag.DragonKeep),
     Enemy("Spiderpants", Pawn("PawnBalance_Spiderpants"), tags=Tag.DragonKeep|Tag.VeryRareEnemy|Tag.SlowEnemy, rarities=(100, 100, 50, 50)),
+    # TODO: buff spawn rate
     Enemy("Iron GOD", Pawn("PawnBalance_Golem_Badass", transform=5), tags=Tag.DragonKeep|Tag.SlowEnemy|Tag.EvolvedEnemy|Tag.Raid),
     Mission("The Beard Makes The Man", MissionDefinition("GD_Aster_ClapTrapBeard.M_ClapTrapBeard"), tags=Tag.DragonKeep|Tag.LongMission),
         # Forge doesnt reset without savequit
@@ -1813,7 +1835,10 @@ Locations: Sequence[locations.Location] = (
     Mission("Winter is a Bloody Business", MissionDefinition("GD_Aster_WinterIsComing.M_WinterIsComing"), tags=Tag.DragonKeep|Tag.LongMission),
     Enemy("Canine", Pawn("PawnBalance_Knight_Winter_Canine"), mission="Winter is a Bloody Business"),
     Enemy("Molehill", Pawn("PawnBalance_Knight_Winter_Molehill"), mission="Winter is a Bloody Business"),
-    Mission("My Dead Brother (Kill Edgar)", MissionDefinition("GD_Aster_DeadBrother.M_MyDeadBrother"), MyDeadBrother(), tags=Tag.DragonKeep|Tag.LongMission), 
+    Mission("My Dead Brother (Kill Edgar)",
+        MissionDefinition("GD_Aster_DeadBrother.M_MyDeadBrother"),
+        MyDeadBrother(),
+    tags=Tag.DragonKeep|Tag.LongMission), 
     Enemy("Edgar", Pawn("PawnBalance_Wizard_DeadBrotherEdgar"), mission="My Dead Brother (Kill Edgar)"),
     Mission("My Dead Brother (Kill Simon)", MissionTurnInAlt("GD_Aster_DeadBrother.M_MyDeadBrother"), tags=Tag.DragonKeep|Tag.LongMission), 
     Enemy("Simon", Pawn("PawnBalance_Wizard_DeadBrotherSimon"), mission="My Dead Brother (Kill Edgar)"),
@@ -1889,13 +1914,14 @@ Locations: Sequence[locations.Location] = (
             "PawnBalance_NP_Medic"
         ),
     tags=Tag.FightForSanctuary|Tag.MobFarm),
-    Mission("The Oddest Couple", MissionDefinition("GD_Anemone_Side_OddestCouple.M_Anemone_OddestCouple"),
+    Mission("The Oddest Couple",
+        MissionDefinition("GD_Anemone_Side_OddestCouple.M_Anemone_OddestCouple"),
         OddestCouple("OldDust_Mission_Side.TheWorld:PersistentLevel.WillowInteractiveObject_2", "OldDust_P"),
     tags=Tag.FightForSanctuary),
     Enemy("Pizza-Addicted Skag", Pawn("PawnBalance_Infected_Moxxi_Skag"), mission="The Oddest Couple"),
     Mission("Space Cowboy", MissionDefinition("GD_Anemone_Side_SpaceCowboy.M_Anemone_SpaceCowboy"), tags=Tag.FightForSanctuary|Tag.LongMission),
         # Midget toilet porn doesnt respawn without savequit
-    Enemy("Loot Midget (Space Cowboy)", SpaceCowboyMidget("PawnBalance_LootMidget_Marauder"), mission="Space Cowboy"),
+    Enemy("Loot Midget (Space Cowboy)", SpaceCowboyMidget("PawnBalance_LootMidget_Marauder"), mission="Space Cowboy", rarities=(50,)),
     Enemy("Sand Worm",
           Pawn("PawnBalance_SandWorm_Queen", "PawnBalance_InfectedSandWorm"),
     tags=Tag.FightForSanctuary|Tag.MobFarm),
@@ -1923,7 +1949,10 @@ Locations: Sequence[locations.Location] = (
     tags=Tag.FightForSanctuary),
         # ECHO mission giver not interactable after completion
     Mission("Paradise Found", MissionTurnIn("GD_Anemone_Plot_Mission060.M_Anemone_PlotMission060"), tags=Tag.FightForSanctuary|Tag.Excluded),
-    Mission("Sirentology", MissionDefinition("GD_Anemone_Side_Sirentology.M_Anemone_Sirentology"), Sirentology(), tags=Tag.FightForSanctuary|Tag.LongMission),
+    Mission("Sirentology",
+        MissionDefinition("GD_Anemone_Side_Sirentology.M_Anemone_Sirentology"),
+        Sirentology(),
+    tags=Tag.FightForSanctuary|Tag.LongMission),
     Mission("My Brittle Pony", MissionDefinition("GD_Anemone_Side_MyBrittlePony.M_Anemone_MyBrittlePony"), tags=Tag.FightForSanctuary|Tag.LongMission),
         # Brick and enemy waves dont respawn without savequit
     Other("Butt Stallion with Mysterious Amulet",

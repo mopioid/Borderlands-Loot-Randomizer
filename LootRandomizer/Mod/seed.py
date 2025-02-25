@@ -141,8 +141,6 @@ class Seed:
         if AppliedSeed:
             AppliedSeed.unapply()
 
-        missions.playthrough_delegate.playthrough = 2
-
         AppliedSeed = self
         AppliedTags = self.tags
 
@@ -196,7 +194,7 @@ class Seed:
             location.update_hint()
             location.toggle_hint(True)
 
-        for location in self.locations:
+        for location in Locations:
             location.enable()
 
         self.generate_tracker()
@@ -207,8 +205,8 @@ class Seed:
         AppliedTags = Tag(0)
 
         for location in Locations:
-            location.disable()
             location.item = None
+            location.disable()
 
     def generate_tracker(self) -> str:
         path = os.path.join(seeds_dir, f"{self.string}.txt")

@@ -59,7 +59,7 @@ from typing import Optional
 
 class LootRandomizer(ModMenu.SDKMod):
     Name = "Loot Randomizer"
-    Version = "1.5.2"
+    Version = "1.5.5"
     Description = "Create seeds to shuffle items into new farm locations."
     Author = "mopioid"
     SupportedGames = ModMenu.Game.BL2 | ModMenu.Game.TPS
