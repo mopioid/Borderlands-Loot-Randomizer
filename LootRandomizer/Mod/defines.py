@@ -32,7 +32,7 @@ BL2 = Game.GetCurrent() is Game.BL2
 TPS = Game.GetCurrent() is Game.TPS
 
 if TYPE_CHECKING:
-    from .bl2 import *
+    from .tps import *
 elif BL2:
     from .bl2 import *
 elif TPS:
@@ -130,7 +130,7 @@ def convert_struct(fstruct: Any) -> Any:
     try:
         iterator = iter(fstruct)
         int(fstruct)
-    except:
+    except ValueError:
         pass
     else:
         iterator = None
