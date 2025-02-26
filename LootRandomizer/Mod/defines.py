@@ -119,10 +119,11 @@ def is_client() -> UObject:
     return GetEngine().GetCurrentWorldInfo().NetMode == 3
 
 
-def set_command(uobject: UObject, attribute: str, value: str):
-    get_pc().ConsoleCommand(
-        f"set {UObject.PathName(uobject)} {attribute} {value}"
-    )
+def set_command(path: Union[str, UObject], attribute: str, value: str):
+    if not isinstance(path, str):
+        path = UObject.PathName(path)
+
+    get_pc().ConsoleCommand(f"set {path} {attribute} {value}")
 
 
 def convert_struct(fstruct: Any) -> Any:

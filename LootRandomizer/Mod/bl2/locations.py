@@ -275,7 +275,8 @@ _doctorsorders_midgets: Set[str] = set()
 
 def _spawn_midget(caller: UObject, _f: UFunction, params: FStruct) -> bool:
     if (
-        UObject.PathName(caller)
+        params.SpawnedActor
+        and UObject.PathName(caller)
         == "GD_Balance_Treasure.InteractiveObjectsTrap.MidgetHyperion.InteractiveObj_CardboardBox_MidgetHyperion:BehaviorProviderDefinition_1.Behavior_SpawnFromPopulationSystem_5"
     ):
         _doctorsorders_midgets.add(UObject.PathName(params.SpawnedActor))
@@ -1003,43 +1004,14 @@ class GrandmaStoryRaid(MapDropper):
 
 
 class MichaelMamaril(MapDropper):
-    paths = ("Sanctuary_P",)
+    paths = ("Sanctuary_P", "SanctuaryAir_P")
 
     def entered_map(self) -> None:
-        # switch = FindObject(
-        #     "SeqAct_RandomSwitch",
-        #     "Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
-        # )
-        # if not switch:
-        #     raise Exception("Could not locate switch for Michael Mamaril")
-        # switch.LinkCount = 1
-        # TODO: test
-        get_pc().ConsoleCommand(
-            "set"
-            " Sanctuary_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0"
-            " LinkCount"
-            " 2"
+        switch = locations.map_name.replace(
+            "_P".casefold(),
+            "_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
         )
-
-
-class MichaelMAirmaril(MapDropper):
-    paths = ("SanctuaryAir_P",)
-
-    def entered_map(self) -> None:
-        # switch = FindObject(
-        #     "SeqAct_RandomSwitch",
-        #     "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0",
-        # )
-        # if not switch:
-        #     raise Exception("Could not locate switch for Michael Mamaril")
-        # switch.LinkCount = 1
-
-        get_pc().ConsoleCommand(
-            "set "
-            "SanctuaryAir_Dynamic.TheWorld:PersistentLevel.Main_Sequence.SeqAct_RandomSwitch_0"
-            "LinkCount "
-            "2"
-        )
+        set_command(switch, "LinkCount", "2")
 
 
 class DahlAbandonGrave(MapDropper):
@@ -1094,14 +1066,13 @@ Locations: Sequence[locations.Location] = (
     Enemy("Bewm", Pawn("PawnBalance_Boom")),
     Enemy("Captain Flynt", Pawn("PawnBalance_Flynt"), tags=Tag.SlowEnemy, rarities=(33,33,33)),
     Enemy("Savage Lee", Pawn("PawnBalance_SavageLee")),
-    Other("Michael Mamaril",
-        Behavior("GD_JohnMamaril.Character.AIDef_JohnMamaril:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_92"),
-        MichaelMamaril(), MichaelMAirmaril(),
+    Other("Michael Mamaril", Behavior("GD_JohnMamaril.Character.AIDef_JohnMamaril:AIBehaviorProviderDefinition_1.Behavior_SpawnItems_92"),
+        MichaelMamaril(),
     tags=Tag.Freebie),
-    Other("Tip Moxxi",
-        Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_17"),
-        Behavior("GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_23"),
-    tags=Tag.Freebie),
+    Other("Tip Moxxi", Behavior(
+        "GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_17",
+        "GD_Moxxi.Character.CharClass_Moxxi:BehaviorProviderDefinition_3.Behavior_SpawnItems_23",
+    ), tags=Tag.Freebie),
     Mission("Claptrap's Secret Stash", MissionDefinition("GD_Z1_ClapTrapStash.M_ClapTrapStash"), tags=Tag.Freebie),
     Mission("Do No Harm", MissionDefinition("GD_Z1_Surgery.M_PerformSurgery"), tags=Tag.Freebie),
     Mission("Rock, Paper, Genocide: Fire Weapons!", MissionDefinition("GD_Z1_RockPaperGenocide.M_RockPaperGenocide_Fire"), tags=Tag.Freebie),
